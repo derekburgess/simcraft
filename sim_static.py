@@ -19,7 +19,7 @@ UNIT_END_COLOR = (255, 255, 255)
 
 BLACK_HOLE_THRESHOLD = 99
 BLACK_HOLE_GRAVITY_CONSTANT = 0.0001
-BLACK_HOLE_DECAY_RATE = 0.5
+BLACK_HOLE_DECAY_RATE = 1
 BLACK_HOLE_DECAY_THRESHOLD = 1
 
 SCREEN_WIDTH = 1080 #Default: 1080
@@ -98,16 +98,6 @@ class BlackHole:
         for unit in units_to_remove:
             units.remove(unit)
 
-    def update_gravity(self, units, other_black_holes):
-        for obj in units + other_black_holes:
-            if obj is not self:
-                dx = obj.x - self.x
-                dy = obj.y - self.y
-                distance = max(math.hypot(dx, dy), 1)
-                force = GRAVITY_CONSTANT * (self.mass * obj.mass) / (distance**2)
-                self.x += (dx / distance) * force
-                self.y += (dy / distance) * force
-
     def decay(self):
         self.mass -= BLACK_HOLE_DECAY_RATE
         if self.mass < BLACK_HOLE_DECAY_THRESHOLD:
@@ -139,7 +129,19 @@ def draw_ring(points, color, opacity):
         rgba_color = color + (opacity,)
         pygame.draw.circle(surface, rgba_color, (5, 5), 5)
         screen.blit(surface, (point[0] - 5, point[1] - 5))
+"""
+def apply_gravity(units, ring_points):
+    for unit in units:
+        for point in ring_points:
+            dx = unit.x - point[0]
+            dy = unit.y - point[1]
+            distance = math.hypot(dx, dy)
+            if distance > 0:
+                force = RING_GRAVITY_CONSTANT * unit.mass / (distance**2)
+                unit.x += (dx / distance) * force
+                unit.y += (dy / distance) * force
 
+"""
 def apply_gravity(units, ring_points):
     for unit in units:
         for point in ring_points:
@@ -148,6 +150,7 @@ def apply_gravity(units, ring_points):
             distance = max(math.hypot(dx, dy), 1)
             force = RING_GRAVITY_CONSTANT * unit.mass / (distance**2)
             
+            # Check if the unit is too close to the ring
             if distance > unit.size / 2:
                 unit.x += (dx / distance) * force
                 unit.y += (dy / distance) * force
@@ -161,6 +164,7 @@ def update_units(units):
             black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
             units.remove(unit)
 
+#units = [SpaceTimeUnit(random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT), UNIT_START_SIZE, UNIT_START_MASS) for _ in range(UNIT_COUNT)]
 units = []
 for _ in range(UNIT_COUNT):
     radius = random.uniform(0, RING_RADIUS)
@@ -195,7 +199,6 @@ def run_simulation():
 
             for black_hole in black_holes:
                 black_hole.attract(units, black_holes)
-                black_hole.update_gravity(units, black_holes)
                 black_hole.decay()
                 black_hole.draw(screen)
                 if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
