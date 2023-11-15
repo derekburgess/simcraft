@@ -2,28 +2,28 @@ import pygame
 import math
 import random
 
-RING_RADIUS = 400
-RING_ROTATION_SPEED = 0.08
-RING_GRAVITY_CONSTANT = 100
-RING_COLOR = (0, 0, 255)
-RING_OPACITY = 100
+RING_RADIUS = 500 #Default: 500
+RING_ROTATION_SPEED = 0.1 #Default: 0.1
+RING_GRAVITY_CONSTANT = 5 #Default: 5 -- Increase create my drag on units
+RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
+RING_OPACITY = 50 #Range: 0-255
 
-GRAVITY_CONSTANT = 0.009 #How much units attract each other
+GRAVITY_CONSTANT = 0.1 #Unit gravity.
 
-UNIT_COUNT = 5000 #Number of units to spawn at the start of the simulation
-UNIT_START_SIZE = 10 #Size of units at the start of the simulation
-UNIT_START_MASS = 1 #Mass of units at the start of the simulation
+UNIT_COUNT = 5000
+UNIT_START_SIZE = 25
+UNIT_START_MASS = 1
 UNIT_MAX_MASS = 100
-UNIT_START_COLOR = (25, 0, 25) 
+UNIT_START_COLOR = (10, 0, 10) 
 UNIT_END_COLOR = (255, 255, 255)
 
-BLACK_HOLE_THRESHOLD = 99 #Units with mass greater than this will become black holes
-BLACK_HOLE_GRAVITY_CONSTANT = 0.01 #How much black holes attract units
-BLACK_HOLE_DECAY_RATE = 0.5 #How much mass is lost per frame for black holes
-BLACK_HOLE_DECAY_THRESHOLD = 1 #Black holes with mass less than this will be removed from the simulation
+BLACK_HOLE_THRESHOLD = 99
+BLACK_HOLE_GRAVITY_CONSTANT = 0.0001
+BLACK_HOLE_DECAY_RATE = 1
+BLACK_HOLE_DECAY_THRESHOLD = 1
 
-SCREEN_WIDTH = 1080
-SCREEN_HEIGHT = 1080
+SCREEN_WIDTH = 1080 #Default: 1080
+SCREEN_HEIGHT = 1080 #Default: 1080
 
 objects_with_gravity = [] #Units and black holes
 black_holes = [] #Black holes
@@ -179,7 +179,7 @@ def run_simulation():
     try:
         running = True
         angle = 0
-        ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, 100, 0)
+        ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, 20, 0)
 
         decay_black_holes = []
 
@@ -191,7 +191,7 @@ def run_simulation():
             screen.fill((0, 0, 5))
 
             angle += RING_ROTATION_SPEED
-            ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, 100, angle)
+            ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, 20, angle)
 
             draw_ring(ring_points, RING_COLOR, RING_OPACITY)
             update_units(units)
@@ -204,7 +204,6 @@ def run_simulation():
                 if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
                     decay_black_holes.append(black_hole)
 
-            # Remove the decayed black holes and handle any potential errors
             for decayed_black_hole in decay_black_holes.copy():
                 if decayed_black_hole in black_holes:
                     black_holes.remove(decayed_black_hole)
