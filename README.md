@@ -1,7 +1,8 @@
 # simcraft
 ![hehe](/assets/cmb.jpg)
 
-2023 CE
+2023 CE //
+
 A pixel universe simulators written with OpenAI GPT4 and VSCode Copilot. Uses `Python` and `pygame`.
 
 ```pip install pygame```
