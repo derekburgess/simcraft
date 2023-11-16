@@ -4,32 +4,38 @@ import random
 
 RING_RADIUS = 500 #Default: 500
 RING_ROTATION_SPEED = 0.1 #Default: 0.1
-RING_GRAVITY_CONSTANT = 5 #Default: 5 -- Increase create my drag on units
+RING_GRAVITY_CONSTANT = 20 #Default: 5 -- Increase create my drag on units
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Range: 0-255
 
-GRAVITY_CONSTANT = 0.1 #Unit gravity.
+GRAVITY_CONSTANT = 0.5 #Unit gravity.
 
 UNIT_COUNT = 5000
-UNIT_START_SIZE = 25
-UNIT_START_MASS = 2
-UNIT_MAX_MASS = 100
-UNIT_START_COLOR = (40, 0, 40) 
+UNIT_START_SIZE = 15
+UNIT_START_MASS = 1.25
+UNIT_MAX_MASS = 60
+UNIT_START_COLOR = (60, 0, 60) 
 UNIT_END_COLOR = (255, 255, 255)
 
-BLACK_HOLE_THRESHOLD = 99
-BLACK_HOLE_GRAVITY_CONSTANT = 0.0001
-BLACK_HOLE_DECAY_RATE = 0.5
+BLACK_HOLE_THRESHOLD = 59
+BLACK_HOLE_GRAVITY_CONSTANT = 0.0005
+BLACK_HOLE_DECAY_RATE = 0.75
 BLACK_HOLE_DECAY_THRESHOLD = 1
 
-SCREEN_WIDTH = 1080 #Default: 1080
-SCREEN_HEIGHT = 1080 #Default: 1080
+GRID_COLOR = (20, 20, 20)  # White
+GRID_OPACITY = 10  # Half-transparent
+GRID_LINES_HORIZONTAL = 6
+GRID_LINES_VERTICAL = 6
+
+SCREEN_WIDTH = 1400 #Default: 1080
+SCREEN_HEIGHT = 1200 #Default: 1080
 
 objects_with_gravity = [] #Units and black holes
 black_holes = [] #Black holes
 
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("simcraft")
 
 def interpolate_color(start_color, end_color, factor):
     r = start_color[0] + factor * (end_color[0] - start_color[0])
@@ -37,6 +43,17 @@ def interpolate_color(start_color, end_color, factor):
     b = start_color[2] + factor * (end_color[2] - start_color[2])
     return int(r), int(g), int(b)
 
+def draw_grid(screen, color, opacity, lines_horizontal, lines_vertical):
+    grid_color = color + (opacity,)
+    screen_width, screen_height = screen.get_size()
+
+    for i in range(lines_horizontal + 1):
+        y = screen_height / lines_horizontal * i
+        pygame.draw.line(screen, grid_color, (0, y), (screen_width, y))
+
+    for i in range(lines_vertical + 1):
+        x = screen_width / lines_vertical * i
+        pygame.draw.line(screen, grid_color, (x, 0), (x, screen_height))
 class SpaceTimeUnit:
     def __init__(self, x, y, size, mass):
         self.x = x
@@ -77,7 +94,7 @@ class BlackHole:
         self.border_radius = int(mass // 10)
 
     def draw(self, screen):
-        pygame.draw.circle(screen, (50, 0, 50), (self.x, self.y), self.border_radius)
+        pygame.draw.circle(screen, (255, 191, 0), (self.x, self.y), self.border_radius)
         pygame.draw.circle(screen, (0, 0, 0), (self.x, self.y), self.mass // 10, 0)
 
     def attract(self, units, black_holes):
@@ -178,13 +195,22 @@ def run_simulation():
         ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, 20, 0)
 
         decay_black_holes = []
+        years = 0
+
+        pygame.font.init()
+        font = pygame.font.SysFont('Monospace', 14)
 
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
                     running = False
 
-            screen.fill((0, 0, 5))
+            screen.fill((0, 0, 10))
+            draw_grid(screen, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
+
+            years += 1
+            year_text = font.render(f"YEARS(m): {years}", True, (200, 200, 200))
+            screen.blit(year_text, (10, SCREEN_HEIGHT - 30))
 
             angle += RING_ROTATION_SPEED
             ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, 20, angle)
