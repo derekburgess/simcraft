@@ -10,18 +10,18 @@ RING_GRAVITY_CONSTANT = 10 #Default: 20
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
 
-GRAVITY_CONSTANT = 0.1 #Unit gravity...
-UNIT_COUNT = 5000
-UNIT_START_SIZE = 15
-UNIT_START_MASS = 0.5
-UNIT_MAX_MASS = 60
-UNIT_START_COLOR = (60, 0, 60) 
-UNIT_END_COLOR = (255, 255, 255)
+GRAVITY_CONSTANT = 0.1 #Default: 0.1
+UNIT_COUNT = 5000 #Default: 5000
+UNIT_START_SIZE = 15 #Default: 15
+UNIT_START_MASS = 0.5 #Default: 0.5
+UNIT_MAX_MASS = 60 #Default: 60
+UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
+UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 59
-BLACK_HOLE_GRAVITY_CONSTANT = 0.0001
-BLACK_HOLE_DECAY_RATE = 2
-BLACK_HOLE_DECAY_THRESHOLD = 10
+BLACK_HOLE_THRESHOLD = 59 #Default: 59
+BLACK_HOLE_GRAVITY_CONSTANT = 0.0001 #Default: 0.0001
+BLACK_HOLE_DECAY_RATE = 2 #Default: 2
+BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
 
 GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
 GRID_OPACITY = 10 #Default: 10, Range: 0-255
@@ -37,6 +37,7 @@ black_holes = [] #Black holes
 
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+font = pygame.font.SysFont('Monospace', 14) #Font for time text.
 pygame.display.set_caption("pySimcraft")
 
 #Interpolate color between two colors, used for units as they transition from molecular clouds to stars.
@@ -58,6 +59,21 @@ def draw_grid(screen, color, opacity, lines_horizontal, lines_vertical):
     for i in range(lines_vertical + 1):
         x = screen_width / lines_vertical * i
         pygame.draw.line(screen, grid_color, (x, 0), (x, screen_height))
+
+def draw_static_key(screen):
+    # Molecular Cloud Key
+    molecular_cloud_pos = (15, 1070)
+    pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
+    screen.blit(font.render('MOLECULAR CLOUD', True, (200, 200, 200)), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1]))
+    # Protostar Key
+    protostar_pos = (21, 1105)
+    pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 3, 3))
+    screen.blit(font.render('PROTOSTAR', True, (200, 200, 200)), (protostar_pos[0] + 25, protostar_pos[1] - 6))
+    # Primordial Black Hole Key
+    black_hole_pos = (22, 1135)
+    pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
+    pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
+    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, (200, 200, 200)), (black_hole_pos[0] + 22, black_hole_pos[1] - 8))
 
 #Unit class, also known as SpaceTimeUnit, probably because I described these as "units of spacetime" to OpenAI.
 #This class is to represent the molecular clouds as they transition into stars. It also handles gravity for each "unit".
@@ -267,20 +283,20 @@ def run_simulation():
         decay_black_holes = []
         years = 0
         pygame.font.init()
-        font = pygame.font.SysFont('Monospace', 14) #Font for time text.
 
         while running:
-            #Handle keyboard events
             for event in pygame.event.get():
-                #If event is quit or q, set running to False
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
-                    dump_to_csv(units, black_holes)  # Call function to dump data to CSV
                     running = False
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    dump_to_csv(units, black_holes)
 
             #Fill screen with background color
             screen.fill(BACKGROUND_COLOR)
             #Draw grid on screen
             draw_grid(screen, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
+            #Draw static key on screen
+            draw_static_key(screen)
             #Increment years
             years += 1
             #Render time text
