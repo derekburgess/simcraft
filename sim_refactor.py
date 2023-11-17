@@ -5,28 +5,38 @@ import csv
 import os
 
 RING_RADIUS = 500 #Default: 500
+RING_ATTRACTOR_COUNT = 20 #Default: 20
 RING_ROTATION_SPEED = 1 #Default: 1
 RING_GRAVITY_CONSTANT = 20 #Default: 20
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
 
-GRAVITY_CONSTANT = 0.05 #Default: 0.05
 UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
+UNIT_MIN_SIZE = 3 #Default: 3
+UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
+UNIT_GRAVITY_CONSTANT = 0.05 #Default: 0.05
 UNIT_MAX_MASS = 50 #Default: 50
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
 BLACK_HOLE_THRESHOLD = 49 #Default: 49
+BLACK_HOLE_RADIUS = 20 #Default: 20
 BLACK_HOLE_GRAVITY_CONSTANT = 0.01 #Default: 0.01
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 1
 BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
+BLACK_HOLE_COLOR = (0,0,0) #Black...
+BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
 GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
+GRID_TEXT_COLOR = (0, 0, 255)  # White or choose another contrasting color
 GRID_OPACITY = 10 #Default: 10, Range: 0-255
 GRID_LINES_HORIZONTAL = 12 #Default: 12
 GRID_LINES_VERTICAL = 12 #Default: 12
+GRID_LABEL_OFFSET = 5 #Default: 5
+
+LABEL_COLOR = (200, 200, 200) #Default: (200, 200, 200) -- Light Gray
 
 BACKGROUND_COLOR = (0, 0, 10) #Default: (0, 0, 10) -- Dark Blue
 SCREEN_WIDTH = 1200 #Default: 1200
@@ -51,8 +61,6 @@ def interpolate_color(start_color, end_color, factor):
 def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
     grid_color = color + (opacity,)
     screen_width, screen_height = screen.get_size()
-    text_color = (0, 0, 255)  # White or choose another contrasting color
-    label_offset = 5  # Offset for label positioning
 
     # Draw horizontal lines and label them on the right
     for i in range(lines_horizontal + 1):
@@ -61,8 +69,8 @@ def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
         # Add label (A-Z)
         if i < 26:  # Limit to 26 letters (A-Z)
             label = chr(65 + i)  # ASCII value for A is 65
-            text_surface = font.render(label, True, text_color)
-            screen.blit(text_surface, (screen_width - text_surface.get_width() - label_offset, y))
+            text_surface = font.render(label, True, GRID_TEXT_COLOR)
+            screen.blit(text_surface, (screen_width - text_surface.get_width() - GRID_LABEL_OFFSET, y))
 
     # Draw vertical lines and label them at the bottom
     for i in range(lines_vertical + 1):
@@ -70,23 +78,23 @@ def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
         pygame.draw.line(screen, grid_color, (x, 0), (x, screen_height))
         # Add label (1-9, then 10, 11, ...)
         label = str(i + 1)
-        text_surface = font.render(label, True, text_color)
-        screen.blit(text_surface, (x, screen_height - text_surface.get_height() - label_offset))
+        text_surface = font.render(label, True, GRID_TEXT_COLOR)
+        screen.blit(text_surface, (x, screen_height - text_surface.get_height() - GRID_LABEL_OFFSET))
 
 def draw_static_key(screen):
     # Molecular Cloud Key
-    molecular_cloud_pos = (15, 1050)
-    pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
-    screen.blit(font.render('MOLECULAR CLOUD', True, (200, 200, 200)), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1]))
+    molecular_cloud_pos = (15, 1050) #Default: (15, 1050) Position of the molecular cloud key.
+    pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15)) #Size of the molecular cloud key.
+    screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1])) #30 is the offset of the label from the molecular cloud key.
     # Protostar Key
-    protostar_pos = (21, 1085)
-    pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 3, 3))
-    screen.blit(font.render('PROTOSTAR', True, (200, 200, 200)), (protostar_pos[0] + 25, protostar_pos[1] - 6))
+    protostar_pos = (21, 1085) #Default: (21, 1085) Position of the protostar key.
+    pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 3, 3)) #Size of the protostar key.
+    screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 25, protostar_pos[1] - 6)) #25 is the offset of the label from the protostar key. 6 is the offset of the label from the protostar key.
     # Primordial Black Hole Key
-    black_hole_pos = (22, 1115)
-    pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
-    pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
-    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, (200, 200, 200)), (black_hole_pos[0] + 22, black_hole_pos[1] - 8))
+    black_hole_pos = (22, 1115) #Default: (22, 1115) Position of the primordial black hole key.
+    pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6) #6 is the radius of the primordial black hole key.
+    pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2) #2 is the width of the border of the primordial black hole key.
+    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 22, black_hole_pos[1] - 8)) #22 is the offset of the label from the primordial black hole key. 8 is the offset of the label from the primordial black hole key.
 
 #Unit class, also known as SpaceTimeUnit, probably because I described these as "units of spacetime" to OpenAI.
 #This class is to represent the molecular clouds as they transition into stars. It also handles gravity for each "unit".
@@ -110,8 +118,8 @@ class SpaceTimeUnit:
 
     #Update the unit.
     def update(self):
-        #3 is the minimum size of the unit. 0.5 is the rate at which the unit shrinks.
-        self.size = max(3, UNIT_START_SIZE - int((self.mass - UNIT_START_MASS) * 0.5))
+        #Update the unit's size.
+        self.size = max(UNIT_MIN_SIZE, UNIT_START_SIZE - int((self.mass - UNIT_START_MASS) * UNIT_GROWTH_RATE))
         #Update the unit's gravity.
         self.mass = min(self.mass, UNIT_MAX_MASS)
 
@@ -130,7 +138,7 @@ class SpaceTimeUnit:
             #Distance between the unit and the source. 1 is the minimum distance.
             distance = max(math.hypot(dx, dy), 1)
             #Force between the unit and the source.
-            force = GRAVITY_CONSTANT * (self.mass * source.mass) / (distance**2)   
+            force = UNIT_GRAVITY_CONSTANT * (self.mass * source.mass) / (distance**2)   
             self.x += (dx / distance) * force
             self.y += (dy / distance) * force
     
@@ -139,12 +147,12 @@ class BlackHole:
         self.x = x
         self.y = y
         self.mass = mass #Mass of the black hole, this will be used to set the mass of the black hole.
-        self.border_radius = int(mass // 20) #Radius of the black hole's border, this will be used to set the radius of the black hole's border.
+        self.border_radius = int(mass // BLACK_HOLE_RADIUS)
 
     #Draw the black hole on the screen.
     def draw(self, screen):
-        pygame.draw.circle(screen, (255, 0, 0), (self.x, self.y), self.border_radius) #255, 0, 0 is red.
-        pygame.draw.circle(screen, (0, 0, 0), (self.x, self.y), self.mass // 20, 0) #0, 0, 0 is black. 1/20th of the mass of the black hole is the radius of the black hole.
+        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (self.x, self.y), self.border_radius)
+        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_RADIUS, 0)
 
     #Attract units to the black hole.
     def attract(self, units, black_holes):
@@ -178,7 +186,7 @@ class BlackHole:
                 #Distance between the black hole and the object. 1 is the minimum distance. 1 is the minimum distance.
                 distance = max(math.hypot(dx, dy), 1)
                 #Force between the black hole and the object.
-                force = GRAVITY_CONSTANT * (self.mass * obj.mass) / (distance**2)
+                force = UNIT_GRAVITY_CONSTANT * (self.mass * obj.mass) / (distance**2)
                 self.x += (dx / distance) * force
                 self.y += (dy / distance) * force
 
@@ -292,18 +300,16 @@ def run_simulation():
     try:
         running = True
         angle = 0
-        ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, 20, 0)
+        ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
         decay_black_holes = []
         years = 0
         pygame.font.init()
-
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
                     running = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                     dump_to_csv(units, black_holes)
-
             #Fill screen with background color
             screen.fill(BACKGROUND_COLOR)
             #Draw grid on screen
@@ -313,17 +319,16 @@ def run_simulation():
             #Increment years
             years += 1
             #Render time text
-            year_text = font.render(f"TIME(YEARS): {years}mm", True, (200, 200, 200))
+            year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
             #Blit time text to screen
             screen.blit(year_text, (15, SCREEN_HEIGHT - 50))
             #Increment angle
             angle += RING_ROTATION_SPEED
             #Get ring points
-            ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, 20, angle)
+            ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, angle)
             draw_ring(ring_points, RING_COLOR, RING_OPACITY)
             update_units(units)
             apply_gravity(units, ring_points)
-            
             #Update black holes
             for black_hole in black_holes:
                 #Attract units to the black hole.
@@ -344,23 +349,18 @@ def run_simulation():
                 if decayed_black_hole in black_holes:
                     black_holes.remove(decayed_black_hole)
                 decay_black_holes.remove(decayed_black_hole)
-            
             #Update units
             for unit in units:
                 unit.update_gravity()
-
             for unit in units:
                 unit.draw(screen)
-
             #Update screen
             pygame.display.flip()
-
         print("Exiting simulation...")
     except Exception as e:
         print(f"Error occurred: {e}")
     finally:
         pygame.quit()
-
 if __name__ == "__main__":
     print("Starting simulation...")
     run_simulation()
