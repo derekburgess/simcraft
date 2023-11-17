@@ -38,7 +38,7 @@ black_holes = [] #Black holes
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 font = pygame.font.SysFont('Monospace', 14) #Font for time text.
-pygame.display.set_caption("pySimcraft")
+pygame.display.set_caption("simcraft")
 
 #Interpolate color between two colors, used for units as they transition from molecular clouds to stars.
 def interpolate_color(start_color, end_color, factor):
