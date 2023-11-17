@@ -13,15 +13,15 @@ RING_OPACITY = 0 #Default: 0, Range: 0-255
 GRAVITY_CONSTANT = 0.05 #Default: 0.05
 UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
-UNIT_START_MASS = 1 #Default: 0.5
-UNIT_MAX_MASS = 50 #Default: 60
+UNIT_START_MASS = 1 #Default: 1
+UNIT_MAX_MASS = 50 #Default: 50
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 49 #Default: 59
+BLACK_HOLE_THRESHOLD = 49 #Default: 49
 BLACK_HOLE_GRAVITY_CONSTANT = 0.01 #Default: 0.01
-BLACK_HOLE_DECAY_RATE = 0.1 #Default: 1
-BLACK_HOLE_DECAY_THRESHOLD = 20 #Default: 10
+BLACK_HOLE_DECAY_RATE = 0.5 #Default: 1
+BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
 
 GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
 GRID_OPACITY = 10 #Default: 10, Range: 0-255
@@ -48,29 +48,42 @@ def interpolate_color(start_color, end_color, factor):
     return int(r), int(g), int(b)
 
 #Draw grid on screen
-def draw_grid(screen, color, opacity, lines_horizontal, lines_vertical):
+def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
     grid_color = color + (opacity,)
     screen_width, screen_height = screen.get_size()
-    #Draw horizontal and vertical lines
+    text_color = (0, 0, 255)  # White or choose another contrasting color
+    label_offset = 5  # Offset for label positioning
+
+    # Draw horizontal lines and label them on the right
     for i in range(lines_horizontal + 1):
         y = screen_height / lines_horizontal * i
         pygame.draw.line(screen, grid_color, (0, y), (screen_width, y))
-    #Draw vertical lines
+        # Add label (A-Z)
+        if i < 26:  # Limit to 26 letters (A-Z)
+            label = chr(65 + i)  # ASCII value for A is 65
+            text_surface = font.render(label, True, text_color)
+            screen.blit(text_surface, (screen_width - text_surface.get_width() - label_offset, y))
+
+    # Draw vertical lines and label them at the bottom
     for i in range(lines_vertical + 1):
         x = screen_width / lines_vertical * i
         pygame.draw.line(screen, grid_color, (x, 0), (x, screen_height))
+        # Add label (1-9, then 10, 11, ...)
+        label = str(i + 1)
+        text_surface = font.render(label, True, text_color)
+        screen.blit(text_surface, (x, screen_height - text_surface.get_height() - label_offset))
 
 def draw_static_key(screen):
     # Molecular Cloud Key
-    molecular_cloud_pos = (15, 1070)
+    molecular_cloud_pos = (15, 1050)
     pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
     screen.blit(font.render('MOLECULAR CLOUD', True, (200, 200, 200)), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1]))
     # Protostar Key
-    protostar_pos = (21, 1105)
+    protostar_pos = (21, 1085)
     pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 3, 3))
     screen.blit(font.render('PROTOSTAR', True, (200, 200, 200)), (protostar_pos[0] + 25, protostar_pos[1] - 6))
     # Primordial Black Hole Key
-    black_hole_pos = (22, 1135)
+    black_hole_pos = (22, 1115)
     pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
     pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
     screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, (200, 200, 200)), (black_hole_pos[0] + 22, black_hole_pos[1] - 8))
@@ -294,7 +307,7 @@ def run_simulation():
             #Fill screen with background color
             screen.fill(BACKGROUND_COLOR)
             #Draw grid on screen
-            draw_grid(screen, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
+            draw_grid(screen, font, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
             #Draw static key on screen
             draw_static_key(screen)
             #Increment years
@@ -302,7 +315,7 @@ def run_simulation():
             #Render time text
             year_text = font.render(f"TIME(YEARS): {years}mm", True, (200, 200, 200))
             #Blit time text to screen
-            screen.blit(year_text, (10, SCREEN_HEIGHT - 30))
+            screen.blit(year_text, (15, SCREEN_HEIGHT - 50))
             #Increment angle
             angle += RING_ROTATION_SPEED
             #Get ring points
