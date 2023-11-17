@@ -2,39 +2,47 @@ import pygame
 import math
 import random
 
+UNIVERSAL_SQUARE_DISTANCE = 2 #Default: 2
+UNIVERSAL_FORCE_DISTANCE = 0.5 #Default: 0.5
+
 RING_RADIUS = 500 #Default: 500
 RING_ROTATION_SPEED = 0.1 #Default: 0.1
 RING_GRAVITY_CONSTANT = 20 #Default: 20 -- Increase create my drag on units
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
-RING_OPACITY = 50 #Range: 0-255 #Default: 0
+RING_OPACITY = 20 #Range: 0-255 #Default: 20
 
 UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
-UNIT_START_MASS = 1.25 #Default: 1.25
-UNIT_MAX_MASS = 60 #Default: 60
+UNIT_MIN_SIZE = 3 #Default: 3
+UNIT_GROWTH_RATE = 1 #Default: 1
+UNIT_START_MASS = 2 #Default: 1.25
+UNIT_MAX_MASS = 100 #Default: 100
 UNIT_GRAVITY_CONSTANT = 0.5 #Default: 0.5
-UNIT_START_COLOR = (100, 0, 100) #Default: (60, 0, 60) -- Purple
+UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Purple
 UNIT_END_COLOR = (255, 255, 255) #Default: (255, 255, 255) -- White
 
-BLACK_HOLE_THRESHOLD = 59 #Default: 59
-BLACK_HOLE_GRAVITY_CONSTANT = 0.0005 #Default: 0.0005
-BLACK_HOLE_DECAY_RATE = 0.75 #Default: 0.75
+BLACK_HOLE_THRESHOLD = 99 #Default: 99
+BLACK_HOLE_SIZE_RATIO = 30 #Default: 30, 1/30th of the black hole mass is the radius of the black hole. Decrease to increase the size of the black hole.
+BLACK_HOLE_GRAVITY_CONSTANT = 0.0001 #Default: 0.0001
+BLACK_HOLE_DECAY_RATE = 1 #Default: 1
 BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
+BLACK_HOLE_COLOR = (0, 0, 0) #Black duh...
+BLACK_HOLE_BOARDER = (100, 0, 0) #Default: (100, 0, 0) -- Dark red
 
-GRID_COLOR = (20, 20, 20) #Default: (20, 20, 20) -- Dark gray
-GRID_OPACITY = 10 #Range: 0-255 #Default: 10
-GRID_LINES_HORIZONTAL = 6 #Default: 6
-GRID_LINES_VERTICAL = 6 #Default: 6
+GRID_COLOR = (0, 0, 150) #Default: (0, 0, 150) -- Dark blue
+GRID_OPACITY = 50 #Range: 0-255 #Default: 50
+GRID_LINES_HORIZONTAL = 12 #Default: 12
+GRID_LINES_VERTICAL = 12 #Default: 12
 
-SCREEN_WIDTH = 1400 #Default: 1080
-SCREEN_HEIGHT = 1200 #Default: 1080
+SCREEN_WIDTH = 1200 #Default: 1200
+SCREEN_HEIGHT = 1200 #Default: 1200
 
 objects_with_gravity = [] #Units and black holes
 black_holes = [] #Black holes
 
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT)) #Set screen size
-pygame.display.set_caption("simcraft") #Default: "simcraft" -- Change to whatever you want
+pygame.display.set_caption("pySimcraft") #Default: "pySimcraft" -- Change to whatever you want
 
 #Interpolate color between two colors, used for units as they transition from molecular clouds to stars.
 def interpolate_color(start_color, end_color, factor):
@@ -61,27 +69,29 @@ def draw_grid(screen, color, opacity, lines_horizontal, lines_vertical):
 #A unit is represented by the square pixels that start out as large, low-mass molecular clouds and transition into small, high-mass stars.
 class SpaceTimeUnit:
     def __init__(self, x, y, size, mass):
-        self.x = x
-        self.y = y
-        self.size = size
-        self.mass = mass
-        self.gravity_sources = []
+        self.x = x #Set x to x, this will be used to set the x position of the unit.
+        self.y = y #Set y to y, this will be used to set the y position of the unit.
+        self.size = size #Set size to size, this will be used to set the size of the unit.
+        self.mass = mass #Set mass to mass, this will be used to set the mass of the unit.
+        self.gravity_sources = [] #Set gravity sources to an empty list, this will be used to set the gravity sources of the unit.
 
     #Draw unit on screen
     def draw(self, screen):
-        #Interpolate color between start and end color based on mass
+        #Set factor to the mass of the unit divided by the maximum mass of the unit, this will be used to set the color of the unit.
         factor = self.mass / UNIT_MAX_MASS
+        #Set color to the interpolated color between the start and end color based on the factor.
         color = interpolate_color(UNIT_START_COLOR, UNIT_END_COLOR, factor)
+        #Draw rectangle on screen, set color.
         pygame.draw.rect(screen, color, (self.x, self.y, self.size, self.size))
 
     #Update unit size and mass
     def update(self):
-        self.size = max(5, UNIT_START_SIZE - int((self.mass - UNIT_START_MASS) * 0.5))
+        self.size = max(UNIT_MIN_SIZE, UNIT_START_SIZE - int((self.mass - UNIT_START_MASS) * UNIT_GROWTH_RATE))
         self.mass = min(self.mass, UNIT_MAX_MASS)
 
     #Update gravity for unit
     def check_collision(self, other):
-        #Check if unit collides with another unit and return True if it does, use this to inform handle_collisions()
+        #Check if unit collides with another unit and return True if it does, use this to inform handle_collisions().
         return (self.x < other.x + other.size and
                 self.x + self.size > other.x and
                 self.y < other.y + other.size and
@@ -90,46 +100,46 @@ class SpaceTimeUnit:
     #Update gravity for unit
     def update_gravity(self):
         for source in self.gravity_sources:
-            #Update gravity for unit based on gravity sources
             dx = source.x - self.x
             dy = source.y - self.y
-            distance = max(math.hypot(dx, dy), 1)
-            force = UNIT_GRAVITY_CONSTANT * (self.mass * source.mass) / (distance**2)
+            #Distance is how far the unit is from the gravity source. To increase the distance, change the universal force distance to a larger number.
+            distance = max(math.hypot(dx, dy), UNIVERSAL_FORCE_DISTANCE)
+            #Force is how much gravity is applied to the unit. To increase the force, change the unit gravity constant to a larger number.
+            force = UNIT_GRAVITY_CONSTANT * (self.mass * source.mass) / (distance**UNIVERSAL_SQUARE_DISTANCE)
             self.x += (dx / distance) * force
             self.y += (dy / distance) * force
 
 #Black hole class, handles gravity for black holes.
-#Black holes are represented by the yellow circles that appear when a unit reaches a mass of 59 or higher.
-#Black holes are also the only objects that can remove other black holes from the simulation.
-#Black holes also decay over time, and when they reach a mass of 1 or lower, they disappear.
-#Black holes also have a border radius that is 1/10th of their mass. This represents the event horizon and remains as the black hole decays to represent the hot gasses that are emitted from the black hole.
-#It would be cool to add: Black holes can collide with each other and merge, and the resulting black hole has a mass that is the sum of the two black holes that collided. With a "ring of gravity" that is emitted from the collision.
 class BlackHole:
     def __init__(self, x, y, mass):
         self.x = x
         self.y = y
-        self.mass = mass
-        self.border_radius = int(mass // 10)
+        self.mass = mass #Set mass to mass, this will be used to set the mass of the black hole. This comes from the unit that reached a mass of 59 or higher.
+        self.border_radius = int(mass // BLACK_HOLE_SIZE_RATIO)
+        self.active = True
 
     #Draw black hole on screen
     def draw(self, screen):
-        pygame.draw.circle(screen, (255, 191, 0), (self.x, self.y), self.border_radius)
-        pygame.draw.circle(screen, (0, 0, 0), (self.x, self.y), self.mass // 10, 0)
+        pygame.draw.circle(screen, BLACK_HOLE_BOARDER, (self.x, self.y), self.border_radius)
+        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_SIZE_RATIO, 0)
 
     #Attract units to black hole
     def attract(self, units, black_holes):
+        if not self.active:
+            return
         #Attract units to black hole and remove units that are smaller than the black hole
         units_to_remove = []
         for unit in units:
             #If unit is a black hole and its mass is less than the mass of the black hole it is being attracted to, remove it from the simulation
             if isinstance(unit, BlackHole) and unit.mass < self.mass:
                 units_to_remove.append(unit)
-            #If unit is not a black hole and its mass is less than the mass of the black hole it is being attracted to, remove it from the simulation
             else:
                 dx = self.x - unit.x
                 dy = self.y - unit.y
-                distance = max(math.hypot(dx, dy), 1)
-                force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * unit.mass) / (distance**2)
+                #Distance is how far the unit is from the black hole. To increase the distance, change the universal force distance to a larger number.
+                distance = max(math.hypot(dx, dy), UNIVERSAL_FORCE_DISTANCE)
+                #Force is how much gravity is applied to the unit. To increase the force, change the black hole gravity constant to a larger number.
+                force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * unit.mass) / (distance**UNIVERSAL_SQUARE_DISTANCE)
                 unit.x += (dx / distance) * force
                 unit.y += (dy / distance) * force
                 unit.gravity_sources.append(self)
@@ -140,27 +150,32 @@ class BlackHole:
 
     #Update gravity for black hole
     def update_gravity(self, units, other_black_holes):
+        if not self.active:
+            return
         #Update gravity for black hole based on other black holes
         for obj in units + other_black_holes:
             #If object is not the black hole itself, update gravity for black hole based on other black holes
             if obj is not self:
                 dx = obj.x - self.x
                 dy = obj.y - self.y
-                distance = max(math.hypot(dx, dy), 1)
-                force = UNIT_GRAVITY_CONSTANT * (self.mass * obj.mass) / (distance**2)
+                #Distance is how far the black hole is from the other black hole. To increase the distance, change the universal force distance to a larger number.
+                distance = max(math.hypot(dx, dy), UNIVERSAL_FORCE_DISTANCE)
+                #Force is how much gravity is applied to the black hole. To increase the force, change the unit gravity constant to a larger number.
+                force = UNIT_GRAVITY_CONSTANT * (self.mass * obj.mass) / (distance**UNIVERSAL_SQUARE_DISTANCE)
                 self.x += (dx / distance) * force
                 self.y += (dy / distance) * force
+
     #Decay black hole
     def decay(self):
-        #Decay black hole over time
         self.mass -= BLACK_HOLE_DECAY_RATE
         #If black hole mass is less than the decay threshold, remove it from the simulation
         if self.mass < BLACK_HOLE_DECAY_THRESHOLD:
+            self.active = False
             if self in black_holes:
                 black_holes.remove(self)
 
 #Set up Attractor Ring: This is important because a solid ring did not create the effect I was looking for. This allows for the creation gravitational sources that create a crude sudo-manifold around the units.
-def get_ring_points(center, radius, num_points, angle):
+def get_ring_points(center, radius, num_points, angle):#
     points = []
     for i in range(num_points):
         theta = angle + (2 * math.pi / num_points) * i
@@ -172,10 +187,12 @@ def get_ring_points(center, radius, num_points, angle):
 #Draw ring on screen
 def draw_ring(points, color, opacity):
     for point in points:
-        surface = pygame.Surface((10, 10), pygame.SRCALPHA) #Create surface, set source alpha.
+        #Create surface, set source alpha.
+        surface = pygame.Surface((10, 10), pygame.SRCALPHA)
         rgba_color = color + (opacity,)
-        pygame.draw.circle(surface, rgba_color, (5, 5), 5) #Draw circle on surface, set alpha.
-        screen.blit(surface, (point[0] - 5, point[1] - 5)) #Blit surface to screen. Blitting is a term used in computer graphics to refer to the process of combining two images to form a third, resulting in a new image.
+        pygame.draw.circle(surface, rgba_color, (5, 5), 5) 
+        #Blit surface to screen. Blitting is a term used in computer graphics to refer to the process of combining two images to form a third, resulting in a new image.
+        screen.blit(surface, (point[0] - 5, point[1] - 5)) 
 
 #Apply gravity to units based on ring points. This creates the gravitational effect for each point as it passes by a section of the universe it will attract units toward it.
 def apply_gravity(units, ring_points):
@@ -184,10 +201,10 @@ def apply_gravity(units, ring_points):
         for point in ring_points:
             dx = point[0] - unit.x
             dy = point[1] - unit.y
-            #Distance is set to 1 to prevent division by zero
-            distance = max(math.hypot(dx, dy), 1)
-            #If distance is greater than unit size, apply gravity to unit
-            force = RING_GRAVITY_CONSTANT * unit.mass / (distance**2)
+            #Distance is how far the unit is from the ring point. To increase the distance, change the universal force distance to a larger number.
+            distance = max(math.hypot(dx, dy), UNIVERSAL_FORCE_DISTANCE)
+            #Force is how much gravity is applied to the unit. To increase the force, change the ring gravity constant to a larger number.
+            force = RING_GRAVITY_CONSTANT * unit.mass / (distance**UNIVERSAL_SQUARE_DISTANCE)
             if distance > unit.size / 2:
                 unit.x += (dx / distance) * force
                 unit.y += (dy / distance) * force
@@ -214,20 +231,24 @@ def update_units(units):
     #Update units
     for unit in list(units):
         unit.update()
-        #If unit mass is greater than black hole threshold, remove unit from units and add it to black holes
-        if unit.mass > BLACK_HOLE_THRESHOLD:
+        #If unit mass is greater than black hole threshold, remove unit from units and add it to black holes. include a random chance to prevent all units from becoming black holes.
+        if unit.mass > BLACK_HOLE_THRESHOLD and random.random() > 0.5:
             #If unit is not already a black hole, remove it from units and add it to black holes
             black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
             units.remove(unit)
 
 units = []
 for _ in range(UNIT_COUNT):
+    #Create unit at random position
     radius = random.uniform(0, RING_RADIUS)
+    #Set angle to random angle between 0 and 2 * pi
     angle = random.uniform(0, 2 * math.pi)
+    #Set x and y to the center of the screen plus the radius times the cosine of the angle and the radius times the sine of the angle
     x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
     y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
-
+    #Create unit at x and y with random size and mass
     unit = SpaceTimeUnit(x, y, UNIT_START_SIZE, UNIT_START_MASS)
+    #Add unit to units
     units.append(unit)
 
 #Run simulation
@@ -253,7 +274,7 @@ def run_simulation():
             draw_grid(screen, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
             #Begin counting years... in the millions... lol.
             years += 1
-            year_text = font.render(f"TIME(YEARS): {years}K", True, (200, 200, 200)) #Update label "YEARS(m):"
+            year_text = font.render(f"TIME(YEARS): {years}MM", True, (200, 200, 200)) #Update label "YEARS(m):"
             screen.blit(year_text, (10, SCREEN_HEIGHT - 30))
             #Rotate the ring..
             angle += RING_ROTATION_SPEED
