@@ -5,23 +5,23 @@ import csv
 import os
 
 RING_RADIUS = 500 #Default: 500
-RING_ROTATION_SPEED = 1 #Default: 0.5
-RING_GRAVITY_CONSTANT = 10 #Default: 20
+RING_ROTATION_SPEED = 1 #Default: 1
+RING_GRAVITY_CONSTANT = 20 #Default: 20
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
 
-GRAVITY_CONSTANT = 0.1 #Default: 0.1
+GRAVITY_CONSTANT = 0.05 #Default: 0.05
 UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
-UNIT_START_MASS = 0.5 #Default: 0.5
-UNIT_MAX_MASS = 60 #Default: 60
+UNIT_START_MASS = 1 #Default: 0.5
+UNIT_MAX_MASS = 50 #Default: 60
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 59 #Default: 59
-BLACK_HOLE_GRAVITY_CONSTANT = 0.0001 #Default: 0.0001
-BLACK_HOLE_DECAY_RATE = 2 #Default: 2
-BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
+BLACK_HOLE_THRESHOLD = 49 #Default: 59
+BLACK_HOLE_GRAVITY_CONSTANT = 0.005 #Default: 0.01
+BLACK_HOLE_DECAY_RATE = 0.5 #Default: 1
+BLACK_HOLE_DECAY_THRESHOLD = 20 #Default: 10
 
 GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
 GRID_OPACITY = 10 #Default: 10, Range: 0-255
