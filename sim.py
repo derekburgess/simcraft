@@ -19,8 +19,8 @@ UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
 BLACK_HOLE_THRESHOLD = 49 #Default: 59
-BLACK_HOLE_GRAVITY_CONSTANT = 0.005 #Default: 0.01
-BLACK_HOLE_DECAY_RATE = 0.5 #Default: 1
+BLACK_HOLE_GRAVITY_CONSTANT = 0.01 #Default: 0.01
+BLACK_HOLE_DECAY_RATE = 0.1 #Default: 1
 BLACK_HOLE_DECAY_THRESHOLD = 20 #Default: 10
 
 GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue

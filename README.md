@@ -11,4 +11,4 @@ A pixel universe simulators written with OpenAI GPT4 and VSCode Copilot. Uses `P
 
 ```sim.py``` -- This was my original plan. A set and forget universe simulator with my "great attractor" ring. Why? I had this drunk thought along the lines of "what if the 'great attractor' was actually just gravity on the edge of expanding manifold?" and so I wanted to see if I could make this simulation using OpenAI, because that's been my thing lately lol... anyways- run it and find out.
 
-![hehe](/assets/demo.gif)
+![hehe](/assets/demo_171123.gif)
