@@ -1,8 +1,8 @@
+import os
+import csv
 import pygame
 import math
 import random
-import csv
-import os
 
 RING_RADIUS = 500 #Default: 500
 RING_ATTRACTOR_COUNT = 20 #Default: 20
