@@ -281,20 +281,20 @@ for _ in range(UNIT_COUNT):
     units.append(unit)
 
 #Dump data to CSV
-def dump_to_csv(units, black_holes, filename='data.csv'):
-    #Check if file exists.
+def dump_to_csv(units, black_holes, current_year, filename='data.csv'):
+    # Check if file exists
     file_exists = os.path.isfile(filename)
     with open(filename, mode='a' if file_exists else 'w', newline='') as file:
         writer = csv.writer(file)
+        # Write header if the file is new
         if not file_exists:
-            #Write header.
-            writer.writerow(['Type', 'X', 'Y', 'Mass', 'Size'])
+            writer.writerow(['Type', 'X', 'Y', 'Mass', 'Size', 'Observation'])
+        # Write data for each unit
         for unit in units:
-            #Write unit data.
-            writer.writerow(['Unit', unit.x, unit.y, unit.mass, unit.size])
+            writer.writerow(['Unit', unit.x, unit.y, unit.mass, unit.size, current_year])
+        # Write data for each black hole
         for black_hole in black_holes:
-            #Write black hole data.
-            writer.writerow(['BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius])
+            writer.writerow(['BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, current_year])
 
 #Run simulation.
 def run_simulation():
@@ -310,7 +310,7 @@ def run_simulation():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
                     running = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    dump_to_csv(units, black_holes)
+                    dump_to_csv(units, black_holes, years)
             #Fill screen with background color
             screen.fill(BACKGROUND_COLOR)
             #Draw grid on screen
