@@ -17,14 +17,14 @@ UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
 UNIT_GRAVITY_CONSTANT = 0.05 #Default: 0.05
-UNIT_MAX_MASS = 50 #Default: 50
+UNIT_MAX_MASS = 100 #Default: 50
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 49 #Default: 49
-BLACK_HOLE_RADIUS = 20 #Default: 20
-BLACK_HOLE_GRAVITY_CONSTANT = 0.01 #Default: 0.01
-BLACK_HOLE_DECAY_RATE = 0.5 #Default: 1
+BLACK_HOLE_THRESHOLD = 99 #Default: 49
+BLACK_HOLE_RADIUS = 25 #Default: 20
+BLACK_HOLE_GRAVITY_CONSTANT = 0.001 #Default: 0.01
+BLACK_HOLE_DECAY_RATE = 0.75 #Default: 1
 BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
 BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
@@ -61,40 +61,41 @@ def interpolate_color(start_color, end_color, factor):
 def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
     grid_color = color + (opacity,)
     screen_width, screen_height = screen.get_size()
-
-    # Draw horizontal lines and label them on the right
+    #Draw horizontal lines and label them on the right
     for i in range(lines_horizontal + 1):
         y = screen_height / lines_horizontal * i
         pygame.draw.line(screen, grid_color, (0, y), (screen_width, y))
         # Add label (A-Z)
-        if i < 26:  # Limit to 26 letters (A-Z)
+        if i < 26:  #Limit to 26 letters (A-Z)
             label = chr(65 + i)  # ASCII value for A is 65
             text_surface = font.render(label, True, GRID_TEXT_COLOR)
             screen.blit(text_surface, (screen_width - text_surface.get_width() - GRID_LABEL_OFFSET, y))
-
-    # Draw vertical lines and label them at the bottom
+    #Draw vertical lines and label them at the bottom
     for i in range(lines_vertical + 1):
         x = screen_width / lines_vertical * i
         pygame.draw.line(screen, grid_color, (x, 0), (x, screen_height))
-        # Add label (1-9, then 10, 11, ...)
+        #Add label (1-9, then 10, 11, ...)
         label = str(i + 1)
         text_surface = font.render(label, True, GRID_TEXT_COLOR)
         screen.blit(text_surface, (x, screen_height - text_surface.get_height() - GRID_LABEL_OFFSET))
 
 def draw_static_key(screen):
-    # Molecular Cloud Key
-    molecular_cloud_pos = (15, 1050) #Default: (15, 1050) Position of the molecular cloud key.
+    #Molecular Cloud Key
+    molecular_cloud_pos = (15, 1000) #Default: (15, 1050) Position of the molecular cloud key.
     pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15)) #Size of the molecular cloud key.
-    screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1])) #30 is the offset of the label from the molecular cloud key.
-    # Protostar Key
-    protostar_pos = (21, 1085) #Default: (21, 1085) Position of the protostar key.
+    screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1]))
+    #Protostar Key
+    protostar_pos = (21, 1035) #Default: (21, 1085) Position of the protostar key.
     pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 3, 3)) #Size of the protostar key.
-    screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 25, protostar_pos[1] - 6)) #25 is the offset of the label from the protostar key. 6 is the offset of the label from the protostar key.
-    # Primordial Black Hole Key
-    black_hole_pos = (22, 1115) #Default: (22, 1115) Position of the primordial black hole key.
+    screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 25, protostar_pos[1] - 6))
+    #Primordial Black Hole Key
+    black_hole_pos = (22, 1070) #Default: (22, 1115) Position of the primordial black hole key.
     pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6) #6 is the radius of the primordial black hole key.
     pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2) #2 is the width of the border of the primordial black hole key.
-    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 22, black_hole_pos[1] - 8)) #22 is the offset of the label from the primordial black hole key. 8 is the offset of the label from the primordial black hole key.
+    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 22, black_hole_pos[1] - 8))
+    #Data Snapshot Key
+    snapshot_pos = (15, 1115) #Default: (22, 1115) Position of the primordial black hole key.
+    screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos))
 
 #Unit class, also known as SpaceTimeUnit, probably because I described these as "units of spacetime" to OpenAI.
 #This class is to represent the molecular clouds as they transition into stars. It also handles gravity for each "unit".
