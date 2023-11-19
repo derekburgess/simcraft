@@ -24,4 +24,4 @@ A pixel universe simulator written with OpenAI GPT4 and VSCode Copilot. Uses `Py
 ```flux.py``` -- A dumb "exoplanet" graph. Shows change in `flux` (dip in opacity), over `observations`...
 
 A out of date demo
-![hehe](/assets/demo_171123.gif)
+![hehe](/assets/demo_181123.gif)

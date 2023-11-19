@@ -22,6 +22,5 @@ for body, group in grouped_data:
 plt.xlabel('Observation')
 plt.ylabel('Smoothed Flux')
 plt.title('Smoothed Flux Over Observation for Units with Change in Flux')
-plt.legend()
 plt.grid(True)
 plt.show()
