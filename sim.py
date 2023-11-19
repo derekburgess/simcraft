@@ -5,9 +5,9 @@ import math
 import random
 
 RING_RADIUS = 500 #Default: 500
-RING_ATTRACTOR_COUNT = 20 #Default: 20
-RING_ROTATION_SPEED = 1 #Default: 1
-RING_GRAVITY_CONSTANT = 20 #Default: 20
+RING_ATTRACTOR_COUNT = 10 #Default: 10
+RING_ROTATION_SPEED = 0.75 #Default: 0.75
+RING_GRAVITY_CONSTANT = 5 #Default: 5
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
 
@@ -87,7 +87,7 @@ def draw_static_key(screen):
     pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15)) #Size of the molecular cloud key.
     screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1]))
     #Protostar Key
-    protostar_pos = (31, 1000) #Default: (21, 1085) Position of the protostar key.
+    protostar_pos = (31, 1003) #Default: (21, 1085) Position of the protostar key.
     pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 3, 3)) #Size of the protostar key.
     screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 25, protostar_pos[1] - 6))
     #Primordial Black Hole Key
