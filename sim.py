@@ -267,23 +267,21 @@ def apply_gravity(units, ring_points):
                 unit.x += (dx / distance) * force
                 unit.y += (dy / distance) * force
 
-#Update units.
+# Update units.
 def update_units(units):
     global black_holes
     handle_collisions(units)
-    
-    # Create a dictionary to keep track of units by their IDs
-    unit_dict = {unit.id: unit for unit in units}
-    
+    # Create a list to keep track of units to remove
+    units_to_remove = []
     # Update units
-    for unit_id, unit in unit_dict.items():
+    for unit in units:
         unit.update()
         if unit.mass > BLACK_HOLE_THRESHOLD:
             black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
-            del unit_dict[unit_id]  # Remove the unit from the dictionary
-    
-    # Update the 'units' list with the remaining units
-    units[:] = unit_dict.values()
+            units_to_remove.append(unit)  # Add the unit to the removal list
+    # Remove units that exceed the threshold
+    for unit in units_to_remove:
+        units.remove(unit)
 
 units = []
 for _ in range(UNIT_COUNT):
@@ -298,41 +296,32 @@ for _ in range(UNIT_COUNT):
     unit = SpaceTimeUnit(x, y, UNIT_START_SIZE, UNIT_START_MASS)
     units.append(unit)
     
-# Dump data to CSV
+#Define a global index counter for units and black holes
+global_index_counter = 1
+#Dump data to CSV
 def dump_to_csv(units, black_holes, current_year, filename='data.csv'):
-    # Check if file exists
+    global global_index_counter  #Declare the global index counter
+    #Check if file exists
     file_exists = os.path.isfile(filename)
-    # Get the last used ID from the existing CSV file or start from 1 if it's a new file
-    if file_exists:
-        with open(filename, mode='r') as file:
-            reader = csv.reader(file)
-            # Skip the header row
-            next(reader, None)
-            # Find the last used ID by iterating through the file
-            last_row = None
-            for last_row in reader:
-                pass
-            last_id = int(last_row[0]) if last_row else 0
-    else:
-        last_id = 0
-
     with open(filename, mode='a' if file_exists else 'w', newline='') as file:
         writer = csv.writer(file)
-        # Write header if the file is new
+        #Write header if the file is new
         if not file_exists:
-            writer.writerow(['ID', 'body', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation'])
-        # Initialize the row_id with the last used ID + 1
-        row_id = last_id + 1
-        # Write data for each unit
+            writer.writerow(['id', 'body', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation'])
+        #Initialize the row_id with the last used ID + 1
+        row_id = global_index_counter
+        #Write data for each unit
         for unit in units:
-            # Flux can be represented by the opacity attribute
+            #Flux can be represented by the opacity attribute
             flux = unit.opacity if hasattr(unit, 'opacity') else 'N/A'
             writer.writerow([row_id, unit.id, 'Unit', unit.x, unit.y, unit.mass, unit.size, flux, current_year])
             row_id += 1
-        # Write data for each black hole
+        #Write data for each black hole
         for black_hole in black_holes:
             writer.writerow([row_id, 'N/A', 'BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, 0, current_year])
             row_id += 1
+        #Update the global index counter to the next available ID
+        global_index_counter = row_id
 
 #Run simulation.
 def run_simulation():
@@ -385,7 +374,6 @@ def run_simulation():
                 unit.update_gravity()
             for unit in units:
                 unit.draw(screen)
-                print(f"Unit{unit.id}: {unit.x}, {unit.y}, {unit.mass}, {unit.size}")
             #Update screen
             #Draw static key on screen
             draw_static_key(screen)
