@@ -16,15 +16,15 @@ UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
-UNIT_GRAVITY_CONSTANT = 0.01 #Default: 0.01
-UNIT_MAX_MASS = 100 #Default: 100
+UNIT_GRAVITY_CONSTANT = 0.001 #Default: 0.001
+UNIT_MAX_MASS = 200 #Default: 100
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 75 #Default: 75
+BLACK_HOLE_THRESHOLD = 150 #Default: 75
 BLACK_HOLE_CHANCE = 0.75 #Default: 0.75
 BLACK_HOLE_RADIUS = 20 #Default: 20
-BLACK_HOLE_GRAVITY_CONSTANT = 0.001 #Default: 0.001
+BLACK_HOLE_GRAVITY_CONSTANT = 0.0005 #Default: 0.0005
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
 BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
 BLACK_HOLE_COLOR = (0,0,0) #Black...
@@ -34,13 +34,13 @@ GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
 GRID_TEXT_COLOR = (0, 0, 255)  # White or choose another contrasting color
 GRID_OPACITY = 10 #Default: 10, Range: 0-255
 GRID_LINES_HORIZONTAL = 12 #Default: 12
-GRID_LINES_VERTICAL = 12 #Default: 12
+GRID_LINES_VERTICAL = 16 #Default: 16
 GRID_LABEL_OFFSET = 5 #Default: 5
 
 LABEL_COLOR = (200, 200, 200) #Default: (200, 200, 200) -- Light Gray
 
 BACKGROUND_COLOR = (0, 0, 10) #Default: (0, 0, 10) -- Dark Blue
-SCREEN_WIDTH = 1200 #Default: 1200
+SCREEN_WIDTH = 1600 #Default: 1600
 SCREEN_HEIGHT = 1200 #Default: 1200
 
 unit_id_counter = 0
@@ -83,22 +83,22 @@ def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
 
 def draw_static_key(screen):
     #Molecular Cloud Key
-    molecular_cloud_pos = (15, 1000) #Default: (15, 1050) Position of the molecular cloud key.
+    molecular_cloud_pos = (25, 970) #Default: (15, 1050) Position of the molecular cloud key.
     pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15)) #Size of the molecular cloud key.
     screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1]))
     #Protostar Key
-    protostar_pos = (21, 1035) #Default: (21, 1085) Position of the protostar key.
+    protostar_pos = (31, 1000) #Default: (21, 1085) Position of the protostar key.
     pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 3, 3)) #Size of the protostar key.
     screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 25, protostar_pos[1] - 6))
     #Primordial Black Hole Key
-    black_hole_pos = (22, 1070) #Default: (22, 1115) Position of the primordial black hole key.
+    black_hole_pos = (32, 1030) #Default: (22, 1115) Position of the primordial black hole key.
     pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6) #6 is the radius of the primordial black hole key.
     pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2) #2 is the width of the border of the primordial black hole key.
     screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 22, black_hole_pos[1] - 8))
     #Data Snapshot Key
-    snapshot_pos = (15, 1115) #Default: (22, 1115) Position of the primordial black hole key.
+    snapshot_pos = (25, 1075) #Default: (22, 1115) Position of the primordial black hole key.
     screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos))
-    snapshot_pos = (15, 1135)
+    snapshot_pos = (25, 1100)
     screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos))
 
 def generate_unique_id():
@@ -384,7 +384,7 @@ def run_simulation():
             #Render time text
             year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
             #Blit time text to screen
-            screen.blit(year_text, (15, SCREEN_HEIGHT - 30 ))
+            screen.blit(year_text, (25, SCREEN_HEIGHT - 50 ))
             pygame.display.flip()
         print("Exiting simulation...")
     except Exception as e:
