@@ -25,8 +25,8 @@ grouped = df.groupby(['observation', 'category']).size().unstack(fill_value=0)
 #Define colors for categories
 colors = {
     'MolecularCloud': 'purple',
-    'Star': 'red',
-    'BlackHole': 'black'
+    'Star': 'blue',
+    'BlackHole': 'red'
 }
 
 #Time Series Plotting
