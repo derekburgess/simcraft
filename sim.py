@@ -5,16 +5,16 @@ import math
 import random
 
 RING_RADIUS = 500 #Default: 500
-RING_ATTRACTOR_COUNT = 20 #Default: 10
-RING_ROTATION_SPEED = 1 #Default: 0.75
-RING_GRAVITY_CONSTANT = 20 #Default: 10
+RING_ATTRACTOR_COUNT = 20 #Default: 20
+RING_ROTATION_SPEED = 1 #Default: 1
+RING_GRAVITY_CONSTANT = 20 #Default: 20
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
-RING_OPACITY = 20 #Default: 0, Range: 0-255
+RING_OPACITY = 0 #Default: 0, Range: 0-255
 
 UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
-UNIT_GROWTH_RATE = 3 #Default: 1
+UNIT_GROWTH_RATE = 3 #Default: 3
 UNIT_START_MASS = 1 #Default: 1
 UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.1
 

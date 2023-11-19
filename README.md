@@ -19,12 +19,16 @@ Delete `data.csv` before running the simulator.
 
 ```cluster.py``` Clusters units by `type`, `mass`, `distance from center`, and `observation`, returns a 3D plot.
 
-```timeseries.py``` -- Displays the change in the 3 primary unit `types`, Molecular Clouds, Protostars, and Primordial Black Holes. Calculating the stars from the molecular clouds to add a layer of ambiguity and adjustment in the analysis phase.
+```flux.py``` -- A dumb "exoplanet" graph. Shows change in `flux` (dip in opacity), over `observations`...
 
 ```heatmap.py``` -- Shows the distribution of units by `mass` and `flux`, calling out black holes.
 
 ```network.py``` -- Creates heirarchical network graphs of the units, based on their distance from more massive units like stars and black holes. Not much to say on what this really means, I thought it would be interesting to see a mapping of matter impacted by the presense of a black hole, but this needs some work...
 
-```flux.py``` -- A dumb "exoplanet" graph. Shows change in `flux` (dip in opacity), over `observations`...
+```time_3d.py```  -- Displays a 3D plot of change in unit `type` over time including `X`an `Y` position.
+
+```timeseries.py``` -- Displays the change in the 3 primary unit `types`, Molecular Clouds, Protostars, and Primordial Black Holes. Calculating the stars from the molecular clouds to add a layer of ambiguity and adjustment in the analysis phase.
+
+```example_data.csv``` -- 8 Billion year run of the simulator.
 
 ![hehe](/assets/demo_181123.gif)
