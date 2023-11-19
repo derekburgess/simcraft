@@ -16,12 +16,12 @@ UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
-UNIT_GRAVITY_CONSTANT = 0.05 #Default: 0.05
-UNIT_MAX_MASS = 100 #Default: 50
+UNIT_GRAVITY_CONSTANT = 0.01 #Default: 0.05
+UNIT_MAX_MASS = 200 #Default: 50
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 99 #Default: 49
+BLACK_HOLE_THRESHOLD = 199 #Default: 49
 BLACK_HOLE_RADIUS = 25 #Default: 20
 BLACK_HOLE_GRAVITY_CONSTANT = 0.001 #Default: 0.01
 BLACK_HOLE_DECAY_RATE = 0.75 #Default: 1
@@ -42,6 +42,7 @@ BACKGROUND_COLOR = (0, 0, 10) #Default: (0, 0, 10) -- Dark Blue
 SCREEN_WIDTH = 1200 #Default: 1200
 SCREEN_HEIGHT = 1200 #Default: 1200
 
+unit_id_counter = 0
 objects_with_gravity = [] #Units and black holes
 black_holes = [] #Black holes
 
@@ -96,26 +97,36 @@ def draw_static_key(screen):
     #Data Snapshot Key
     snapshot_pos = (15, 1115) #Default: (22, 1115) Position of the primordial black hole key.
     screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos))
+    snapshot_pos = (15, 1135)
+    screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos))
+
+def generate_unique_id():
+    global unit_id_counter
+    unit_id_counter += 1
+    return unit_id_counter
 
 #Unit class, also known as SpaceTimeUnit, probably because I described these as "units of spacetime" to OpenAI.
 #This class is to represent the molecular clouds as they transition into stars. It also handles gravity for each "unit".
 #A unit is represented by the square pixels that start out as large, low-mass molecular clouds and transition into small, high-mass stars.
 class SpaceTimeUnit:
     def __init__(self, x, y, size, mass):
+        self.id = generate_unique_id()
         self.x = x #X position of the unit, this will be used to set the X position of the unit.
         self.y = y #Y position of the unit, this will be used to set the Y position of the unit.
         self.size = size #Size of the unit, this will be used to set the size of the unit.
         self.mass = mass #Mass of the unit, this will be used to set the mass of the unit.
+        self.opacity = 255  #Maximum opacity
         self.gravity_sources = [] #Set gravity sources to an empty list, this will be used to set the gravity sources of the unit.
 
     #Draw the unit on the screen.
     def draw(self, screen):
-        #Interpolate color between two colors, used for units as they transition from molecular clouds to stars.
+        # Interpolate color
         factor = self.mass / UNIT_MAX_MASS
-        #Set color to the interpolated color.
         color = interpolate_color(UNIT_START_COLOR, UNIT_END_COLOR, factor)
-        #Draw the unit on the screen.
-        pygame.draw.rect(screen, color, (self.x, self.y, self.size, self.size))
+        #Add opacity to color for flicker effect (opacity is a random number between 0 and 255)
+        color_with_opacity = color + (int(self.opacity),)
+        # Draw the unit with flickering effect
+        pygame.draw.rect(screen, color_with_opacity, (self.x, self.y, self.size, self.size))
 
     #Update the unit.
     def update(self):
@@ -123,6 +134,10 @@ class SpaceTimeUnit:
         self.size = max(UNIT_MIN_SIZE, UNIT_START_SIZE - int((self.mass - UNIT_START_MASS) * UNIT_GROWTH_RATE))
         #Update the unit's gravity.
         self.mass = min(self.mass, UNIT_MAX_MASS)
+        #Update the unit's opacity.
+        if self.size < 6:
+            #Randomly adjust the opacity for flicker effect
+            self.opacity = random.randint(0, 255)
 
     #Check if unit collides with another unit and return True if it does, use this to inform handle_collisions().
     def check_collision(self, other):
@@ -253,19 +268,21 @@ def apply_gravity(units, ring_points):
 
 #Update units.
 def update_units(units):
-    #Use global objects_with_gravity and black_holes.
     global black_holes
-    #Handle collisions between units.
     handle_collisions(units)
-    #Update units.
-    for unit in list(units):
-        #If unit is a black hole, update the black hole.
+    
+    # Create a dictionary to keep track of units by their IDs
+    unit_dict = {unit.id: unit for unit in units}
+    
+    # Update units
+    for unit_id, unit in unit_dict.items():
         unit.update()
-        #If unit is a black hole and its mass is greater than the black hole threshold, remove it from the simulation.
         if unit.mass > BLACK_HOLE_THRESHOLD:
-            #Remove the black hole from the simulation.
             black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
-            units.remove(unit)
+            del unit_dict[unit_id]  # Remove the unit from the dictionary
+    
+    # Update the 'units' list with the remaining units
+    units[:] = unit_dict.values()
 
 units = []
 for _ in range(UNIT_COUNT):
@@ -279,22 +296,41 @@ for _ in range(UNIT_COUNT):
     #Create unit.
     unit = SpaceTimeUnit(x, y, UNIT_START_SIZE, UNIT_START_MASS)
     units.append(unit)
-
-#Dump data to CSV
+    
+# Dump data to CSV
 def dump_to_csv(units, black_holes, current_year, filename='data.csv'):
     # Check if file exists
     file_exists = os.path.isfile(filename)
+    # Get the last used ID from the existing CSV file or start from 1 if it's a new file
+    if file_exists:
+        with open(filename, mode='r') as file:
+            reader = csv.reader(file)
+            # Skip the header row
+            next(reader, None)
+            # Find the last used ID by iterating through the file
+            last_row = None
+            for last_row in reader:
+                pass
+            last_id = int(last_row[0]) if last_row else 0
+    else:
+        last_id = 0
     with open(filename, mode='a' if file_exists else 'w', newline='') as file:
         writer = csv.writer(file)
         # Write header if the file is new
         if not file_exists:
-            writer.writerow(['Type', 'X', 'Y', 'Mass', 'Size', 'Observation'])
+            writer.writerow(['id', 'body', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation'])
+        # Initialize the row_id with the last used ID + 1
+        row_id = last_id + 1
         # Write data for each unit
         for unit in units:
-            writer.writerow(['Unit', unit.x, unit.y, unit.mass, unit.size, current_year])
+            # Flux can be represented by the opacity attribute
+            flux = unit.opacity if hasattr(unit, 'opacity') else 'N/A'
+            writer.writerow([row_id, unit.id, 'Unit', unit.x, unit.y, unit.mass, unit.size, flux, current_year])
+            row_id += 1
         # Write data for each black hole
         for black_hole in black_holes:
-            writer.writerow(['BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, current_year])
+            writer.writerow([row_id, 'N/A', 'BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, 0, current_year])
+            row_id += 1
 
 #Run simulation.
 def run_simulation():
@@ -315,14 +351,6 @@ def run_simulation():
             screen.fill(BACKGROUND_COLOR)
             #Draw grid on screen
             draw_grid(screen, font, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
-            #Draw static key on screen
-            draw_static_key(screen)
-            #Increment years
-            years += 1
-            #Render time text
-            year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
-            #Blit time text to screen
-            screen.blit(year_text, (15, SCREEN_HEIGHT - 50))
             #Increment angle
             angle += RING_ROTATION_SPEED
             #Get ring points
@@ -355,7 +383,16 @@ def run_simulation():
                 unit.update_gravity()
             for unit in units:
                 unit.draw(screen)
+                print(f"Unit{unit.id}: {unit.x}, {unit.y}, {unit.mass}, {unit.size}")
             #Update screen
+            #Draw static key on screen
+            draw_static_key(screen)
+            #Increment years
+            years += 1
+            #Render time text
+            year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
+            #Blit time text to screen
+            screen.blit(year_text, (15, SCREEN_HEIGHT - 30 ))
             pygame.display.flip()
         print("Exiting simulation...")
     except Exception as e:
