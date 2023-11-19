@@ -1,15 +1,10 @@
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-df = pd.read_csv('../data.csv')
-center_x, center_y = 600, 600
+df = pd.read_csv('../example_data.csv')
 
-#Calculate the Euclidean distance from the center for each object
-df['distance'] = np.sqrt((df['posx'] - center_x)**2 + (df['posy'] - center_y)**2)
-
-#Categorizing objects
+# Existing categorization function
 def categorize_object(row):
     if row['type'] == 'BlackHole':
         return 'BlackHole'
@@ -25,20 +20,26 @@ def categorize_object(row):
 
 df['category'] = df.apply(categorize_object, axis=1)
 
+# Prepare 3D plot
 fig = plt.figure(figsize=(12, 8))
 ax = fig.add_subplot(111, projection='3d')
 
-#Assigning colors based on category
-color_map = {
+colors = {
     'MolecularCloud': 'gray',
     'Star': 'blue',
-    'BlackHole': 'red',
+    'BlackHole': 'red'
 }
 
-df['color'] = df['category'].map(color_map)
-ax.scatter(df['mass'], df['distance'], df['observation'], c=df['color'])
-ax.set_xlabel('mass')
-ax.set_ylabel('Distance from Center')
+# Plot each category with its position and observation year
+for category in df['category'].unique():
+    cat_data = df[df['category'] == category]
+    ax.scatter(cat_data['posx'], cat_data['posy'], cat_data['observation'], 
+               label=category, color=colors[category], marker='o')
+
+# Setting labels and title
+ax.set_xlabel('Position X')
+ax.set_ylabel('Position Y')
 ax.set_zlabel('Observation Year')
+ax.set_title('3D Plot of Astronomical Objects')
 plt.tight_layout()
 plt.show()

@@ -24,8 +24,8 @@ black_holes = df[df['category'] == 'BlackHole']
 
 #Color map based on categories
 color_map = {
-    'MolecularCloud': 'purple',
-    'Star': 'red',
+    'MolecularCloud': 'gray',
+    'Star': 'blue',
     'BlackHole': 'black'
 }
 G = nx.DiGraph()

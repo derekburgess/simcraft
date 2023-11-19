@@ -15,7 +15,7 @@ other_bodies = aggregated_data[(aggregated_data['flux'] >= 255) & (aggregated_da
 
 #Generate a scatter plot
 plt.figure(figsize=(12, 8))
-plt.scatter(other_bodies['posx'], other_bodies['posy'], c='purple', alpha=0.5, s=other_bodies['mass'], label='Other Bodies')
+plt.scatter(other_bodies['posx'], other_bodies['posy'], c='gray', alpha=0.5, s=other_bodies['mass'], label='Other Bodies')
 plt.scatter(low_flux_bodies['posx'], low_flux_bodies['posy'], c='blue', alpha=0.5, s=low_flux_bodies['mass'], label='Low Flux Bodies')
 plt.scatter(blackholes['posx'], blackholes['posy'], c='red', marker='x', s=50, label='BlackHoles')
 plt.title('Mass Distribution with Black Holes and Low Flux Bodies Highlighted')

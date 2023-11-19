@@ -5,28 +5,28 @@ import math
 import random
 
 RING_RADIUS = 500 #Default: 500
-RING_ATTRACTOR_COUNT = 10 #Default: 10
-RING_ROTATION_SPEED = 0.75 #Default: 0.75
-RING_GRAVITY_CONSTANT = 5 #Default: 5
+RING_ATTRACTOR_COUNT = 20 #Default: 10
+RING_ROTATION_SPEED = 1 #Default: 0.75
+RING_GRAVITY_CONSTANT = 20 #Default: 10
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
-RING_OPACITY = 0 #Default: 0, Range: 0-255
+RING_OPACITY = 20 #Default: 0, Range: 0-255
 
 UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
-UNIT_GROWTH_RATE = 1 #Default: 1
+UNIT_GROWTH_RATE = 3 #Default: 1
 UNIT_START_MASS = 1 #Default: 1
-UNIT_GRAVITY_CONSTANT = 0.001 #Default: 0.001
-UNIT_MAX_MASS = 200 #Default: 100
+UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.1
+UNIT_MAX_MASS = 80 #Default: 80
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 150 #Default: 75
-BLACK_HOLE_CHANCE = 0.75 #Default: 0.75
-BLACK_HOLE_RADIUS = 20 #Default: 20
+BLACK_HOLE_THRESHOLD = 60 #Default: 60
+BLACK_HOLE_CHANCE = 0.6 #Default: 0.6
+BLACK_HOLE_RADIUS = 18 #Default: 18
 BLACK_HOLE_GRAVITY_CONSTANT = 0.0005 #Default: 0.0005
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
-BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
+BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
 BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
@@ -379,6 +379,8 @@ def run_simulation():
             #Update screen
             #Draw static key on screen
             draw_static_key(screen)
+            if years % 500 == 0:
+                dump_to_csv(units, black_holes, years)
             #Increment years
             years += 1
             #Render time text
