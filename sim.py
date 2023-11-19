@@ -16,7 +16,7 @@ UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
-UNIT_GRAVITY_CONSTANT = 0.01 #Default: 0.05
+UNIT_GRAVITY_CONSTANT = 0.01 #Default: 0.01
 UNIT_MAX_MASS = 50 #Default: 50
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
@@ -24,7 +24,7 @@ UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 BLACK_HOLE_THRESHOLD = 49 #Default: 49
 BLACK_HOLE_RADIUS = 25 #Default: 20
 BLACK_HOLE_GRAVITY_CONSTANT = 0.001 #Default: 0.01
-BLACK_HOLE_DECAY_RATE = 0.75 #Default: 1
+BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
 BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
 BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
@@ -160,6 +160,7 @@ class SpaceTimeUnit:
     
 class BlackHole:
     def __init__(self, x, y, mass):
+        self.id = generate_unique_id()
         self.x = x
         self.y = y
         self.mass = mass #Mass of the black hole, this will be used to set the mass of the black hole.
@@ -314,11 +315,12 @@ def dump_to_csv(units, black_holes, current_year, filename='data.csv'):
             last_id = int(last_row[0]) if last_row else 0
     else:
         last_id = 0
+
     with open(filename, mode='a' if file_exists else 'w', newline='') as file:
         writer = csv.writer(file)
         # Write header if the file is new
         if not file_exists:
-            writer.writerow(['id', 'body', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation'])
+            writer.writerow(['ID', 'body', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation'])
         # Initialize the row_id with the last used ID + 1
         row_id = last_id + 1
         # Write data for each unit
