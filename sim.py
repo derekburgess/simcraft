@@ -17,6 +17,7 @@ UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 3 #Default: 1
 UNIT_START_MASS = 1 #Default: 1
 UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.1
+
 UNIT_MAX_MASS = 80 #Default: 80
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
@@ -26,6 +27,7 @@ BLACK_HOLE_CHANCE = 0.6 #Default: 0.6
 BLACK_HOLE_RADIUS = 18 #Default: 18
 BLACK_HOLE_GRAVITY_CONSTANT = 0.0005 #Default: 0.0005
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
+
 BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
 BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
