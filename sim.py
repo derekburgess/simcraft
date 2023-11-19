@@ -17,13 +17,14 @@ UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
 UNIT_GRAVITY_CONSTANT = 0.01 #Default: 0.01
-UNIT_MAX_MASS = 50 #Default: 50
+UNIT_MAX_MASS = 100 #Default: 100
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 49 #Default: 49
-BLACK_HOLE_RADIUS = 25 #Default: 20
-BLACK_HOLE_GRAVITY_CONSTANT = 0.001 #Default: 0.01
+BLACK_HOLE_THRESHOLD = 75 #Default: 75
+BLACK_HOLE_CHANCE = 0.75 #Default: 0.75
+BLACK_HOLE_RADIUS = 20 #Default: 20
+BLACK_HOLE_GRAVITY_CONSTANT = 0.001 #Default: 0.001
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
 BLACK_HOLE_DECAY_THRESHOLD = 10 #Default: 10
 BLACK_HOLE_COLOR = (0,0,0) #Black...
@@ -271,15 +272,16 @@ def apply_gravity(units, ring_points):
 def update_units(units):
     global black_holes
     handle_collisions(units)
-    # Create a list to keep track of units to remove
     units_to_remove = []
-    # Update units
     for unit in units:
         unit.update()
         if unit.mass > BLACK_HOLE_THRESHOLD:
-            black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
-            units_to_remove.append(unit)  # Add the unit to the removal list
-    # Remove units that exceed the threshold
+            #Randomly generate black holes.
+            if random.random() < BLACK_HOLE_CHANCE: 
+                #Create a black hole.
+                black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
+                #Add the black hole to the objects with gravity list.
+                units_to_remove.append(unit)
     for unit in units_to_remove:
         units.remove(unit)
 
