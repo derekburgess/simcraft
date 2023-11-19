@@ -318,7 +318,7 @@ def dump_to_csv(units, black_holes, current_year, filename='data.csv'):
             row_id += 1
         #Write data for each black hole
         for black_hole in black_holes:
-            writer.writerow([row_id, 'N/A', 'BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, 0, current_year])
+            writer.writerow([row_id, black_hole.id, 'BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, 0, current_year])
             row_id += 1
         #Update the global index counter to the next available ID
         global_index_counter = row_id

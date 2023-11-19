@@ -15,9 +15,11 @@ A pixel universe simulator written with OpenAI GPT4 and VSCode Copilot. Uses `Py
 
 ```analysis``` -- The Analysis directory contains some scripts that ingest the `data.csv` file (created and updated by hitting spacebar) and return some visualizations to enhance your experience.
 
-```cluster.py``` Clusters units by `type`, `mass`, `distance from center`, and `observation`, returns a 3D plot. Fun for seeing distributions of units and the evolution of your universe.
+```cluster.py``` Clusters units by `type`, `mass`, `distance from center`, and `observation`, returns a 3D plot.
 
-```timeseries.py``` -- Displays the change in the 3 primary unit `types`, Molecular Clouds, Protostars, and Primordial Black Holes. We calculate the stars from the molecular clouds to add a layer of ambiguity and adjustment in the analysis phase.
+```timeseries.py``` -- Displays the change in the 3 primary unit `types`, Molecular Clouds, Protostars, and Primordial Black Holes. Calculating the stars from the molecular clouds to add a layer of ambiguity and adjustment in the analysis phase.
+
+```heatmap.py``` -- Shows the distribution of units by `mass` and `flux`, calling out black holes.
 
 ```network.py``` -- Creates heirarchical network graphs of the units, based on their distance from more massive units like stars and black holes. Not much to say on what this really means, I thought it would be interesting to see a mapping of matter impacted by the presense of a black hole, but this needs some work...
 
