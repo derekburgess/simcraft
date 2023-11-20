@@ -49,9 +49,9 @@ objects_with_gravity = [] #Units and black holes
 black_holes = [] #Black holes
 
 pygame.init()
-pygame.display.set_caption("simcraft")
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 font = pygame.font.SysFont('Monospace', 14) #Font for time text.
+pygame.display.set_caption("simcraft")
 
 #Interpolate color between two colors, used for units as they transition from molecular clouds to stars.
 def interpolate_color(start_color, end_color, factor):
@@ -113,7 +113,6 @@ def generate_unique_id():
 class SpaceTimeUnit:
     def __init__(self, x, y, size, mass):
         self.id = generate_unique_id()
-        self.selected = False
         self.x = x #X position of the unit, this will be used to set the X position of the unit.
         self.y = y #Y position of the unit, this will be used to set the Y position of the unit.
         self.size = size #Size of the unit, this will be used to set the size of the unit.
@@ -123,17 +122,13 @@ class SpaceTimeUnit:
 
     #Draw the unit on the screen.
     def draw(self, screen):
-        if self.selected:
-            highlight_color = (255, 165, 0)  # Orange color
-            pygame.draw.rect(screen, highlight_color, (self.x, self.y, self.size, self.size))
-        else:
-            # Interpolate color
-            factor = self.mass / UNIT_MAX_MASS
-            color = interpolate_color(UNIT_START_COLOR, UNIT_END_COLOR, factor)
-            #Add opacity to color for flicker effect (opacity is a random number between 0 and 255)
-            color_with_opacity = color + (int(self.opacity),)
-            # Draw the unit with flickering effect
-            pygame.draw.rect(screen, color_with_opacity, (self.x, self.y, self.size, self.size))
+        # Interpolate color
+        factor = self.mass / UNIT_MAX_MASS
+        color = interpolate_color(UNIT_START_COLOR, UNIT_END_COLOR, factor)
+        #Add opacity to color for flicker effect (opacity is a random number between 0 and 255)
+        color_with_opacity = color + (int(self.opacity),)
+        # Draw the unit with flickering effect
+        pygame.draw.rect(screen, color_with_opacity, (self.x, self.y, self.size, self.size))
 
     #Update the unit.
     def update(self):
@@ -164,10 +159,6 @@ class SpaceTimeUnit:
             force = UNIT_GRAVITY_CONSTANT * (self.mass * source.mass) / (distance**2)   
             self.x += (dx / distance) * force
             self.y += (dy / distance) * force
-    
-    def is_clicked(self, click_x, click_y):
-        return (self.x <= click_x <= self.x + self.size and
-                self.y <= click_y <= self.y + self.size)
     
 class BlackHole:
     def __init__(self, x, y, mass):
@@ -338,17 +329,11 @@ def dump_to_csv(units, black_holes, current_year, filename='data.csv'):
 #Run simulation.
 def run_simulation():
     try:
-        global font
         running = True
         angle = 0
         ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
         decay_black_holes = []
         years = 0
-        sub_window_rect = pygame.Rect(25, 580, 180, 360)
-        close_button_rect = pygame.Rect(185, 580, 20, 20)
-        sub_window_active = False
-        selected_unit = None
-
         pygame.font.init()
         while running:
             for event in pygame.event.get():
@@ -356,38 +341,8 @@ def run_simulation():
                     running = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                     dump_to_csv(units, black_holes, years)
-
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    click_x, click_y = event.pos
-                    if sub_window_active:
-                        if close_button_rect.collidepoint(click_x, click_y):
-                            # Deselect unit and close sub-window
-                            if selected_unit:
-                                selected_unit.selected = False
-                                selected_unit = None
-                            sub_window_active = False
-                        elif not sub_window_rect.collidepoint(click_x, click_y):
-                            # Click is outside the sub-window
-                            # Check for unit selection
-                            for unit in units:
-                                unit.selected = False  # Deselect all units
-                                if unit.is_clicked(click_x, click_y):
-                                    selected_unit = unit
-                                    unit.selected = True
-                                    sub_window_active = True
-                    else:
-                        # Sub-window is not active
-                        # Check for unit selection
-                        for unit in units:
-                            unit.selected = False  # Deselect all units
-                            if unit.is_clicked(click_x, click_y):
-                                selected_unit = unit
-                                unit.selected = True
-                                sub_window_active = True
-
             #Fill screen with background color
             screen.fill(BACKGROUND_COLOR)
-
             #Draw grid on screen
             draw_grid(screen, font, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
             #Increment angle
@@ -395,10 +350,8 @@ def run_simulation():
             #Get ring points
             ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, angle)
             draw_ring(ring_points, RING_COLOR, RING_OPACITY)
-
             update_units(units)
             apply_gravity(units, ring_points)
-
             #Update black holes
             for black_hole in black_holes:
                 #Attract units to the black hole.
@@ -419,78 +372,22 @@ def run_simulation():
                 if decayed_black_hole in black_holes:
                     black_holes.remove(decayed_black_hole)
                 decay_black_holes.remove(decayed_black_hole)
-
             #Update units
             for unit in units:
                 unit.update_gravity()
             for unit in units:
                 unit.draw(screen)
-
             #Update screen
             #Draw static key on screen
             draw_static_key(screen)
             if years % 500 == 0:
                 dump_to_csv(units, black_holes, years)
-
             #Increment years
             years += 1
             #Render time text
             year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
             #Blit time text to screen
             screen.blit(year_text, (25, SCREEN_HEIGHT - 50 ))
-
-            def load_csv_data(file_path):
-                with open(file_path, 'r') as file:
-                    reader = csv.DictReader(file)
-                    return {row['body']: row for row in reader}
-
-            csv_data = load_csv_data('./data.csv')
-
-            def display_unit_data(screen, selected_unit, rect, font, csv_data):
-                if selected_unit is None:
-                    return
-                
-                live_data_texts = [
-                    "LIVE DATA:",
-                    f"ID: {selected_unit.id}",
-                    f"X-POS: {round(selected_unit.x, 5)}",
-                    f"Y-POS: {round(selected_unit.y, 5)}",
-                    f"SIZE: {selected_unit.size}",
-                    f"MASS: {selected_unit.mass}",
-                    f"FLUX: {selected_unit.opacity}"
-                ]
-
-                y_offset = 5
-                for text in live_data_texts:
-                    text_surface = font.render(text, True, LABEL_COLOR)
-                    screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-                    y_offset += 20
-
-                y_offset = 160
-                unit_csv_data = csv_data.get(str(selected_unit.id))
-                if unit_csv_data:
-                    csv_header_text = "OBSERVATIONAL DATA:"
-                    header_surface = font.render(csv_header_text, True, LABEL_COLOR)
-                    screen.blit(header_surface, (rect.x + 10, rect.y + y_offset))
-                    y_offset += 20
-
-                    for key, value in unit_csv_data.items():
-                        if key == 'posx' or key == 'posy':
-                            value = round(float(value), 5)
-
-                        csv_text = f"{key.upper()}: {value}"
-                        text_surface = font.render(csv_text, True, LABEL_COLOR)
-                        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-                        y_offset += 20
-
-            if sub_window_active:
-                pygame.draw.rect(screen, LABEL_COLOR, sub_window_rect, 1)
-                inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1)
-                pygame.draw.rect(screen, BACKGROUND_COLOR, inner_rect)
-                pygame.draw.rect(screen, LABEL_COLOR, close_button_rect)
-                if selected_unit:
-                    display_unit_data(screen, selected_unit, sub_window_rect, font, csv_data)
-                
             pygame.display.flip()
         print("Exiting simulation...")
     except Exception as e:
