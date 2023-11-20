@@ -453,10 +453,10 @@ def run_simulation():
                 live_data_texts = [
                     "LIVE DATA:",
                     f"ID: {selected_unit.id}",
-                    f"X-POS: {round(selected_unit.x, 5)}",
-                    f"Y-POS: {round(selected_unit.y, 5)}",
-                    f"SIZE: {selected_unit.size}",
+                    f"POSX: {round(selected_unit.x, 5)}",
+                    f"POSY: {round(selected_unit.y, 5)}",
                     f"MASS: {selected_unit.mass}",
+                    f"SIZE: {selected_unit.size}",
                     f"FLUX: {selected_unit.opacity}"
                 ]
 
