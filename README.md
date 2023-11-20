@@ -9,7 +9,7 @@ A pixel universe simulator written with OpenAI GPT4 and VSCode Copilot. Uses `Py
 
 Delete `data.csv` before running the simulator.
 
-```python sim.py``` -- A set and forget universe simulator with my "great attractor" ring. Why? I had this drunken thought along the lines of "what if the 'great attractor' was actually just gravity on the edge of our universe' expanding manifold?" and so I wanted to see if I could make a dumb little 2D simulation using OpenAI, because that's been my thing lately lol... anyways- run it and find out. You can hit spacebar to add data to a CSV file, spam it as needed like you are "observing" the universe. Further more, using the `analysis` scripts, you can see how the universe evolves over time.
+```python sim_.py``` -- A set and forget universe simulator with my "great attractor" ring. Why? I had this drunken thought along the lines of "what if the 'great attractor' was actually just gravity on the edge of our universe' expanding manifold?" and so I wanted to see if I could make a dumb little 2D simulation using OpenAI, because that's been my thing lately lol... anyways- run it and find out. You can hit spacebar to add data to a CSV file, spam it as needed like you are "observing" the universe. Further more, using the `analysis` scripts, you can see how the universe evolves over time. `_v150.py` does not include the built in data visualization, where `_v200.py` does, there is an occassional error out of matplot and so I consider v200 to be work in progress.
 
 ```backups``` -- Contains older stable versions of the simulator.
 

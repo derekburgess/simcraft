@@ -3,6 +3,8 @@ import csv
 import pygame
 import math
 import random
+import matplotlib.pyplot as plt
+import matplotlib.backends.backend_agg as agg
 
 RING_RADIUS = 500 #Default: 500
 RING_ATTRACTOR_COUNT = 10 #Default: 10
@@ -344,8 +346,8 @@ def run_simulation():
         ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
         decay_black_holes = []
         years = 0
-        sub_window_rect = pygame.Rect(25, 580, 180, 360)
-        close_button_rect = pygame.Rect(185, 580, 20, 20)
+        sub_window_rect = pygame.Rect(25, 25, 180, 450)
+        close_button_rect = pygame.Rect(185, 25, 20, 20)
         sub_window_active = False
         selected_unit = None
 
@@ -442,9 +444,24 @@ def run_simulation():
             def load_csv_data(file_path):
                 with open(file_path, 'r') as file:
                     reader = csv.DictReader(file)
-                    return {row['body']: row for row in reader}
+                    data = {}
+                    for row in reader:
+                        body = row['body']
+                        if body not in data:
+                            data[body] = []
+                        data[body].append(row)
+                    return data
 
             csv_data = load_csv_data('./data.csv')
+
+            def plot_graph(x_values, data, title):
+                fig, ax = plt.subplots(figsize=(2, 1), dpi=80)
+                for key, y_values in data.items():
+                    ax.plot(x_values, y_values, label=key.upper())
+                plt.tight_layout()
+                canvas = agg.FigureCanvasAgg(fig)
+                canvas.draw()
+                return canvas
 
             def display_unit_data(screen, selected_unit, rect, font, csv_data):
                 if selected_unit is None:
@@ -474,7 +491,8 @@ def run_simulation():
                     screen.blit(header_surface, (rect.x + 10, rect.y + y_offset))
                     y_offset += 20
 
-                    for key, value in unit_csv_data.items():
+                    most_recent_observation = unit_csv_data[-1]
+                    for key, value in most_recent_observation.items():
                         if key == 'posx' or key == 'posy':
                             value = round(float(value), 5)
 
@@ -482,6 +500,16 @@ def run_simulation():
                         text_surface = font.render(csv_text, True, LABEL_COLOR)
                         screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
                         y_offset += 20
+
+                    x_values = [float(row['observation']) for row in unit_csv_data]
+                    data = {key: [float(row[key]) for row in unit_csv_data] for key in ['mass', 'size', 'flux']}
+                    min_length = min(len(x_values), min(len(v) for v in data.values()))
+                    x_values = x_values[:min_length]
+                    data = {k: v[:min_length] for k, v in data.items()}
+                    canvas = plot_graph(x_values, data, "OBSERVATIONAL DATA")
+                    width, height = canvas.get_width_height()
+                    pygame_surface = pygame.image.fromstring(canvas.tostring_argb(), (width, height), 'ARGB')
+                    screen.blit(pygame_surface, (rect.x + 10, rect.y + y_offset))
 
             if sub_window_active:
                 pygame.draw.rect(screen, LABEL_COLOR, sub_window_rect, 1)
