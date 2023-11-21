@@ -16,18 +16,22 @@ RING_OPACITY = 0 #Default: 0, Range: 0-255
 UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
-UNIT_GROWTH_RATE = 1 #Default: 1
+UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
-UNIT_GRAVITY_CONSTANT = 0.05 #Default: 0.05
-UNIT_MAX_MASS = 100 #Default: 80
+UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.05
+UNIT_MAX_MASS = 60 #Default: 60
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
-BLACK_HOLE_THRESHOLD = 90 #Default: 60
+BLACK_HOLE_THRESHOLD = 50 #Default: 50
 BLACK_HOLE_CHANCE = 0.25 #Default: 0.6
 BLACK_HOLE_RADIUS = 18 #Default: 18
 BLACK_HOLE_GRAVITY_CONSTANT = 0.0005 #Default: 0.0005
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
+
+BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
+BLACK_HOLE_COLOR = (0,0,0) #Black...
+BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
 BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
 BLACK_HOLE_COLOR = (0,0,0) #Black...
@@ -174,6 +178,7 @@ class SpaceTimeUnit:
 class BlackHole:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
+        self.selected = False
         self.x = x
         self.y = y
         self.mass = mass #Mass of the black hole, this will be used to set the mass of the black hole.
@@ -181,8 +186,12 @@ class BlackHole:
 
     #Draw the black hole on the screen.
     def draw(self, screen):
-        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (self.x, self.y), self.border_radius)
-        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_RADIUS, 0)
+        if self.selected:
+            highlight_color = (255, 165, 0)  # Orange color
+            pygame.draw.rect(screen, highlight_color, (self.x, self.y, self.size, self.size))
+        else:
+            pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (self.x, self.y), self.border_radius)
+            pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_RADIUS, 0)
 
     #Attract units to the black hole.
     def attract(self, units, black_holes):
@@ -353,35 +362,38 @@ def run_simulation():
 
         pygame.font.init()
         while running:
+            #Handle events
             for event in pygame.event.get():
+                #Handle quit event
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
                     running = False
+                #Handle spacebar event
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    #Dump data to CSV
                     dump_to_csv(units, black_holes, years)
 
+                #Here we create a subwindow when a unit is clicked. The subwindow contains live and observational data. All of the logic is handled below. It can be closed by clicking the white block/close button.
+                #Handle mouse button down event
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     click_x, click_y = event.pos
+                    #Handle sub window events
                     if sub_window_active:
+                        #Handle close button event
                         if close_button_rect.collidepoint(click_x, click_y):
-                            # Deselect unit and close sub-window
                             if selected_unit:
                                 selected_unit.selected = False
                                 selected_unit = None
                             sub_window_active = False
                         elif not sub_window_rect.collidepoint(click_x, click_y):
-                            # Click is outside the sub-window
-                            # Check for unit selection
                             for unit in units:
-                                unit.selected = False  # Deselect all units
+                                unit.selected = False
                                 if unit.is_clicked(click_x, click_y):
                                     selected_unit = unit
                                     unit.selected = True
                                     sub_window_active = True
                     else:
-                        # Sub-window is not active
-                        # Check for unit selection
                         for unit in units:
-                            unit.selected = False  # Deselect all units
+                            unit.selected = False
                             if unit.is_clicked(click_x, click_y):
                                 selected_unit = unit
                                 unit.selected = True
@@ -441,48 +453,71 @@ def run_simulation():
             #Blit time text to screen
             screen.blit(year_text, (25, SCREEN_HEIGHT - 50 ))
 
+            #Display unit data
             def load_csv_data(file_path):
                 with open(file_path, 'r') as file:
                     reader = csv.DictReader(file)
                     data = {}
+                    #Group data by body
                     for row in reader:
                         body = row['body']
                         if body not in data:
                             data[body] = []
                         data[body].append(row)
                     return data
-
             csv_data = load_csv_data('./data.csv')
 
+            #Plot graph
             def plot_graph(x_values, data, title):
+                #Plot tiny graph
                 fig, ax = plt.subplots(figsize=(2, 1), dpi=80)
-                for key, y_values in data.items():
-                    ax.plot(x_values, y_values, label=key.upper())
+                #Plot title, transparent background
+                fig.patch.set_alpha(0.0)
+                #Plot axis, transparent background
+                ax.patch.set_alpha(0.0)
+                #Line colors and styles
+                colors = ['white', 'gray', 'purple']
+                linestyles = [':', ':', '-']
+                for i, (key, y_values) in enumerate(data.items()):
+                    ax.plot(x_values, y_values, label=key.upper(), color=colors[i % len(colors)], linestyle=linestyles[i % len(linestyles)])
+                #Set labels to nothing...
+                ax.set_xticklabels([])
+                ax.set_yticklabels([])
+                #Tight layout :)
                 plt.tight_layout()
+                #Set to a canvas using agg backend
                 canvas = agg.FigureCanvasAgg(fig)
+                #Draw canvas
                 canvas.draw()
+                #Close figure, or we will have memory issues...
+                plt.close(fig)
+                #Return canvas
                 return canvas
 
+            #Display unit data inside our sub window
             def display_unit_data(screen, selected_unit, rect, font, csv_data):
                 if selected_unit is None:
                     return
                 
+                #Our live data points, pulled from the units themselves.
                 live_data_texts = [
                     "LIVE DATA:",
                     f"ID: {selected_unit.id}",
-                    f"POSX: {round(selected_unit.x, 5)}",
-                    f"POSY: {round(selected_unit.y, 5)}",
+                    f"POSX: {round(selected_unit.x, 5)}", #Round to 5 decimal places
+                    f"POSY: {round(selected_unit.y, 5)}", #Round to 5 decimal places
                     f"MASS: {selected_unit.mass}",
                     f"SIZE: {selected_unit.size}",
                     f"FLUX: {selected_unit.opacity}"
                 ]
 
+                #Display the live data...
                 y_offset = 5
                 for text in live_data_texts:
                     text_surface = font.render(text, True, LABEL_COLOR)
                     screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
                     y_offset += 20
 
+                #Display the observational data...
                 y_offset = 160
                 unit_csv_data = csv_data.get(str(selected_unit.id))
                 if unit_csv_data:
@@ -491,32 +526,45 @@ def run_simulation():
                     screen.blit(header_surface, (rect.x + 10, rect.y + y_offset))
                     y_offset += 20
 
+                    #Only display the most recent observation
                     most_recent_observation = unit_csv_data[-1]
                     for key, value in most_recent_observation.items():
                         if key == 'posx' or key == 'posy':
-                            value = round(float(value), 5)
+                            value = round(float(value), 5) #Round to 5 decimal places
 
                         csv_text = f"{key.upper()}: {value}"
                         text_surface = font.render(csv_text, True, LABEL_COLOR)
                         screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
                         y_offset += 20
 
+                    #Display graph of mass, size, and flux using matplot. Sorted by observation.
                     x_values = [float(row['observation']) for row in unit_csv_data]
+                    #Data is a dictionary of lists, where each list is a list of values for a given key.
                     data = {key: [float(row[key]) for row in unit_csv_data] for key in ['mass', 'size', 'flux']}
+                    #Truncate data to the shortest list
                     min_length = min(len(x_values), min(len(v) for v in data.values()))
+                    #Truncate x_values and data to the min_length
                     x_values = x_values[:min_length]
+                    #Truncate each list in data to the min_length
                     data = {k: v[:min_length] for k, v in data.items()}
+                    #Plot graph
                     canvas = plot_graph(x_values, data, "OBSERVATIONAL DATA")
+                    #Draw canvas
                     width, height = canvas.get_width_height()
+                    #Convert canvas to pygame surface
                     pygame_surface = pygame.image.fromstring(canvas.tostring_argb(), (width, height), 'ARGB')
+                    #Blit surface to screen
                     screen.blit(pygame_surface, (rect.x + 10, rect.y + y_offset))
 
+            #Draw sub window
             if sub_window_active:
-                pygame.draw.rect(screen, LABEL_COLOR, sub_window_rect, 1)
-                inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1)
-                pygame.draw.rect(screen, BACKGROUND_COLOR, inner_rect)
-                pygame.draw.rect(screen, LABEL_COLOR, close_button_rect)
+                pygame.draw.rect(screen, LABEL_COLOR, sub_window_rect, 1) #This is the border of the sub window.
+                inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1) #This is the inner rect of the sub window.
+                pygame.draw.rect(screen, BACKGROUND_COLOR, inner_rect) #This is the background of the sub window.
+                pygame.draw.rect(screen, LABEL_COLOR, close_button_rect) #This is the close button of the sub window.
+                #Display unit data
                 if selected_unit:
+                    #Display unit data inside our sub window
                     display_unit_data(screen, selected_unit, sub_window_rect, font, csv_data)
                 
             pygame.display.flip()
