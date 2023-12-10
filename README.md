@@ -19,7 +19,9 @@ Then run:
 
 https://en.m.wikipedia.org/wiki/Great_Attractor
 
-I should note, I had not read any updated research on the great attractor prior to this and in hindsight alot has changed!
+I should note, I had not read any updated research on the great attractor prior to this and in hindsight alot has changed! I would now say simcraft is more of an attempt to simulate "dark flow" or mass outside of our visible universe...
+
+https://en.m.wikipedia.org/wiki/Dark_flow
 
 ```/backups``` -- Contains older stable versions of the simulator. Earlier examples almost entirelly written by AI.
 
