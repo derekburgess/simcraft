@@ -23,6 +23,8 @@ I should note, I had not read any updated research on the great attractor prior 
 
 https://en.m.wikipedia.org/wiki/Dark_flow
 
+But then this happened?https://www.bbc.com/news/science-environment-67950749
+
 ```/backups``` -- Contains older stable versions of the simulator. Earlier examples almost entirelly written by AI.
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; > ```clock.py``` -- This is a crazy "clock" themed universe simulator. The "great attractor" moves like the old school clocks in a continous minute. This runs like shit after a few minutes (seriously, my rig is not joke), but I ran it for 90 minutes and had some interesting "galaxy clusters" form. In the end, this program was not what I was originally going for but evolved in a fun way and results in fun simulations, forcing you to ponder time and scale. I couldnt get the AI's to reason through concurrency or other performance improvements. Something I will learn and implement myself.
