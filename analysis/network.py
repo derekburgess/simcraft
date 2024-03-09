@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import networkx as nx
 
-df = pd.read_csv('../data.csv')
+df = pd.read_csv('./data.csv')
 
 #Categorizing objects
 def categorize_object(row):
