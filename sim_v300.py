@@ -8,12 +8,11 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 RING_RADIUS = 500 #Default: 500
-RING_ATTRACTOR_COUNT = 50 #Default: 10
+RING_ATTRACTOR_COUNT = 20 #Default: 10
 RING_ROTATION_SPEED = 0.02 #Default: 0.75
 RING_GRAVITY_CONSTANT = 50 #Default: 20
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
-# Add these for the wobble effect
 WOBBLE_MAGNITUDE = 20 #Default: 20
 WOBBLE_FREQUENCY = 0.9 #Default: 0.9
 
@@ -32,14 +31,20 @@ BLACK_HOLE_CHANCE = 0.25 #Default: 0.6
 BLACK_HOLE_RADIUS = 18 #Default: 18
 BLACK_HOLE_GRAVITY_CONSTANT = 0.0005 #Default: 0.0005
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
-
+BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
+BLACK_HOLE_COLOR = (0,0,0) #Black...
+BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
 BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
-BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
-BLACK_HOLE_COLOR = (0,0,0) #Black...
-BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
+NEUTRON_STAR_RADIUS = 2  # Reflects the smaller size of neutron stars compared to black holes.
+NEUTRON_STAR_MASS = 100  # Indicates a high mass but considering they are less massive than black holes in this context.
+NEUTRON_STAR_PULSE_RATE = 5  # How often the neutron star pulses to repel objects, measured in seconds.
+NEUTRON_STAR_PULSE_STRENGTH = 1000  # The strength of the repulsive force exerted by the pulse.
+NEUTRON_STAR_EFFECT_RADIUS = 1000  # Maximum distance at which the pulse effect is felt.
+NEUTRON_STAR_COLOR = (0, 0, 255)  # A dark blue color to visually distinguish neutron stars from black holes.
+NEUTRON_STAR_GRAVITY_CONSTANT = 0.00025  # Less than black holes, reflecting the smaller gravitational pull.
 
 GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
 GRID_TEXT_COLOR = (0, 0, 255)  # White or choose another contrasting color
@@ -57,6 +62,7 @@ SCREEN_HEIGHT = 1200 #Default: 1200
 unit_id_counter = 0
 objects_with_gravity = [] #Units and black holes
 black_holes = [] #Black holes
+neutron_stars = [] #Neutron stars
 
 pygame.init()
 pygame.display.set_caption("simcraft")
@@ -93,24 +99,32 @@ def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
         screen.blit(text_surface, (x, screen_height - text_surface.get_height() - GRID_LABEL_OFFSET))
 
 def draw_static_key(screen):
+    #Unknown Object (Neutron Stars) Key
+    unknown_obj_pos = (29, 945)
+    pygame.draw.rect(screen, NEUTRON_STAR_COLOR, (unknown_obj_pos[0], unknown_obj_pos[1], 4, 4))
+    screen.blit(font.render('UNKNOWN OBJECT', True, LABEL_COLOR), (unknown_obj_pos[0] + 30, unknown_obj_pos[1] - 5))  
+    
     #Molecular Cloud Key
-    molecular_cloud_pos = (25, 970) #Default: (15, 1050) Position of the molecular cloud key.
-    pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15)) #Size of the molecular cloud key.
-    screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 30, molecular_cloud_pos[1]))
+    molecular_cloud_pos = (25, 970)
+    pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
+    screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 34, molecular_cloud_pos[1] - 2))  
+    
     #Protostar Key
-    protostar_pos = (31, 1003) #Default: (21, 1085) Position of the protostar key.
-    pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 3, 3)) #Size of the protostar key.
-    screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 25, protostar_pos[1] - 6))
+    protostar_pos = (29, 1000)
+    pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 6, 6))
+    screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
+    
     #Primordial Black Hole Key
-    black_hole_pos = (32, 1030) #Default: (22, 1115) Position of the primordial black hole key.
-    pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6) #6 is the radius of the primordial black hole key.
-    pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2) #2 is the width of the border of the primordial black hole key.
-    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 22, black_hole_pos[1] - 8))
+    black_hole_pos = (32, 1030)
+    pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
+    pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
+    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
+    
     #Data Snapshot Key
-    snapshot_pos = (25, 1075) #Default: (22, 1115) Position of the primordial black hole key.
-    screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos))
+    snapshot_pos = (25, 1075)
+    screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
     snapshot_pos = (25, 1100)
-    screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos))
+    screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
 
 def generate_unique_id():
     global unit_id_counter
@@ -243,6 +257,52 @@ class BlackHole:
             if self in black_holes:
                 black_holes.remove(self)
 
+
+class NeutronStar:
+    def __init__(self, x, y, mass):
+        self.id = generate_unique_id()
+        self.x = x
+        self.y = y
+        self.mass = mass  # Mass of the neutron star
+        self.radius = NEUTRON_STAR_RADIUS
+        self.pulse_rate = NEUTRON_STAR_PULSE_RATE
+        self.pulse_strength = NEUTRON_STAR_PULSE_STRENGTH
+        self.time_since_last_pulse = 0
+
+    def draw(self, screen):
+        pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (self.x, self.y), self.radius)
+
+    def pulse_gravity(self, units, delta_time):
+        self.time_since_last_pulse += delta_time
+        if self.time_since_last_pulse >= self.pulse_rate:
+            for unit in units:
+                dx = unit.x - self.x
+                dy = unit.y - self.y
+                distance = max(math.hypot(dx, dy), 1)
+                
+                if distance < NEUTRON_STAR_EFFECT_RADIUS:
+                    force = self.pulse_strength / (distance ** 2)
+                    # Ensure units are pushed away; note the subtraction here
+                    unit.x += (dx / distance) * force
+                    unit.y += (dy / distance) * force
+                    
+            self.time_since_last_pulse = 0  # Reset after pulsing
+
+    def update_position(self, units, delta_time):
+        for unit in units:
+            if unit is not self:
+                dx = unit.x - self.x
+                dy = unit.y - self.y
+                distance = max(math.hypot(dx, dy), 1)
+                force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * unit.mass) / (distance**2)
+                unit.x += (dx / distance) * force * delta_time
+                unit.y += (dy / distance) * force * delta_time
+                
+                # Update neutron star position as well
+                self.x -= (dx / distance) * force * delta_time
+                self.y -= (dy / distance) * force * delta_time
+
+
 #Handle collisions between units.  
 def handle_collisions(units):
     for i, unit in enumerate(units):
@@ -301,20 +361,24 @@ def apply_gravity(units, ring_points):
                 unit.x += (dx / distance) * force
                 unit.y += (dy / distance) * force
 
-# Update units.
 def update_units(units):
-    global black_holes
+    global black_holes, neutron_stars
     handle_collisions(units)
     units_to_remove = []
     for unit in units:
         unit.update()
+        # Check if the unit's mass exceeds the transformation threshold
         if unit.mass > BLACK_HOLE_THRESHOLD:
-            #Randomly generate black holes.
-            if random.random() < BLACK_HOLE_CHANCE: 
-                #Create a black hole.
-                black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
-                #Add the black hole to the objects with gravity list.
+            # Decide randomly between transforming into a black hole or a neutron star
+            if random.random() < BLACK_HOLE_CHANCE:  # Assuming BLACK_HOLE_CHANCE is repurposed for transformation chance
+                if random.choice(["black_hole", "neutron_star"]) == "black_hole":
+                    # Transform unit into a black hole
+                    black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
+                else:
+                    # Transform unit into a neutron star
+                    neutron_stars.append(NeutronStar(unit.x, unit.y, NEUTRON_STAR_MASS))
                 units_to_remove.append(unit)
+    # Remove units that have transformed
     for unit in units_to_remove:
         units.remove(unit)
 
@@ -371,6 +435,7 @@ def run_simulation():
         close_button_rect = pygame.Rect(185, 25, 20, 20)
         sub_window_active = False
         selected_unit = None
+        last_frame_time = pygame.time.get_ticks()
 
         pygame.font.init()
         while running:
@@ -410,6 +475,10 @@ def run_simulation():
                                 selected_unit = unit
                                 unit.selected = True
                                 sub_window_active = True
+            
+            current_time = pygame.time.get_ticks()
+            delta_time = (current_time - last_frame_time) / 1000.0  # Convert to seconds
+            last_frame_time = current_time
 
             #Fill screen with background color
             screen.fill(BACKGROUND_COLOR)
@@ -445,6 +514,11 @@ def run_simulation():
                 if decayed_black_hole in black_holes:
                     black_holes.remove(decayed_black_hole)
                 decay_black_holes.remove(decayed_black_hole)
+
+            # Update Neutron Stars
+            for neutron_star in neutron_stars:
+                neutron_star.pulse_gravity(units, delta_time)
+                neutron_star.draw(screen)
 
             #Update units
             for unit in units:
