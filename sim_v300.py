@@ -38,13 +38,13 @@ BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
 BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
-NEUTRON_STAR_RADIUS = 2  # Reflects the smaller size of neutron stars compared to black holes.
-NEUTRON_STAR_MASS = 100  # Indicates a high mass but considering they are less massive than black holes in this context.
-NEUTRON_STAR_PULSE_RATE = 5  # How often the neutron star pulses to repel objects, measured in seconds.
-NEUTRON_STAR_PULSE_STRENGTH = 1000  # The strength of the repulsive force exerted by the pulse.
-NEUTRON_STAR_EFFECT_RADIUS = 1000  # Maximum distance at which the pulse effect is felt.
-NEUTRON_STAR_COLOR = (0, 0, 255)  # A dark blue color to visually distinguish neutron stars from black holes.
-NEUTRON_STAR_GRAVITY_CONSTANT = 0.00025  # Less than black holes, reflecting the smaller gravitational pull.
+NEUTRON_STAR_RADIUS = 2  #Default: 2
+NEUTRON_STAR_MASS = 100  #Default: 100
+NEUTRON_STAR_PULSE_RATE = 5  #Default: 5
+NEUTRON_STAR_PULSE_STRENGTH = 1000  #Default: 1000
+NEUTRON_STAR_EFFECT_RADIUS = 1000  #Default: 1000
+NEUTRON_STAR_COLOR = (0, 0, 255)  #Default: (0, 0, 255) -- Blue
+NEUTRON_STAR_GRAVITY_CONSTANT = 0.00025  #Default: 0.00025
 
 GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
 GRID_TEXT_COLOR = (0, 0, 255)  # White or choose another contrasting color
