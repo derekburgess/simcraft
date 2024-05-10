@@ -1,2 +1,4 @@
 /build
 /Simcraft.egg-info
+/sim/__pycache__
+/analysis/__pycache__

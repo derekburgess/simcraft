@@ -89,7 +89,8 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points={
        'console_scripts': [
-           'simcraft = sim.sim:main' 
+           'simcraft = sim.sim:main',
+           'simanalysis = analysis.analysis:main'
        ],
     },
 )

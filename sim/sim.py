@@ -77,6 +77,8 @@ pygame.init()
 pygame.display.set_caption("simcraft")
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 font = pygame.font.SysFont('Monospace', 14) #Font for time text.
+sim_data_path = os.getenv("SIMCRAFT_DATA")
+sim_data = os.path.join(sim_data_path, 'sim_data.csv')
 
 
 #Interpolate color between two colors, used for units as they transition from molecular clouds to stars.
@@ -419,7 +421,7 @@ for _ in range(UNIT_COUNT):
 #Define a global index counter for units and black holes
 global_index_counter = 1
 #Dump data to CSV
-def dump_to_csv(units, black_holes, current_year, filename='./data/sim_data.csv'):
+def dump_to_csv(units, black_holes, current_year, filename=sim_data):
     global global_index_counter  #Declare the global index counter
     #Check if file exists
     file_exists = os.path.isfile(filename)
@@ -573,7 +575,7 @@ def run_simulation():
                             data[body] = []
                         data[body].append(row)
                     return data
-            csv_data = load_csv_data('./data/sim_data.csv')
+            csv_data = load_csv_data(sim_data)
 
             #Plot graph
             def plot_graph(x_values, data, title):
@@ -683,9 +685,8 @@ def run_simulation():
         pygame.quit()
 
 def main():
-    csv_file = "./data/sim_data.csv"
-    if os.path.isfile(csv_file):
-        os.remove(csv_file)
+    if os.path.isfile(sim_data):
+        os.remove(sim_data)
         print(f"sim_data cleared")
 
     print("Starting simulation")

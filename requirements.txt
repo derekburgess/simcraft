@@ -1,2 +1,4 @@
 pygame
+pandas
+numpy
 matplotlib
