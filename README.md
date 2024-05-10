@@ -7,7 +7,7 @@ A "blocky" (like minecraft) 2D Universe Simulator (Simcraft). Original base stru
 
 Inspired by https://en.m.wikipedia.org/wiki/Zero-player_game
 
-Why? I had this drunken thought one afternoon along the lines of, "what if the 'great attractor' was actually just gravity caused by mass collecting at the edge of our universe' expanding manifold?" and so I wanted to see if I could make a dumb little 2D simulation using OpenAI- Run it and find out. You can hit spacebar to add data to a CSV file, spam it as needed like you are "observing" the universe. Further more, using the `analysis` scripts, you can see how the universe evolves over time.
+Why? I had this drunken thought one afternoon along the lines of, "what if the 'great attractor' was actually just gravity caused by mass collecting at the edge of our universe' expanding manifold?" and so I wanted to see if I could make a dumb little 2D simulation using OpenAI- Run it and find out. You can hit spacebar to add data to a CSV file, spam it as needed like you are "observing" the universe. Further more, by using the `simanalysis` command you can see how the universe evolves over time.
 
 https://en.m.wikipedia.org/wiki/Great_Attractor
 
