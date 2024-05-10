@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-df = pd.read_csv('./data.csv')
+df = pd.read_csv('./data/sim_data.csv')
 
 # Existing categorization function
 def categorize_object(row):

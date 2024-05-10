@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df = pd.read_csv('./data.csv')
+df = pd.read_csv('./data/sim_data.csv')
 
 #Categorizing objects
 def categorize_object(row):

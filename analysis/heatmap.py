@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-file_path = './data.csv'
+file_path = './data/sim_data.csv'
 data = pd.read_csv(file_path)
 
 #Aggregate data by body - average positions, sum of mass, and minimum flux

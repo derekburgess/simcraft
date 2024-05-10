@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-df = pd.read_csv('./data.csv')
+df = pd.read_csv('./data/sim_data.csv')
 center_x, center_y = 600, 600
 
 #Calculate the Euclidean distance from the center for each object

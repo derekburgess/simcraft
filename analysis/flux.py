@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 #Load the CSV data into a DataFrame
-data = pd.read_csv('./data.csv')
+data = pd.read_csv('./data/sim_data.csv')
 
 #Filter out bodies with flux of 255 and type 'blackhole'
 filtered_data = data[(data['flux'] != 255) & (data['type'] != 'blackhole')]

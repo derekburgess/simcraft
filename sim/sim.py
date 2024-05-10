@@ -7,6 +7,7 @@ import random
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
+
 RING_RADIUS = 500 #Default: 500
 RING_ATTRACTOR_COUNT = 20 #Default: 10
 RING_ROTATION_SPEED = 0.02 #Default: 0.75
@@ -15,6 +16,7 @@ RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
 WOBBLE_MAGNITUDE = 20 #Default: 20
 WOBBLE_FREQUENCY = 0.9 #Default: 0.9
+
 
 UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
@@ -25,6 +27,7 @@ UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.05
 UNIT_MAX_MASS = 60 #Default: 60
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
+
 
 BLACK_HOLE_THRESHOLD = 50 #Default: 50
 BLACK_HOLE_CHANCE = 0.25 #Default: 0.6
@@ -38,6 +41,7 @@ BLACK_HOLE_DECAY_THRESHOLD = 5 #Default: 5
 BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
+
 NEUTRON_STAR_RADIUS = 2  #Default: 2
 NEUTRON_STAR_MASS = 100  #Default: 100
 NEUTRON_STAR_PULSE_RATE = 5  #Default: 5
@@ -46,6 +50,7 @@ NEUTRON_STAR_EFFECT_RADIUS = 1000  #Default: 1000
 NEUTRON_STAR_COLOR = (0, 0, 255)  #Default: (0, 0, 255) -- Blue
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.00025  #Default: 0.00025
 
+
 GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
 GRID_TEXT_COLOR = (0, 0, 255)  # White or choose another contrasting color
 GRID_OPACITY = 10 #Default: 10, Range: 0-255
@@ -53,21 +58,26 @@ GRID_LINES_HORIZONTAL = 12 #Default: 12
 GRID_LINES_VERTICAL = 16 #Default: 16
 GRID_LABEL_OFFSET = 5 #Default: 5
 
+
 LABEL_COLOR = (200, 200, 200) #Default: (200, 200, 200) -- Light Gray
+
 
 BACKGROUND_COLOR = (0, 0, 10) #Default: (0, 0, 10) -- Dark Blue
 SCREEN_WIDTH = 1600 #Default: 1600
 SCREEN_HEIGHT = 1200 #Default: 1200
+
 
 unit_id_counter = 0
 objects_with_gravity = [] #Units and black holes
 black_holes = [] #Black holes
 neutron_stars = [] #Neutron stars
 
+
 pygame.init()
 pygame.display.set_caption("simcraft")
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 font = pygame.font.SysFont('Monospace', 14) #Font for time text.
+
 
 #Interpolate color between two colors, used for units as they transition from molecular clouds to stars.
 def interpolate_color(start_color, end_color, factor):
@@ -75,6 +85,7 @@ def interpolate_color(start_color, end_color, factor):
     g = start_color[1] + factor * (end_color[1] - start_color[1])
     b = start_color[2] + factor * (end_color[2] - start_color[2])
     return int(r), int(g), int(b)
+
 
 #Draw grid on screen
 def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
@@ -97,6 +108,7 @@ def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
         label = str(i + 1)
         text_surface = font.render(label, True, GRID_TEXT_COLOR)
         screen.blit(text_surface, (x, screen_height - text_surface.get_height() - GRID_LABEL_OFFSET))
+
 
 def draw_static_key(screen):
     #Unknown Object (Neutron Stars) Key
@@ -126,10 +138,12 @@ def draw_static_key(screen):
     snapshot_pos = (25, 1100)
     screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
 
+
 def generate_unique_id():
     global unit_id_counter
     unit_id_counter += 1
     return unit_id_counter
+
 
 #Unit class, also known as SpaceTimeUnit, probably because I described these as "units of spacetime" to OpenAI.
 #This class is to represent the molecular clouds as they transition into stars. It also handles gravity for each "unit".
@@ -193,6 +207,7 @@ class SpaceTimeUnit:
         return (self.x <= click_x <= self.x + self.size and
                 self.y <= click_y <= self.y + self.size)
     
+
 class BlackHole:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
@@ -319,6 +334,7 @@ def handle_collisions(units):
                 unit.update()
                 break
 
+
 #Set up Attractor Ring: This is important because a solid ring did not create the effect I was looking for. This allows for the creation gravitational sources that create a crude sudo-manifold around the units.
 #Is not manifold as units bleed out of the universe...
 #Add wobble effect to the ring...
@@ -337,6 +353,7 @@ def get_ring_points(center, radius, num_points, angle):
         points.append((x, y))
     return points
 
+
 #Draw the ring on the screen.
 def draw_ring(points, color, opacity):
     for point in points:
@@ -346,6 +363,7 @@ def draw_ring(points, color, opacity):
         pygame.draw.circle(surface, rgba_color, (5, 5), 5)
         screen.blit(surface, (point[0] - 5, point[1] - 5))
         #Blit surface to screen. Blitting is a term used in computer graphics to refer to the process of combining two images to form a third, resulting in a new image.
+
 
 #Apply gravity to units based on ring points. This creates the gravitational effect for each point as it passes by a section of the universe it will attract units toward it.
 def apply_gravity(units, ring_points):
@@ -360,6 +378,7 @@ def apply_gravity(units, ring_points):
             if distance > unit.size / 2:
                 unit.x += (dx / distance) * force
                 unit.y += (dy / distance) * force
+
 
 def update_units(units):
     global black_holes, neutron_stars
@@ -382,6 +401,7 @@ def update_units(units):
     for unit in units_to_remove:
         units.remove(unit)
 
+
 units = []
 for _ in range(UNIT_COUNT):
     #Generate random radius and angle.
@@ -395,10 +415,11 @@ for _ in range(UNIT_COUNT):
     unit = SpaceTimeUnit(x, y, UNIT_START_SIZE, UNIT_START_MASS)
     units.append(unit)
     
+
 #Define a global index counter for units and black holes
 global_index_counter = 1
 #Dump data to CSV
-def dump_to_csv(units, black_holes, current_year, filename='data.csv'):
+def dump_to_csv(units, black_holes, current_year, filename='./data/sim_data.csv'):
     global global_index_counter  #Declare the global index counter
     #Check if file exists
     file_exists = os.path.isfile(filename)
@@ -421,6 +442,7 @@ def dump_to_csv(units, black_holes, current_year, filename='data.csv'):
             row_id += 1
         #Update the global index counter to the next available ID
         global_index_counter = row_id
+
 
 #Run simulation.
 def run_simulation():
@@ -551,7 +573,7 @@ def run_simulation():
                             data[body] = []
                         data[body].append(row)
                     return data
-            csv_data = load_csv_data('./data.csv')
+            csv_data = load_csv_data('./data/sim_data.csv')
 
             #Plot graph
             def plot_graph(x_values, data, title):
@@ -654,11 +676,21 @@ def run_simulation():
                     display_unit_data(screen, selected_unit, sub_window_rect, font, csv_data)
                 
             pygame.display.flip()
-        print("Exiting simulation...")
+        print("Exited simulation")
     except Exception as e:
         print(f"Error occurred: {e}")
     finally:
         pygame.quit()
-if __name__ == "__main__":
-    print("Starting simulation...")
+
+def main():
+    csv_file = "./data/sim_data.csv"
+    if os.path.isfile(csv_file):
+        os.remove(csv_file)
+        print(f"sim_data cleared")
+
+    print("Starting simulation")
+    
     run_simulation()
+
+if __name__ == "__main__":
+    main()
