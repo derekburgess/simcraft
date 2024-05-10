@@ -3,9 +3,11 @@
 
 2023 CE //
 
-"blocky" (like minecraft) 2D universe simulator (simcraft lol). Base structure written with OpenAI GPT4 and VSCode Copilot. Enhanced, tested, and debugged by Derek. Uses `Python` and `pygame`.
+A "blocky" (like minecraft) 2D Universe Simulator (Simcraft). Original base structure (seen in /backups) written with OpenAI GPT4 and VSCode Copilot. Enhanced, tested, and debugged by Derek. Uses `pygame`.
 
-A set and forget universe simulator with my "great attractor" ring. Why? I had this drunken thought one afternoon along the lines of, "what if the 'great attractor' was actually just gravity caused by mass collecting at the edge of our universe' expanding manifold?" and so I wanted to see if I could make a dumb little 2D simulation using OpenAI- Run it and find out. You can hit spacebar to add data to a CSV file, spam it as needed like you are "observing" the universe. Further more, using the `analysis` scripts, you can see how the universe evolves over time.
+Inspired by https://en.m.wikipedia.org/wiki/Zero-player_game
+
+Why? I had this drunken thought one afternoon along the lines of, "what if the 'great attractor' was actually just gravity caused by mass collecting at the edge of our universe' expanding manifold?" and so I wanted to see if I could make a dumb little 2D simulation using OpenAI- Run it and find out. You can hit spacebar to add data to a CSV file, spam it as needed like you are "observing" the universe. Further more, using the `analysis` scripts, you can see how the universe evolves over time.
 
 https://en.m.wikipedia.org/wiki/Great_Attractor
 
@@ -17,21 +19,26 @@ But then this happened?
 
 https://www.bbc.com/news/science-environment-67950749
 
-Inspiration: https://en.m.wikipedia.org/wiki/Zero-player_game
+
+## Setup
 
 First set an env var for the data file: 
 
 `SIMCRAFT_DATA`
 
-Pull the repo and:
+
+Then run:
 
 `pip install -r requirements.txt`
 
 `pip install .`
 
-Then run: `simcraft`
 
-Running `simanalysis` with any of the following args:
+## Operation
+
+Run `simcraft` for the main game.
+
+Run `simanalysis` with any of the following args:
 
 `--cluster` Clusters units by `type`, `mass`, `distance from center`, and `observation`, returns a 3D plot. Great for exploring the composition of universe over time.
 
@@ -43,7 +50,9 @@ Running `simanalysis` with any of the following args:
 
 `--timeseries` -- Displays the change in the 3 primary unit `types`, Molecular Clouds, Protostars, and Primordial Black Holes. Calculating the stars from the molecular clouds to add a layer of ambiguity and adjustment in the analysis phase.
 
+
 ![hehe](/assets/demo_211123.gif)
+
 
 /backups -- Contains older stable versions of the simulator. Earlier examples almost entirelly written by AI.
 
