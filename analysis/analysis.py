@@ -47,29 +47,6 @@ def cluster(df):
     plt.show()
 
 
-def flux(df):
-    #Filter out bodies with flux of 255 and type 'blackhole'
-    filtered_data = df[(df['flux'] != 255) & (df['type'] != 'blackhole')]
-
-    #Group the filtered data by the 'body' column
-    grouped_data = filtered_data.groupby('body')
-
-    #Create a time series line chart for units with a change in flux
-    plt.figure(figsize=(12, 6))
-    for body, group in grouped_data:
-        flux_diff = group['flux'].diff().fillna(0)
-        if (flux_diff != 0).any():
-            # mooth the flux data using a 5-point moving average
-            smoothed_flux = group['flux'].rolling(window=5, min_periods=1).mean()
-            plt.plot(group['observation'], smoothed_flux, label=f'Body {body}')
-
-    plt.xlabel('Observation')
-    plt.ylabel('Smoothed Flux')
-    plt.title('Smoothed Flux Over Observation for Units with Change in Flux')
-    plt.grid(True)
-    plt.show()
-
-
 def heatmap(df):
     #Aggregate data by body - average positions, sum of mass, and minimum flux
     aggregated_data = df.groupby('body').agg({'posx': 'mean', 'posy': 'mean', 'mass': 'sum', 'flux': 'min', 'type': 'first'}).reset_index()
@@ -179,7 +156,6 @@ def timeseries(df):
 def main():
     parser = argparse.ArgumentParser(description="Run various analysis against the simulation data")
     parser.add_argument("--cluster", action="store_true", help="View a cluste plot of object Distance from Center over Time")
-    parser.add_argument("--flux", action="store_true", help="View a plot of Smoothed Flux Over Observation for Units with Change in Flux")
     parser.add_argument("--heatmap", action="store_true", help="View a heatmap of Mass Distribution with Black Holes and Low Flux Bodies Highlighted")
     parser.add_argument("--time3d", action="store_true", help="View a 3D scatter plot of Astronomical Objects")
     parser.add_argument("--timeseries", action="store_true", help="View a time series of Unique Astronomical Objects")
@@ -192,8 +168,6 @@ def main():
 
     if args.cluster:
         cluster(df)
-    if args.flux:
-        flux(df)
     if args.heatmap:
         heatmap(df)
     if args.time3d:
