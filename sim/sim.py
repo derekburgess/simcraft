@@ -18,7 +18,7 @@ WOBBLE_MAGNITUDE = 5 #Default: 5
 WOBBLE_FREQUENCY = 0.5 #Default: 0.5
 
 
-UNIT_COUNT = 10000 #Default: 10000
+UNIT_COUNT = 5000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.2 #Default: 0.2
