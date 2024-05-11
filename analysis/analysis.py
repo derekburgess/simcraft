@@ -172,7 +172,7 @@ def main():
         heatmap(df)
     if args.time3d:
         time3d(df)
-    if args.timeseries:
+    if args.time:
         timeseries(df)
 
 
