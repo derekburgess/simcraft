@@ -8,29 +8,29 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
-RING_RADIUS = 400 #Default: 500
+RING_RADIUS = 800 #Default: 500
 RING_ATTRACTOR_COUNT = 20 #Default: 10
-RING_ROTATION_SPEED = 0.02 #Default: 0.75
-RING_GRAVITY_CONSTANT = 50 #Default: 20
+RING_ROTATION_SPEED = 0.05 #Default: 0.75
+RING_GRAVITY_CONSTANT = 100 #Default: 20
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
 WOBBLE_MAGNITUDE = 20 #Default: 20
 WOBBLE_FREQUENCY = 0.9 #Default: 0.9
 
 
-UNIT_COUNT = 5000 #Default: 5000
+UNIT_COUNT = 7500 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
-UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.05
+UNIT_GRAVITY_CONSTANT = 0.08 #Default: 0.05
 UNIT_MAX_MASS = 60 #Default: 60
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
 
-BLACK_HOLE_THRESHOLD = 50 #Default: 50
-BLACK_HOLE_CHANCE = 0.25 #Default: 0.6
+BLACK_HOLE_THRESHOLD = 60 #Default: 50
+BLACK_HOLE_CHANCE = 0.6 #Default: 0.6
 BLACK_HOLE_RADIUS = 18 #Default: 18
 BLACK_HOLE_GRAVITY_CONSTANT = 0.0005 #Default: 0.0005
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
@@ -42,11 +42,12 @@ BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
 
+NEUTRON_STAR_CHANCE = 0.4  #Default: 0.5
 NEUTRON_STAR_RADIUS = 2  #Default: 2
 NEUTRON_STAR_MASS = 100  #Default: 100
 NEUTRON_STAR_PULSE_RATE = 5  #Default: 5
-NEUTRON_STAR_PULSE_STRENGTH = 1000  #Default: 1000
-NEUTRON_STAR_EFFECT_RADIUS = 1000  #Default: 1000
+NEUTRON_STAR_PULSE_STRENGTH = 2000  #Default: 1000
+NEUTRON_STAR_EFFECT_RADIUS = 50000  #Default: 1000
 NEUTRON_STAR_COLOR = (0, 0, 255)  #Default: (0, 0, 255) -- Blue
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.00025  #Default: 0.00025
 
@@ -113,31 +114,36 @@ def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
 
 
 def draw_static_key(screen):
+    sub_window_rect = pygame.Rect(20, SCREEN_HEIGHT - 260, 300, 225)
+    pygame.draw.rect(screen, LABEL_COLOR, sub_window_rect, 1) #This is the border of the sub window.
+    inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1) #This is the inner rect of the sub window.
+    pygame.draw.rect(screen, BACKGROUND_COLOR, inner_rect) #This is the background of the sub window.
+
     #Unknown Object (Neutron Stars) Key
-    unknown_obj_pos = (29, SCREEN_HEIGHT - 245)
+    unknown_obj_pos = (34, SCREEN_HEIGHT - 245)
     pygame.draw.rect(screen, NEUTRON_STAR_COLOR, (unknown_obj_pos[0], unknown_obj_pos[1], 4, 4))
     screen.blit(font.render('UNKNOWN OBJECT', True, LABEL_COLOR), (unknown_obj_pos[0] + 30, unknown_obj_pos[1] - 5))  
     
     #Molecular Cloud Key
-    molecular_cloud_pos = (25, SCREEN_HEIGHT - 220)
+    molecular_cloud_pos = (30, SCREEN_HEIGHT - 220)
     pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
     screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 34, molecular_cloud_pos[1] - 2))  
     
     #Protostar Key
-    protostar_pos = (29, SCREEN_HEIGHT - 190)
+    protostar_pos = (34, SCREEN_HEIGHT - 190)
     pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 6, 6))
     screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
     
     #Primordial Black Hole Key
-    black_hole_pos = (32, SCREEN_HEIGHT - 160)
+    black_hole_pos = (36, SCREEN_HEIGHT - 160)
     pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
     pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
     screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
     
     #Data Snapshot Key
-    snapshot_pos = (25, SCREEN_HEIGHT - 130)
+    snapshot_pos = (30, SCREEN_HEIGHT - 130)
     screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
-    snapshot_pos = (25, SCREEN_HEIGHT - 100)
+    snapshot_pos = (30, SCREEN_HEIGHT - 100)
     screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
 
 
@@ -392,12 +398,12 @@ def update_units(units):
         if unit.mass > BLACK_HOLE_THRESHOLD:
             # Decide randomly between transforming into a black hole or a neutron star
             if random.random() < BLACK_HOLE_CHANCE:  # Assuming BLACK_HOLE_CHANCE is repurposed for transformation chance
-                if random.choice(["black_hole", "neutron_star"]) == "black_hole":
-                    # Transform unit into a black hole
-                    black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
-                else:
+                if random.random() < NEUTRON_STAR_CHANCE:
                     # Transform unit into a neutron star
                     neutron_stars.append(NeutronStar(unit.x, unit.y, NEUTRON_STAR_MASS))
+                else:
+                    # Transform unit into a black hole
+                    black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
                 units_to_remove.append(unit)
     # Remove units that have transformed
     for unit in units_to_remove:
@@ -455,8 +461,8 @@ def run_simulation():
         ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
         decay_black_holes = []
         years = 0
-        sub_window_rect = pygame.Rect(25, 25, 180, 450)
-        close_button_rect = pygame.Rect(185, 25, 20, 20)
+        sub_window_rect = pygame.Rect(20, 20, 180, 450)
+        close_button_rect = pygame.Rect(180, 20, 20, 20)
         sub_window_active = False
         selected_unit = None
         last_frame_time = pygame.time.get_ticks()
@@ -561,7 +567,7 @@ def run_simulation():
             #Render time text
             year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
             #Blit time text to screen
-            screen.blit(year_text, (25, SCREEN_HEIGHT - 60 ))
+            screen.blit(year_text, (30, SCREEN_HEIGHT - 60 ))
 
             #Display unit data
             def load_csv_data(file_path):
