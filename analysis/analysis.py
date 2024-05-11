@@ -39,7 +39,7 @@ def cluster(df):
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
     df['color'] = df['category'].map(color_map)
-    ax.scatter(df['mass'], df['distance'], df['observation'], c=df['color'])
+    ax.scatter(df['mass'], df['distance'], df['observation'], c=df['color'], alpha=0.5)
     ax.set_xlabel('mass')
     ax.set_ylabel('Distance from Center')
     ax.set_zlabel('Observation Year')
@@ -50,13 +50,11 @@ def cluster(df):
 def heatmap(df):
     #Aggregate data by body - average positions, sum of mass, and minimum flux
     aggregated_data = df.groupby('body').agg({'posx': 'mean', 'posy': 'mean', 'mass': 'sum', 'flux': 'min', 'type': 'first'}).reset_index()
-
     #Separate BlackHoles, bodies with flux below 255, and other bodies
     blackholes = aggregated_data[aggregated_data['type'] == 'BlackHole']
     neutronstars = aggregated_data[aggregated_data['type'] == 'NeutronStar']
     low_flux_bodies = aggregated_data[(aggregated_data['flux'] < 255) & (aggregated_data['type'] != 'BlackHole') & (aggregated_data['type'] != 'NeutronStar')]
     other_bodies = aggregated_data[(aggregated_data['flux'] >= 255) & (aggregated_data['type'] != 'BlackHole') & (aggregated_data['type'] != 'NeutronStar')]
-
     #Generate a scatter plot
     plt.figure(figsize=(12, 8))
     plt.scatter(other_bodies['posx'], other_bodies['posy'], c='gray', alpha=0.5, zorder=1, s=other_bodies['mass'], label='Other Bodies')
@@ -85,7 +83,6 @@ def timeseries(df):
     ax.set_xlabel('Observation Year')
     ax.set_ylabel('Number of Unique Objects')
     ax.grid(True)
-    ax.legend(title='Category')
     plt.show()
 
 
@@ -98,7 +95,7 @@ def time3d(df):
     for category in df['category'].unique():
         cat_data = df[df['category'] == category]
         ax.scatter(cat_data['posx'], cat_data['posy'], cat_data['observation'], 
-                label=category, color=color_map[category], marker='o')
+                label=category, color=color_map[category], marker='o', alpha=0.5)
     # Setting labels and title
     ax.set_xlabel('Position X')
     ax.set_ylabel('Position Y')
