@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
-RING_RADIUS = 600 #Default: 400
+RING_RADIUS = 600 #Default: 600
 RING_ATTRACTOR_COUNT = 20 #Default: 20
-RING_ROTATION_SPEED = 0.0005 #Default: 0.0005
+RING_ROTATION_SPEED = 0.001 #Default: 0.001
 RING_GRAVITY_CONSTANT = 10 #Default: 10
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
@@ -106,9 +106,9 @@ def draw_static_key(screen):
 
     #Data Snapshot Key
     snapshot_pos = (30, SCREEN_HEIGHT - 110)
-    screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
+    screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
     snapshot_pos = (30, SCREEN_HEIGHT - 80)
-    screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
+    screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
 
 
 def generate_unique_id():
