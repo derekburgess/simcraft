@@ -6,41 +6,38 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
+color_map = {
+    'MolecularCloud': 'purple',
+    'Star': 'orange',
+    'BlackHole': 'red',
+    'NeutronStar': 'blue'
+}
+
+
+#Categorizing objects
+def categorize_object(row):
+    if row['type'] == 'BlackHole':
+        return 'BlackHole'
+    elif row['type'] == 'NeutronStar':
+        return 'NeutronStar'
+    elif row['mass'] < 15 and 8 <= row['size'] <= 15:
+        return 'MolecularCloud'
+    elif row['mass'] > 15 and row['size'] < 8:
+        return 'Star'
+    else:
+        if row['mass'] < 15:
+            return 'MolecularCloud'
+        else:
+            return 'Star'
+
+
 def cluster(df):
     center_x, center_y = 600, 600
-
     #Calculate the Euclidean distance from the center for each object
     df['distance'] = np.sqrt((df['posx'] - center_x)**2 + (df['posy'] - center_y)**2)
-
-    #Categorizing objects
-    def categorize_object(row):
-        if row['type'] == 'BlackHole':
-            return 'BlackHole'
-        elif row['type'] == 'NeutronStar':
-            return 'NeutronStar'
-        elif row['mass'] < 15 and 8 <= row['size'] <= 15:
-            return 'MolecularCloud'
-        elif row['mass'] > 15 and row['size'] < 8:
-            return 'Star'
-        else:
-            if row['mass'] < 15:
-                return 'MolecularCloud'
-            else:
-                return 'Star'
-
     df['category'] = df.apply(categorize_object, axis=1)
-
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
-
-    #Assigning colors based on category
-    color_map = {
-        'MolecularCloud': 'purple',
-        'Star': 'orange',
-        'BlackHole': 'red',
-        'NeutronStar': 'blue'
-    }
-
     df['color'] = df['category'].map(color_map)
     ax.scatter(df['mass'], df['distance'], df['observation'], c=df['color'])
     ax.set_xlabel('mass')
@@ -73,94 +70,41 @@ def heatmap(df):
     plt.show()
 
 
-def time3d(df):
-    # Existing categorization function
-    def categorize_object(row):
-        if row['type'] == 'BlackHole':
-            return 'BlackHole'
-        elif row['type'] == 'NeutronStar':
-            return 'NeutronStar'
-        elif row['mass'] < 15 and 8 <= row['size'] <= 15:
-            return 'MolecularCloud'
-        elif row['mass'] > 15 and row['size'] < 8:
-            return 'Star'
-        else:
-            if row['mass'] < 15:
-                return 'MolecularCloud'
-            else:
-                return 'Star'
-
+def timeseries(df):
     df['category'] = df.apply(categorize_object, axis=1)
+    #Ensuring we track only unique objects, we'll drop duplicates based on the 'body' column
+    #df_unique = df.drop_duplicates(subset='body')
+    #Grouping by Observation year and Category for unique objects
+    #grouped = df_unique.groupby(['observation', 'category']).size().unstack(fill_value=0)
+    grouped = df.groupby(['observation', 'category']).size().unstack(fill_value=0)
+    #Time Series Plotting
+    fig, ax = plt.subplots(figsize=(12, 4))
+    for category in grouped.columns:
+        ax.plot(grouped.index, grouped[category], label=category, color=color_map[category], marker='o', linestyle='-')
+    ax.set_title('Time Series of Unique Astronomical Objects')
+    ax.set_xlabel('Observation Year')
+    ax.set_ylabel('Number of Unique Objects')
+    ax.grid(True)
+    ax.legend(title='Category')
+    plt.show()
 
+
+def time3d(df):
+    df['category'] = df.apply(categorize_object, axis=1)
     # Prepare 3D plot
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
-
-    colors = {
-        'MolecularCloud': 'purple',
-        'Star': 'orange',
-        'BlackHole': 'red',
-        'NeutronStar': 'blue'
-    }
-
     # Plot each category with its position and observation year
     for category in df['category'].unique():
         cat_data = df[df['category'] == category]
         ax.scatter(cat_data['posx'], cat_data['posy'], cat_data['observation'], 
-                label=category, color=colors[category], marker='o')
-
+                label=category, color=color_map[category], marker='o')
     # Setting labels and title
     ax.set_xlabel('Position X')
     ax.set_ylabel('Position Y')
     ax.set_zlabel('Observation Year')
     ax.set_title('3D Plot of Astronomical Objects')
     plt.tight_layout()
-    plt.show()
-
-
-def timeseries(df):
-    #Categorizing objects
-    def categorize_object(row):
-        if row['type'] == 'BlackHole':
-            return 'BlackHole'
-        elif row['type'] == 'NeutronStar':
-            return 'NeutronStar'
-        elif row['mass'] < 15 and 8 <= row['size'] <= 15:
-            return 'MolecularCloud'
-        elif row['mass'] > 15 and row['size'] < 8:
-            return 'Star'
-        else:
-            if row['mass'] < 15:
-                return 'MolecularCloud'
-            else:
-                return 'Star'
-
-    df['category'] = df.apply(categorize_object, axis=1)
-
-    #Ensuring we track only unique objects, we'll drop duplicates based on the 'body' column
-    #df_unique = df.drop_duplicates(subset='body')
-
-    #Grouping by Observation year and Category for unique objects
-    #grouped = df_unique.groupby(['observation', 'category']).size().unstack(fill_value=0)
-    grouped = df.groupby(['observation', 'category']).size().unstack(fill_value=0)
-
-    #Define colors for categories
-    colors = {
-        'MolecularCloud': 'purple',
-        'Star': 'orange',
-        'BlackHole': 'red',
-        'NeutronStar': 'blue'
-    }
-
-    #Time Series Plotting
-    fig, ax = plt.subplots(figsize=(12, 4))
-    for category in grouped.columns:
-        ax.plot(grouped.index, grouped[category], label=category, color=colors[category], marker='o', linestyle='-')
-    ax.set_title('Time Series of Unique Astronomical Objects')
-    ax.set_xlabel('Observation Year')
-    ax.set_ylabel('Number of Unique Objects')
-    ax.grid(True)
-    ax.legend(title='Category')
     plt.show()
 
 
