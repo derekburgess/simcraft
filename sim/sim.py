@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
-RING_RADIUS = 500 #Default: 500
+RING_RADIUS = 450 #Default: 450
 RING_ATTRACTOR_COUNT = 100 #Default: 100
 RING_ROTATION_SPEED = 0.005 #Default: 0.005
 RING_GRAVITY_CONSTANT = 10 #Default: 10
