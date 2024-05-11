@@ -8,22 +8,22 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
-RING_RADIUS = 800 #Default: 500
-RING_ATTRACTOR_COUNT = 20 #Default: 10
-RING_ROTATION_SPEED = 0.05 #Default: 0.75
-RING_GRAVITY_CONSTANT = 100 #Default: 20
+RING_RADIUS = 500 #Default: 500
+RING_ATTRACTOR_COUNT = 100 #Default: 100
+RING_ROTATION_SPEED = 0.005 #Default: 0.005
+RING_GRAVITY_CONSTANT = 10 #Default: 10
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
-RING_OPACITY = 100 #Default: 0, Range: 0-255
-WOBBLE_MAGNITUDE = 40 #Default: 20
-WOBBLE_FREQUENCY = 0.9 #Default: 0.9
+RING_OPACITY = 0 #Default: 0, Range: 0-255
+WOBBLE_MAGNITUDE = 10 #Default: 20
+WOBBLE_FREQUENCY = 0.5 #Default: 0.5
 
 
-UNIT_COUNT = 10000 #Default: 5000
+UNIT_COUNT = 8000 #Default: 8000
 UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
-UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.05
+UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.1
 UNIT_MAX_MASS = 60 #Default: 60
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
@@ -52,19 +52,12 @@ NEUTRON_STAR_COLOR = (0, 0, 255)  #Default: (0, 0, 255) -- Blue
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.00025  #Default: 0.00025
 
 
-GRID_COLOR = (0, 0, 150) #Default: (0, 0, 100) -- Dark Blue
-GRID_TEXT_COLOR = (0, 0, 255)  # White or choose another contrasting color
-GRID_OPACITY = 10 #Default: 10, Range: 0-255
-GRID_LINES_HORIZONTAL = 12 #Default: 12
-GRID_LINES_VERTICAL = 16 #Default: 16
-GRID_LABEL_OFFSET = 5 #Default: 5
-
-
 LABEL_COLOR = (255, 255, 255) #Default: (255, 255, 255) -- White
-BORDER_COLOR = (50, 50, 50) #Default: (100, 100, 100) -- Gray
-BACKGROUND_COLOR = (0, 0, 10) #Default: (0, 0, 10) -- Dark Blue
-SCREEN_WIDTH = 1280 #Default: 1600
-SCREEN_HEIGHT = 960 #Default: 1200
+BORDER_COLOR = (150, 150, 150) #Default: (150, 150, 150) -- Gray
+BACKGROUND_COLOR = (0, 0, 20) #Default: (0, 0, 20) -- Dark Blue
+BOX_BG_COLOR = (0, 0, 10) #Default: (0, 0, 10) -- Dark Blue
+SCREEN_WIDTH = 1536 #Default: 1536
+SCREEN_HEIGHT = 960 #Default: 960
 
 
 unit_id_counter = 0
@@ -89,60 +82,32 @@ def interpolate_color(start_color, end_color, factor):
     return int(r), int(g), int(b)
 
 
-#Draw grid on screen
-def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
-    grid_color = color + (opacity,)
-    screen_width, screen_height = screen.get_size()
-    #Draw horizontal lines and label them on the right
-    for i in range(lines_horizontal + 1):
-        y = screen_height / lines_horizontal * i
-        pygame.draw.line(screen, grid_color, (0, y), (screen_width, y))
-        # Add label (A-Z)
-        if i < 26:  #Limit to 26 letters (A-Z)
-            label = chr(65 + i)  # ASCII value for A is 65
-            text_surface = font.render(label, True, GRID_TEXT_COLOR)
-            screen.blit(text_surface, (screen_width - text_surface.get_width() - GRID_LABEL_OFFSET, y))
-    #Draw vertical lines and label them at the bottom
-    for i in range(lines_vertical + 1):
-        x = screen_width / lines_vertical * i
-        pygame.draw.line(screen, grid_color, (x, 0), (x, screen_height))
-        #Add label (1-9, then 10, 11, ...)
-        label = str(i + 1)
-        text_surface = font.render(label, True, GRID_TEXT_COLOR)
-        screen.blit(text_surface, (x, screen_height - text_surface.get_height() - GRID_LABEL_OFFSET))
-
-
 def draw_static_key(screen):
-    sub_window_rect = pygame.Rect(20, SCREEN_HEIGHT - 260, 300, 225)
-    pygame.draw.rect(screen, BORDER_COLOR, sub_window_rect, 1) #This is the border of the sub window.
-    inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1) #This is the inner rect of the sub window.
-    pygame.draw.rect(screen, BACKGROUND_COLOR, inner_rect) #This is the background of the sub window.
-
     #Unknown Object (Neutron Stars) Key
-    unknown_obj_pos = (34, SCREEN_HEIGHT - 245)
+    unknown_obj_pos = (34, SCREEN_HEIGHT - 224)
     pygame.draw.rect(screen, NEUTRON_STAR_COLOR, (unknown_obj_pos[0], unknown_obj_pos[1], 4, 4))
     screen.blit(font.render('UNKNOWN OBJECT', True, LABEL_COLOR), (unknown_obj_pos[0] + 30, unknown_obj_pos[1] - 5))  
     
     #Molecular Cloud Key
-    molecular_cloud_pos = (30, SCREEN_HEIGHT - 220)
+    molecular_cloud_pos = (30, SCREEN_HEIGHT - 200)
     pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
     screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 34, molecular_cloud_pos[1] - 2))  
     
     #Protostar Key
-    protostar_pos = (34, SCREEN_HEIGHT - 190)
+    protostar_pos = (34, SCREEN_HEIGHT - 170)
     pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 6, 6))
     screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
     
     #Primordial Black Hole Key
-    black_hole_pos = (36, SCREEN_HEIGHT - 160)
+    black_hole_pos = (36, SCREEN_HEIGHT - 140)
     pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
     pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
     screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
-    
+
     #Data Snapshot Key
-    snapshot_pos = (30, SCREEN_HEIGHT - 130)
+    snapshot_pos = (30, SCREEN_HEIGHT - 110)
     screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
-    snapshot_pos = (30, SCREEN_HEIGHT - 100)
+    snapshot_pos = (30, SCREEN_HEIGHT - 80)
     screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
 
 
@@ -508,18 +473,13 @@ def run_simulation():
             current_time = pygame.time.get_ticks()
             delta_time = (current_time - last_frame_time) / 1000.0  # Convert to seconds
             last_frame_time = current_time
-
             #Fill screen with background color
             screen.fill(BACKGROUND_COLOR)
-
-            #Draw grid on screen
-            #draw_grid(screen, font, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
             #Increment angle
             angle += RING_ROTATION_SPEED
             #Get ring points
             ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, angle)
             draw_ring(ring_points, RING_COLOR, RING_OPACITY)
-
             update_units(units)
             apply_gravity(units, ring_points)
 
@@ -566,7 +526,7 @@ def run_simulation():
             #Render time text
             year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
             #Blit time text to screen
-            screen.blit(year_text, (30, SCREEN_HEIGHT - 60 ))
+            screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
 
             #Display unit data
             def load_csv_data(file_path):
@@ -675,7 +635,7 @@ def run_simulation():
             if sub_window_active:
                 pygame.draw.rect(screen, BORDER_COLOR, sub_window_rect, 1) #This is the border of the sub window.
                 inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1) #This is the inner rect of the sub window.
-                pygame.draw.rect(screen, BACKGROUND_COLOR, inner_rect) #This is the background of the sub window.
+                pygame.draw.rect(screen, BOX_BG_COLOR, inner_rect) #This is the background of the sub window.
                 pygame.draw.rect(screen, BORDER_COLOR, close_button_rect) #This is the close button of the sub window.
                 #Display unit data
                 if selected_unit:
