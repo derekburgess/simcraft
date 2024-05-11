@@ -157,8 +157,8 @@ def main():
     parser = argparse.ArgumentParser(description="Run various analysis against the simulation data")
     parser.add_argument("--cluster", action="store_true", help="View a cluste plot of object Distance from Center over Time")
     parser.add_argument("--heatmap", action="store_true", help="View a heatmap of Mass Distribution with Black Holes and Low Flux Bodies Highlighted")
+    parser.add_argument("--time", action="store_true", help="View a time series of Unique Astronomical Objects")
     parser.add_argument("--time3d", action="store_true", help="View a 3D scatter plot of Astronomical Objects")
-    parser.add_argument("--timeseries", action="store_true", help="View a time series of Unique Astronomical Objects")
 
     sim_data_path = os.getenv("SIMCRAFT_DATA")
     sim_data = os.path.join(sim_data_path, 'sim_data.csv')

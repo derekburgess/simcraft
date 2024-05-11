@@ -44,9 +44,9 @@ Run `simanalysis` with any of the following args:
 
 `--heatmap` -- Shows the distribution of units by `mass` and `flux`, calling out black holes. Interesting for analyzing black hole evolution in proximity to possible exoplanets, i.e. "possible civilizations".
 
-`--time_3d`  -- Displays a 3D plot of change in unit `type` over time including `X`an `Y` position.
+`--time` -- Displays the change in the 3 primary unit `types`, Molecular Clouds, Protostars, and Primordial Black Holes. Calculating the stars from the molecular clouds to add a layer of ambiguity and adjustment in the analysis phase.
 
-`--timeseries` -- Displays the change in the 3 primary unit `types`, Molecular Clouds, Protostars, and Primordial Black Holes. Calculating the stars from the molecular clouds to add a layer of ambiguity and adjustment in the analysis phase.
+`--time_3d`  -- Displays a 3D plot of change in unit `type` over time including `X`an `Y` position.
 
 
 ![hehe](/assets/demo_211123.gif)
