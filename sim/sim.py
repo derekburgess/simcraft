@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
-RING_RADIUS = 500 #Default: 500
+RING_RADIUS = 400 #Default: 500
 RING_ATTRACTOR_COUNT = 20 #Default: 10
 RING_ROTATION_SPEED = 0.02 #Default: 0.75
 RING_GRAVITY_CONSTANT = 50 #Default: 20
@@ -63,8 +63,8 @@ LABEL_COLOR = (200, 200, 200) #Default: (200, 200, 200) -- Light Gray
 
 
 BACKGROUND_COLOR = (0, 0, 10) #Default: (0, 0, 10) -- Dark Blue
-SCREEN_WIDTH = 1600 #Default: 1600
-SCREEN_HEIGHT = 1200 #Default: 1200
+SCREEN_WIDTH = 1280 #Default: 1600
+SCREEN_HEIGHT = 960 #Default: 1200
 
 
 unit_id_counter = 0
@@ -114,30 +114,30 @@ def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
 
 def draw_static_key(screen):
     #Unknown Object (Neutron Stars) Key
-    unknown_obj_pos = (29, 945)
+    unknown_obj_pos = (29, SCREEN_HEIGHT - 245)
     pygame.draw.rect(screen, NEUTRON_STAR_COLOR, (unknown_obj_pos[0], unknown_obj_pos[1], 4, 4))
     screen.blit(font.render('UNKNOWN OBJECT', True, LABEL_COLOR), (unknown_obj_pos[0] + 30, unknown_obj_pos[1] - 5))  
     
     #Molecular Cloud Key
-    molecular_cloud_pos = (25, 970)
+    molecular_cloud_pos = (25, SCREEN_HEIGHT - 220)
     pygame.draw.rect(screen, UNIT_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
     screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 34, molecular_cloud_pos[1] - 2))  
     
     #Protostar Key
-    protostar_pos = (29, 1000)
+    protostar_pos = (29, SCREEN_HEIGHT - 190)
     pygame.draw.rect(screen, UNIT_END_COLOR, (protostar_pos[0], protostar_pos[1], 6, 6))
     screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
     
     #Primordial Black Hole Key
-    black_hole_pos = (32, 1030)
+    black_hole_pos = (32, SCREEN_HEIGHT - 160)
     pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
     pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
     screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
     
     #Data Snapshot Key
-    snapshot_pos = (25, 1075)
+    snapshot_pos = (25, SCREEN_HEIGHT - 130)
     screen.blit(font.render('PRESS SPACEBAR FOR DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
-    snapshot_pos = (25, 1100)
+    snapshot_pos = (25, SCREEN_HEIGHT - 100)
     screen.blit(font.render('PRESS Q TO EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
 
 
@@ -561,7 +561,7 @@ def run_simulation():
             #Render time text
             year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
             #Blit time text to screen
-            screen.blit(year_text, (25, SCREEN_HEIGHT - 50 ))
+            screen.blit(year_text, (25, SCREEN_HEIGHT - 60 ))
 
             #Display unit data
             def load_csv_data(file_path):
