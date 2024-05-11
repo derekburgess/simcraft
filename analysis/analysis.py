@@ -64,7 +64,6 @@ def heatmap(df):
     plt.title('Mass Distribution with Black Holes and Low Flux Bodies Highlighted')
     plt.xlabel('posx')
     plt.ylabel('posy')
-    plt.colorbar(label='Mass')
     plt.show()
 
 
