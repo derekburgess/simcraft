@@ -40,7 +40,7 @@ def cluster(df):
     ax = fig.add_subplot(111, projection='3d')
     df['color'] = df['category'].map(color_map)
     ax.scatter(df['mass'], df['distance'], df['observation'], c=df['color'], alpha=0.5)
-    ax.set_xlabel('mass')
+    ax.set_xlabel('Mass')
     ax.set_ylabel('Distance from Center')
     ax.set_zlabel('Observation Year')
     plt.tight_layout()
