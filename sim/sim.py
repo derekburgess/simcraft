@@ -71,6 +71,12 @@ sim_data_path = os.getenv("SIMCRAFT_DATA")
 sim_data = os.path.join(sim_data_path, 'sim_data.csv')
 
 
+def generate_unique_id():
+    global unit_id_counter
+    unit_id_counter += 1
+    return unit_id_counter
+
+
 #Interpolate color between two colors, used for units as they transition from molecular clouds to stars.
 def interpolate_color(start_color, end_color, factor):
     r = start_color[0] + factor * (end_color[0] - start_color[0])
@@ -105,13 +111,37 @@ def draw_static_key(screen):
     snapshot_pos = (30, SCREEN_HEIGHT - 110)
     screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
     snapshot_pos = (30, SCREEN_HEIGHT - 80)
-    screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
+    screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
 
 
-def generate_unique_id():
-    global unit_id_counter
-    unit_id_counter += 1
-    return unit_id_counter
+#Set up Attractor Ring: This is important because a solid ring did not create the effect I was looking for. This allows for the creation gravitational sources that create a crude sudo-manifold around the units.
+#Is not manifold as units bleed out of the universe...
+#Add wobble effect to the ring...
+def get_ring_points(center, radius, num_points, angle):
+    points = []
+    # Time factor for the wobble effect
+    current_time = time.time()
+    for i in range(num_points):
+        theta = angle + (2 * math.pi / num_points) * i
+        # Adding wobble effect based on time and theta
+        wobble = WOBBLE_MAGNITUDE * math.sin(WOBBLE_FREQUENCY * current_time + theta)
+        # Adjust radius for wobble
+        adjusted_radius = radius + wobble
+        x = center[0] + adjusted_radius * math.cos(theta)
+        y = center[1] + adjusted_radius * math.sin(theta)
+        points.append((x, y))
+    return points
+
+
+#Draw the ring on the screen.
+def draw_ring(points, color, opacity):
+    for point in points:
+        #Create surface, set source alpha.
+        surface = pygame.Surface((10, 10), pygame.SRCALPHA)
+        rgba_color = color + (opacity,)
+        pygame.draw.circle(surface, rgba_color, (5, 5), 5)
+        screen.blit(surface, (point[0] - 5, point[1] - 5))
+        #Blit surface to screen. Blitting is a term used in computer graphics to refer to the process of combining two images to form a third, resulting in a new image.
 
 
 #Unit class, also known as SpaceTimeUnit, probably because I described these as "units of spacetime" to OpenAI.
@@ -304,36 +334,6 @@ def handle_collisions(units):
                 break
 
 
-#Set up Attractor Ring: This is important because a solid ring did not create the effect I was looking for. This allows for the creation gravitational sources that create a crude sudo-manifold around the units.
-#Is not manifold as units bleed out of the universe...
-#Add wobble effect to the ring...
-def get_ring_points(center, radius, num_points, angle):
-    points = []
-    # Time factor for the wobble effect
-    current_time = time.time()
-    for i in range(num_points):
-        theta = angle + (2 * math.pi / num_points) * i
-        # Adding wobble effect based on time and theta
-        wobble = WOBBLE_MAGNITUDE * math.sin(WOBBLE_FREQUENCY * current_time + theta)
-        # Adjust radius for wobble
-        adjusted_radius = radius + wobble
-        x = center[0] + adjusted_radius * math.cos(theta)
-        y = center[1] + adjusted_radius * math.sin(theta)
-        points.append((x, y))
-    return points
-
-
-#Draw the ring on the screen.
-def draw_ring(points, color, opacity):
-    for point in points:
-        #Create surface, set source alpha.
-        surface = pygame.Surface((10, 10), pygame.SRCALPHA)
-        rgba_color = color + (opacity,)
-        pygame.draw.circle(surface, rgba_color, (5, 5), 5)
-        screen.blit(surface, (point[0] - 5, point[1] - 5))
-        #Blit surface to screen. Blitting is a term used in computer graphics to refer to the process of combining two images to form a third, resulting in a new image.
-
-
 #Apply gravity to units based on ring points. This creates the gravitational effect for each point as it passes by a section of the universe it will attract units toward it.
 def apply_gravity(units, ring_points):
     for unit in units:
@@ -358,9 +358,10 @@ def update_units(units):
         # Check if the unit's mass exceeds the transformation threshold
         if unit.mass > BLACK_HOLE_THRESHOLD:
             # Decide randomly between transforming into a black hole or a neutron star
-            if random.random() < BLACK_HOLE_CHANCE:  # Assuming BLACK_HOLE_CHANCE is repurposed for transformation chance
+            if random.random() < BLACK_HOLE_CHANCE:
+            # Transform unit into a black hole
                 if random.random() < NEUTRON_STAR_CHANCE:
-                    # Transform unit into a neutron star
+                # Transform unit into a neutron star
                     neutron_stars.append(NeutronStar(unit.x, unit.y, NEUTRON_STAR_MASS))
                 else:
                     # Transform unit into a black hole
@@ -388,7 +389,7 @@ for _ in range(UNIT_COUNT):
 #Define a global index counter for units and black holes
 global_index_counter = 1
 #Dump data to CSV
-def dump_to_csv(units, black_holes, current_year, filename=sim_data):
+def dump_to_csv(units, black_holes, neutron_stars, current_year, filename=sim_data):
     global global_index_counter  #Declare the global index counter
     #Check if file exists
     file_exists = os.path.isfile(filename)
@@ -409,6 +410,10 @@ def dump_to_csv(units, black_holes, current_year, filename=sim_data):
         for black_hole in black_holes:
             writer.writerow([row_id, black_hole.id, 'BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, 0, current_year])
             row_id += 1
+        #Write data for each neutron star
+        for neutron_stars in neutron_stars:
+            writer.writerow([row_id, neutron_stars.id, 'NeutronStar', neutron_stars.x, neutron_stars.y, neutron_stars.mass, neutron_stars.radius, 0, current_year])
+            row_id += 1
         #Update the global index counter to the next available ID
         global_index_counter = row_id
 
@@ -421,7 +426,7 @@ def run_simulation():
         angle = 0
         ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
         decay_black_holes = []
-        years = 0
+        current_year = 0
         sub_window_rect = pygame.Rect(20, 20, 180, 450)
         close_button_rect = pygame.Rect(180, 20, 20, 20)
         sub_window_active = False
@@ -438,7 +443,7 @@ def run_simulation():
                 #Handle spacebar event
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                     #Dump data to CSV
-                    dump_to_csv(units, black_holes, years)
+                    dump_to_csv(units, black_holes, neutron_stars, current_year)
 
                 #Here we create a subwindow when a unit is clicked. The subwindow contains live and observational data. All of the logic is handled below. It can be closed by clicking the white block/close button.
                 #Handle mouse button down event
@@ -515,13 +520,13 @@ def run_simulation():
             #Update screen
             #Draw static key on screen
             draw_static_key(screen)
-            if years % 500 == 0:
-                dump_to_csv(units, black_holes, years)
+            if current_year % 500 == 0:
+                dump_to_csv(units, black_holes, neutron_stars, current_year)
 
-            #Increment years
-            years += 1
+            #Increment current_year
+            current_year += 1
             #Render time text
-            year_text = font.render(f"TIME(YEARS): {years}M", True, LABEL_COLOR)
+            year_text = font.render(f"TIME(current_year): {current_year}M", True, LABEL_COLOR)
             #Blit time text to screen
             screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
 

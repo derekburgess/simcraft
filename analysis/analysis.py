@@ -16,6 +16,8 @@ def cluster(df):
     def categorize_object(row):
         if row['type'] == 'BlackHole':
             return 'BlackHole'
+        elif row['type'] == 'NeutronStar':
+            return 'NeutronStar'
         elif row['mass'] < 15 and 8 <= row['size'] <= 15:
             return 'MolecularCloud'
         elif row['mass'] > 15 and row['size'] < 8:
@@ -33,9 +35,10 @@ def cluster(df):
 
     #Assigning colors based on category
     color_map = {
-        'MolecularCloud': 'gray',
-        'Star': 'blue',
+        'MolecularCloud': 'purple',
+        'Star': 'orange',
         'BlackHole': 'red',
+        'NeutronStar': 'blue'
     }
 
     df['color'] = df['category'].map(color_map)
@@ -53,14 +56,16 @@ def heatmap(df):
 
     #Separate BlackHoles, bodies with flux below 255, and other bodies
     blackholes = aggregated_data[aggregated_data['type'] == 'BlackHole']
-    low_flux_bodies = aggregated_data[(aggregated_data['flux'] < 255) & (aggregated_data['type'] != 'BlackHole')]
-    other_bodies = aggregated_data[(aggregated_data['flux'] >= 255) & (aggregated_data['type'] != 'BlackHole')]
+    neutronstars = aggregated_data[aggregated_data['type'] == 'NeutronStar']
+    low_flux_bodies = aggregated_data[(aggregated_data['flux'] < 255) & (aggregated_data['type'] != 'BlackHole') & (aggregated_data['type'] != 'NeutronStar')]
+    other_bodies = aggregated_data[(aggregated_data['flux'] >= 255) & (aggregated_data['type'] != 'BlackHole') & (aggregated_data['type'] != 'NeutronStar')]
 
     #Generate a scatter plot
     plt.figure(figsize=(12, 8))
-    plt.scatter(other_bodies['posx'], other_bodies['posy'], c='gray', alpha=0.5, s=other_bodies['mass'], label='Other Bodies')
-    plt.scatter(low_flux_bodies['posx'], low_flux_bodies['posy'], c='blue', alpha=0.5, s=low_flux_bodies['mass'], label='Low Flux Bodies')
-    plt.scatter(blackholes['posx'], blackholes['posy'], c='red', marker='x', s=50, label='BlackHoles')
+    plt.scatter(other_bodies['posx'], other_bodies['posy'], c='gray', alpha=0.5, zorder=1, s=other_bodies['mass'], label='Other Bodies')
+    plt.scatter(low_flux_bodies['posx'], low_flux_bodies['posy'], c='orange', marker='^', alpha=0.5, zorder=2, s=low_flux_bodies['mass'], label='Low Flux Bodies')
+    plt.scatter(blackholes['posx'], blackholes['posy'], c='red', marker='x', s=50, zorder=3, label='BlackHoles')
+    plt.scatter(neutronstars['posx'], neutronstars['posy'], c='blue', marker='o', s=25, zorder=4, label='NeutronStars')
     plt.title('Mass Distribution with Black Holes and Low Flux Bodies Highlighted')
     plt.xlabel('posx')
     plt.ylabel('posy')
@@ -73,6 +78,8 @@ def time3d(df):
     def categorize_object(row):
         if row['type'] == 'BlackHole':
             return 'BlackHole'
+        elif row['type'] == 'NeutronStar':
+            return 'NeutronStar'
         elif row['mass'] < 15 and 8 <= row['size'] <= 15:
             return 'MolecularCloud'
         elif row['mass'] > 15 and row['size'] < 8:
@@ -90,9 +97,10 @@ def time3d(df):
     ax = fig.add_subplot(111, projection='3d')
 
     colors = {
-        'MolecularCloud': 'gray',
-        'Star': 'blue',
-        'BlackHole': 'red'
+        'MolecularCloud': 'purple',
+        'Star': 'orange',
+        'BlackHole': 'red',
+        'NeutronStar': 'blue'
     }
 
     # Plot each category with its position and observation year
@@ -115,6 +123,8 @@ def timeseries(df):
     def categorize_object(row):
         if row['type'] == 'BlackHole':
             return 'BlackHole'
+        elif row['type'] == 'NeutronStar':
+            return 'NeutronStar'
         elif row['mass'] < 15 and 8 <= row['size'] <= 15:
             return 'MolecularCloud'
         elif row['mass'] > 15 and row['size'] < 8:
@@ -136,9 +146,10 @@ def timeseries(df):
 
     #Define colors for categories
     colors = {
-        'MolecularCloud': 'gray',
-        'Star': 'blue',
-        'BlackHole': 'red'
+        'MolecularCloud': 'purple',
+        'Star': 'orange',
+        'BlackHole': 'red',
+        'NeutronStar': 'blue'
     }
 
     #Time Series Plotting
