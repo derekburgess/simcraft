@@ -13,17 +13,17 @@ RING_ATTRACTOR_COUNT = 20 #Default: 10
 RING_ROTATION_SPEED = 0.05 #Default: 0.75
 RING_GRAVITY_CONSTANT = 100 #Default: 20
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
-RING_OPACITY = 0 #Default: 0, Range: 0-255
-WOBBLE_MAGNITUDE = 20 #Default: 20
+RING_OPACITY = 100 #Default: 0, Range: 0-255
+WOBBLE_MAGNITUDE = 40 #Default: 20
 WOBBLE_FREQUENCY = 0.9 #Default: 0.9
 
 
-UNIT_COUNT = 7500 #Default: 5000
+UNIT_COUNT = 10000 #Default: 5000
 UNIT_START_SIZE = 15 #Default: 15
 UNIT_MIN_SIZE = 3 #Default: 3
 UNIT_GROWTH_RATE = 0.5 #Default: 0.5
 UNIT_START_MASS = 1 #Default: 1
-UNIT_GRAVITY_CONSTANT = 0.08 #Default: 0.05
+UNIT_GRAVITY_CONSTANT = 0.1 #Default: 0.05
 UNIT_MAX_MASS = 60 #Default: 60
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
@@ -52,7 +52,7 @@ NEUTRON_STAR_COLOR = (0, 0, 255)  #Default: (0, 0, 255) -- Blue
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.00025  #Default: 0.00025
 
 
-GRID_COLOR = (0, 0, 100) #Default: (0, 0, 100) -- Dark Blue
+GRID_COLOR = (0, 0, 150) #Default: (0, 0, 100) -- Dark Blue
 GRID_TEXT_COLOR = (0, 0, 255)  # White or choose another contrasting color
 GRID_OPACITY = 10 #Default: 10, Range: 0-255
 GRID_LINES_HORIZONTAL = 12 #Default: 12
@@ -60,9 +60,8 @@ GRID_LINES_VERTICAL = 16 #Default: 16
 GRID_LABEL_OFFSET = 5 #Default: 5
 
 
-LABEL_COLOR = (200, 200, 200) #Default: (200, 200, 200) -- Light Gray
-
-
+LABEL_COLOR = (255, 255, 255) #Default: (255, 255, 255) -- White
+BORDER_COLOR = (50, 50, 50) #Default: (100, 100, 100) -- Gray
 BACKGROUND_COLOR = (0, 0, 10) #Default: (0, 0, 10) -- Dark Blue
 SCREEN_WIDTH = 1280 #Default: 1600
 SCREEN_HEIGHT = 960 #Default: 1200
@@ -115,7 +114,7 @@ def draw_grid(screen, font, color, opacity, lines_horizontal, lines_vertical):
 
 def draw_static_key(screen):
     sub_window_rect = pygame.Rect(20, SCREEN_HEIGHT - 260, 300, 225)
-    pygame.draw.rect(screen, LABEL_COLOR, sub_window_rect, 1) #This is the border of the sub window.
+    pygame.draw.rect(screen, BORDER_COLOR, sub_window_rect, 1) #This is the border of the sub window.
     inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1) #This is the inner rect of the sub window.
     pygame.draw.rect(screen, BACKGROUND_COLOR, inner_rect) #This is the background of the sub window.
 
@@ -514,7 +513,7 @@ def run_simulation():
             screen.fill(BACKGROUND_COLOR)
 
             #Draw grid on screen
-            draw_grid(screen, font, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
+            #draw_grid(screen, font, GRID_COLOR, GRID_OPACITY, GRID_LINES_HORIZONTAL, GRID_LINES_VERTICAL)
             #Increment angle
             angle += RING_ROTATION_SPEED
             #Get ring points
@@ -674,10 +673,10 @@ def run_simulation():
 
             #Draw sub window
             if sub_window_active:
-                pygame.draw.rect(screen, LABEL_COLOR, sub_window_rect, 1) #This is the border of the sub window.
+                pygame.draw.rect(screen, BORDER_COLOR, sub_window_rect, 1) #This is the border of the sub window.
                 inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1) #This is the inner rect of the sub window.
                 pygame.draw.rect(screen, BACKGROUND_COLOR, inner_rect) #This is the background of the sub window.
-                pygame.draw.rect(screen, LABEL_COLOR, close_button_rect) #This is the close button of the sub window.
+                pygame.draw.rect(screen, BORDER_COLOR, close_button_rect) #This is the close button of the sub window.
                 #Display unit data
                 if selected_unit:
                     #Display unit data inside our sub window
