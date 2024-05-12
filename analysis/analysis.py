@@ -17,7 +17,6 @@ color_map = {
 }
 
 
-#Categorizing objects
 def categorize_object(row):
     if row['type'] == 'BlackHole':
         return 'BlackHole'
@@ -36,7 +35,6 @@ def categorize_object(row):
 
 def cluster(df):
     center_x, center_y = 600, 600
-    #Calculate the Euclidean distance from the center for each object
     df['distance'] = np.sqrt((df['posx'] - center_x)**2 + (df['posy'] - center_y)**2)
     df['category'] = df.apply(categorize_object, axis=1)
     fig = plt.figure(figsize=(12, 8))
@@ -53,14 +51,11 @@ def cluster(df):
 
 
 def heatmap(df):
-    #Aggregate data by body - average positions, sum of mass, and minimum flux
     aggregated_data = df.groupby('body').agg({'posx': 'mean', 'posy': 'mean', 'mass': 'sum', 'flux': 'min', 'type': 'first'}).reset_index()
-    #Separate BlackHoles, bodies with flux below 255, and other bodies
     blackholes = aggregated_data[aggregated_data['type'] == 'BlackHole']
     neutronstars = aggregated_data[aggregated_data['type'] == 'NeutronStar']
     low_flux_bodies = aggregated_data[(aggregated_data['flux'] < 255) & (aggregated_data['type'] != 'BlackHole') & (aggregated_data['type'] != 'NeutronStar')]
     other_bodies = aggregated_data[(aggregated_data['flux'] >= 255) & (aggregated_data['type'] != 'BlackHole') & (aggregated_data['type'] != 'NeutronStar')]
-    #Generate a scatter plot
     plt.figure(figsize=(12, 8))
     plt.scatter(other_bodies['posx'], other_bodies['posy'], c='gray', alpha=0.5, zorder=1, s=other_bodies['mass'], label='Other Bodies')
     plt.scatter(low_flux_bodies['posx'], low_flux_bodies['posy'], c='orange', marker='^', alpha=0.5, zorder=2, s=low_flux_bodies['mass'], label='Low Flux Bodies')
@@ -74,12 +69,7 @@ def heatmap(df):
 
 def timeseries(df):
     df['category'] = df.apply(categorize_object, axis=1)
-    #Ensuring we track only unique objects, we'll drop duplicates based on the 'body' column
-    #df_unique = df.drop_duplicates(subset='body')
-    #Grouping by Observation year and Category for unique objects
-    #grouped = df_unique.groupby(['observation', 'category']).size().unstack(fill_value=0)
     grouped = df.groupby(['observation', 'category']).size().unstack(fill_value=0)
-    #Time Series Plotting
     fig, ax = plt.subplots(figsize=(12, 4))
     for category in grouped.columns:
         ax.plot(grouped.index, grouped[category], label=category, color=color_map[category], marker='o', linestyle='-')
@@ -92,15 +82,12 @@ def timeseries(df):
 
 def time3d(df):
     df['category'] = df.apply(categorize_object, axis=1)
-    # Prepare 3D plot
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
-    # Plot each category with its position and observation year
     for category in df['category'].unique():
         cat_data = df[df['category'] == category]
         ax.scatter(cat_data['posx'], cat_data['posy'], cat_data['observation'], 
                 label=category, color=color_map[category], marker='o', alpha=0.5)
-    # Setting labels and title
     ax.set_xlabel('Position X')
     ax.set_ylabel('Position Y')
     ax.set_zlabel('Observation Year')
