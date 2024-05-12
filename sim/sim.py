@@ -41,7 +41,7 @@ BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 NEUTRON_STAR_CHANCE = 0.2  #Default: 0.5
 NEUTRON_STAR_RADIUS = 2  #Default: 3
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.001  #Default: 0.001
-NEUTRON_STAR_PULSE_STRENGTH = 200  #Default: 200
+NEUTRON_STAR_PULSE_STRENGTH = 600  #Default: 200
 NEUTRON_STAR_EFFECT_RADIUS = 10000  #Default: 10000
 NEUTRON_STAR_DECAY_RATE = 0.05 #Default: 0.05
 NEUTRON_STAR_DECAY_THRESHOLD = 1 #Default: 1
@@ -246,7 +246,7 @@ class BlackHole:
             pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_RADIUS, 0)
 
     #Attract units to the black hole.
-    def attract(self, units, black_holes, neutron_stars):
+    def attract(self, units):
         #Remove units that are black holes and have a mass less than the mass of the black hole.
         units_to_remove = []
         for unit in units:
@@ -271,8 +271,8 @@ class BlackHole:
             units.remove(unit)
 
     #Update the black hole's gravity.
-    def update_gravity(self, units, black_holes, neutron_stars):
-        for obj in units + black_holes + neutron_stars:
+    def update_gravity(self, units):
+        for obj in units:
             #If object is not the black hole, update the black hole's gravity.
             if obj is not self:
                 dx = obj.x - self.x
@@ -501,9 +501,9 @@ def run_simulation():
             #Update black holes
             for black_hole in black_holes:
                 #Attract units to the black hole.
-                black_hole.attract(units, black_holes, neutron_stars)
+                black_hole.attract(units)
                 #Update the black hole's gravity.
-                black_hole.update_gravity(units, black_holes, neutron_stars)
+                black_hole.update_gravity(units)
                 #Decay the black hole.
                 black_hole.decay()
                 #Draw the black hole on the screen.
