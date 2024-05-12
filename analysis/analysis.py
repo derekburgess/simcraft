@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
+sim_data_path = os.getenv("SIMCRAFT_DATA")
+sim_data = os.path.join(sim_data_path, 'sim_data.csv')
+df = pd.read_csv(sim_data)
 color_map = {
     'MolecularCloud': 'purple',
     'Star': 'orange',
@@ -43,6 +46,8 @@ def cluster(df):
     ax.set_xlabel('Mass')
     ax.set_ylabel('Distance from Center')
     ax.set_zlabel('Observation Year')
+    ax.set_title('Cluster Plot of Object Distance from Center over Time')
+    plt.legend(df['category'])
     plt.tight_layout()
     plt.show()
 
@@ -78,9 +83,9 @@ def timeseries(df):
     fig, ax = plt.subplots(figsize=(12, 4))
     for category in grouped.columns:
         ax.plot(grouped.index, grouped[category], label=category, color=color_map[category], marker='o', linestyle='-')
-    ax.set_title('Time Series of Unique Astronomical Objects')
+    ax.set_title('Time Series of Astronomical Objects')
     ax.set_xlabel('Observation Year')
-    ax.set_ylabel('Number of Unique Objects')
+    ax.set_ylabel('Number of Objects')
     ax.grid(True)
     plt.show()
 
@@ -110,10 +115,6 @@ def main():
     parser.add_argument("--heatmap", action="store_true", help="View a heatmap of Mass Distribution with Black Holes and Low Flux Bodies Highlighted")
     parser.add_argument("--time", action="store_true", help="View a time series of Unique Astronomical Objects")
     parser.add_argument("--time3d", action="store_true", help="View a 3D scatter plot of Astronomical Objects")
-
-    sim_data_path = os.getenv("SIMCRAFT_DATA")
-    sim_data = os.path.join(sim_data_path, 'sim_data.csv')
-    df = pd.read_csv(sim_data)
 
     args = parser.parse_args()
 

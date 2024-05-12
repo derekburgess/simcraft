@@ -2,20 +2,18 @@ import os
 import csv
 import pygame
 import math
-import time #Some how I had not needed to import time...
+import numpy as np
 import random
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
 RING_RADIUS = 600 #Default: 600
-RING_ATTRACTOR_COUNT = 60 #Default: 100
-RING_ROTATION_SPEED = 0.01 #Default: 0.01
-RING_GRAVITY_CONSTANT = 20 #Default: 20
+RING_ATTRACTOR_COUNT = 60 #Default: 60
+RING_ROTATION_SPEED = 0.1 #Default: 0.1
+RING_GRAVITY_CONSTANT = 12 #Default: 12
 RING_COLOR = (0, 0, 255) #Default: (0, 0, 255) -- Blue
 RING_OPACITY = 0 #Default: 0, Range: 0-255
-WOBBLE_MAGNITUDE = 10 #Default: 10
-WOBBLE_FREQUENCY = 0.5 #Default: 0.5
 
 
 UNIT_COUNT = 6000 #Default: 5000
@@ -27,10 +25,11 @@ UNIT_GRAVITY_CONSTANT = 0.01 #Default: 0.01
 UNIT_MAX_MASS = 60 #Default: 60
 UNIT_START_COLOR = (60, 0, 60) #Default: (60, 0, 60) -- Dark Purple
 UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
+DEFAULT_STATE_CHANCE = 1 #Default: 1
 
 
 BLACK_HOLE_THRESHOLD = 50 #Default: 50
-BLACK_HOLE_CHANCE = 0.8 #Default: 0.4
+BLACK_HOLE_CHANCE = 0.6 #Default: 0.4
 BLACK_HOLE_RADIUS = 18 #Default: 18
 BLACK_HOLE_GRAVITY_CONSTANT = 0.04 #Default: 0.04
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
@@ -39,14 +38,15 @@ BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
 
-NEUTRON_STAR_CHANCE = 0.4  #Default: 0.5
-NEUTRON_STAR_RADIUS = 2  #Default: 2
-NEUTRON_STAR_MASS = 30  #Default: 100
-NEUTRON_STAR_GRAVITY_CONSTANT = 0.025  #Default: 0.025
-NEUTRON_STAR_PULSE_STRENGTH = 100  #Default: 500
+NEUTRON_STAR_CHANCE = 0.2  #Default: 0.5
+NEUTRON_STAR_RADIUS = 2  #Default: 3
+NEUTRON_STAR_GRAVITY_CONSTANT = 0.001  #Default: 0.001
+NEUTRON_STAR_PULSE_STRENGTH = 200  #Default: 200
 NEUTRON_STAR_EFFECT_RADIUS = 10000  #Default: 10000
-NEUTRON_STAR_PULSE_RATE = 6  #Default: 5
-NEUTRON_STAR_COLOR = (0, 0, 255)  #Default: (0, 0, 255) -- Blue
+NEUTRON_STAR_DECAY_RATE = 0.05 #Default: 0.05
+NEUTRON_STAR_DECAY_THRESHOLD = 1 #Default: 1
+NEUTRON_STAR_PULSE_RATE = 6  #Default: 6
+NEUTRON_STAR_COLOR = (0, 50, 255)  #Default: (0, 0, 255) -- Blue
 
 
 LABEL_COLOR = (255, 255, 255) #Default: (255, 255, 255) -- White
@@ -69,6 +69,9 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 font = pygame.font.SysFont('Monospace', 14) #Font for time text.
 sim_data_path = os.getenv("SIMCRAFT_DATA")
 sim_data = os.path.join(sim_data_path, 'sim_data.csv')
+#Define a global index counter for units and black holes
+global_index_counter = 1
+units = []
 
 
 def generate_unique_id():
@@ -116,19 +119,12 @@ def draw_static_key(screen):
 
 #Set up Attractor Ring: This is important because a solid ring did not create the effect I was looking for. This allows for the creation gravitational sources that create a crude sudo-manifold around the units.
 #Is not manifold as units bleed out of the universe...
-#Add wobble effect to the ring...
 def get_ring_points(center, radius, num_points, angle):
     points = []
-    # Time factor for the wobble effect
-    current_time = time.time()
     for i in range(num_points):
         theta = angle + (2 * math.pi / num_points) * i
-        # Adding wobble effect based on time and theta
-        wobble = WOBBLE_MAGNITUDE * math.sin(WOBBLE_FREQUENCY * current_time + theta)
-        # Adjust radius for wobble
-        adjusted_radius = radius + wobble
-        x = center[0] + adjusted_radius * math.cos(theta)
-        y = center[1] + adjusted_radius * math.sin(theta)
+        x = center[0] + radius * math.cos(theta)
+        y = center[1] + radius * math.sin(theta)
         points.append((x, y))
     return points
 
@@ -144,6 +140,21 @@ def draw_ring(points, color, opacity):
         #Blit surface to screen. Blitting is a term used in computer graphics to refer to the process of combining two images to form a third, resulting in a new image.
 
 
+#Apply gravity to units based on ring points. This creates the gravitational effect for each point as it passes by a section of the universe it will attract units toward it.
+def apply_gravity(units, ring_points):
+    for unit in units:
+        for point in ring_points:
+            dx = point[0] - unit.x
+            dy = point[1] - unit.y
+            #Distance between the unit and the point. 1 is the minimum distance.
+            distance = max(math.hypot(dx, dy), 1)
+            #Force between the unit and the point.
+            force = RING_GRAVITY_CONSTANT * unit.mass / (distance**2)
+            if distance > unit.size / 2:
+                unit.x += (dx / distance) * force
+                unit.y += (dy / distance) * force
+
+
 #Unit class, also known as SpaceTimeUnit, probably because I described these as "units of spacetime" to OpenAI.
 #This class is to represent the molecular clouds as they transition into stars. It also handles gravity for each "unit".
 #A unit is represented by the square pixels that start out as large, low-mass molecular clouds and transition into small, high-mass stars.
@@ -155,7 +166,6 @@ class SpaceTimeUnit:
         self.y = y #Y position of the unit, this will be used to set the Y position of the unit.
         self.size = size #Size of the unit, this will be used to set the size of the unit.
         self.mass = mass #Mass of the unit, this will be used to set the mass of the unit.
-        self.opacity = 255  #Maximum opacity
         self.gravity_sources = [] #Set gravity sources to an empty list, this will be used to set the gravity sources of the unit.
 
     #Draw the unit on the screen.
@@ -166,11 +176,9 @@ class SpaceTimeUnit:
         else:
             # Interpolate color
             factor = self.mass / UNIT_MAX_MASS
-            color = interpolate_color(UNIT_START_COLOR, UNIT_END_COLOR, factor)
-            #Add opacity to color for flicker effect (opacity is a random number between 0 and 255)
-            color_with_opacity = color + (int(self.opacity),)
+            self.color = interpolate_color(UNIT_START_COLOR, UNIT_END_COLOR, factor)
             # Draw the unit with flickering effect
-            pygame.draw.rect(screen, color_with_opacity, (self.x, self.y, self.size, self.size))
+            pygame.draw.rect(screen, self.color, (self.x, self.y, self.size, self.size))
 
     #Update the unit.
     def update(self):
@@ -201,10 +209,23 @@ class SpaceTimeUnit:
             force = UNIT_GRAVITY_CONSTANT * (self.mass * source.mass) / (distance**2)   
             self.x += (dx / distance) * force
             self.y += (dy / distance) * force
-    
+
     def is_clicked(self, click_x, click_y):
         return (self.x <= click_x <= self.x + self.size and
                 self.y <= click_y <= self.y + self.size)
+    
+
+for _ in range(UNIT_COUNT):
+    #Generate random radius and angle.
+    radius = random.uniform(0, RING_RADIUS)
+    #Generate random angle between 0 and 2 * pi.
+    angle = random.uniform(0, 2 * math.pi)
+    #Generate x and y coordinates.
+    x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
+    y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
+    #Create unit.
+    unit = SpaceTimeUnit(x, y, UNIT_START_SIZE, UNIT_START_MASS)
+    units.append(unit)
     
 
 class BlackHole:
@@ -226,12 +247,15 @@ class BlackHole:
             pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_RADIUS, 0)
 
     #Attract units to the black hole.
-    def attract(self, units, black_holes):
+    def attract(self, units, black_holes, neutron_stars):
         #Remove units that are black holes and have a mass less than the mass of the black hole.
         units_to_remove = []
         for unit in units:
             #If unit is a black hole and its mass is less than the mass of the black hole it is being attracted to, remove it from the simulation.
             if isinstance(unit, BlackHole) and unit.mass < self.mass:
+                units_to_remove.append(unit)
+            #If unit is a neutron star and its mass is less than the mass of the black hole it is being attracted to, remove it from the simulation.
+            elif isinstance(unit, NeutronStar) and unit.mass < self.mass:
                 units_to_remove.append(unit)
             else:
                 dx = self.x - unit.x
@@ -248,8 +272,8 @@ class BlackHole:
             units.remove(unit)
 
     #Update the black hole's gravity.
-    def update_gravity(self, units, other_black_holes):
-        for obj in units + other_black_holes:
+    def update_gravity(self, units, black_holes, neutron_stars):
+        for obj in units + black_holes + neutron_stars:
             #If object is not the black hole, update the black hole's gravity.
             if obj is not self:
                 dx = obj.x - self.x
@@ -315,6 +339,16 @@ class NeutronStar:
                 # Update neutron star position as well
                 self.x -= (dx / distance) * force * delta_time
                 self.y -= (dy / distance) * force * delta_time
+    
+    #Decay the neutron stars.
+    def decay(self):
+        #Decay the neutron star if its mass is less than the neutron star decay threshold.
+        self.mass -= NEUTRON_STAR_DECAY_RATE
+        #If the neutron star's mass is less than the neutron star decay threshold, remove it from the simulation.
+        if self.mass < NEUTRON_STAR_DECAY_THRESHOLD:
+            #Remove the neutron star from the simulation.
+            if self in neutron_stars:
+                neutron_stars.remove(self)
 
 
 #Handle collisions between units.  
@@ -334,21 +368,6 @@ def handle_collisions(units):
                 break
 
 
-#Apply gravity to units based on ring points. This creates the gravitational effect for each point as it passes by a section of the universe it will attract units toward it.
-def apply_gravity(units, ring_points):
-    for unit in units:
-        for point in ring_points:
-            dx = point[0] - unit.x
-            dy = point[1] - unit.y
-            #Distance between the unit and the point. 1 is the minimum distance.
-            distance = max(math.hypot(dx, dy), 1)
-            #Force between the unit and the point.
-            force = RING_GRAVITY_CONSTANT * unit.mass / (distance**2)
-            if distance > unit.size / 2:
-                unit.x += (dx / distance) * force
-                unit.y += (dy / distance) * force
-
-
 def update_units(units):
     global black_holes, neutron_stars
     handle_collisions(units)
@@ -359,35 +378,23 @@ def update_units(units):
         if unit.mass > BLACK_HOLE_THRESHOLD:
             # Decide randomly between transforming into a black hole or a neutron star
             if random.random() < BLACK_HOLE_CHANCE:
-            # Transform unit into a black hole
+                # Transform unit into a black hole
                 if random.random() < NEUTRON_STAR_CHANCE:
-                # Transform unit into a neutron star
-                    neutron_stars.append(NeutronStar(unit.x, unit.y, NEUTRON_STAR_MASS))
+                    # Transform unit into a neutron star
+                    neutron_stars.append(NeutronStar(unit.x, unit.y, unit.mass))
                 else:
                     # Transform unit into a black hole
                     black_holes.append(BlackHole(unit.x, unit.y, unit.mass))
                 units_to_remove.append(unit)
+            # Chance to return to default state
+            elif random.random() < DEFAULT_STATE_CHANCE:
+                unit.mass = UNIT_START_MASS
+                unit.size = UNIT_START_SIZE
     # Remove units that have transformed
     for unit in units_to_remove:
         units.remove(unit)
-
-
-units = []
-for _ in range(UNIT_COUNT):
-    #Generate random radius and angle.
-    radius = random.uniform(0, RING_RADIUS)
-    #Generate random angle between 0 and 2 * pi.
-    angle = random.uniform(0, 2 * math.pi)
-    #Generate x and y coordinates.
-    x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
-    y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
-    #Create unit.
-    unit = SpaceTimeUnit(x, y, UNIT_START_SIZE, UNIT_START_MASS)
-    units.append(unit)
     
 
-#Define a global index counter for units and black holes
-global_index_counter = 1
 #Dump data to CSV
 def dump_to_csv(units, black_holes, neutron_stars, current_year, filename=sim_data):
     global global_index_counter  #Declare the global index counter
@@ -425,7 +432,8 @@ def run_simulation():
         running = True
         angle = 0
         ring_points = get_ring_points((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
-        decay_black_holes = []
+        decay_blackholes = []
+        decay_neutronstars = []
         current_year = 0
         sub_window_rect = pygame.Rect(20, 20, 180, 450)
         close_button_rect = pygame.Rect(180, 20, 20, 20)
@@ -488,9 +496,9 @@ def run_simulation():
             #Update black holes
             for black_hole in black_holes:
                 #Attract units to the black hole.
-                black_hole.attract(units, black_holes)
+                black_hole.attract(units, black_holes, neutron_stars)
                 #Update the black hole's gravity.
-                black_hole.update_gravity(units, black_holes)
+                black_hole.update_gravity(units, black_holes, neutron_stars)
                 #Decay the black hole.
                 black_hole.decay()
                 #Draw the black hole on the screen.
@@ -498,18 +506,31 @@ def run_simulation():
                 #Remove the black hole from the simulation if its mass is less than the black hole decay threshold.
                 if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
                     #Add the black hole to the decay black holes list.
-                    decay_black_holes.append(black_hole)
+                    decay_blackholes.append(black_hole)
             #Remove the black hole from the simulation if its mass is less than the black hole decay threshold.
-            for decayed_black_hole in decay_black_holes.copy():
+            for decayed_black_hole in decay_blackholes.copy():
                 #Remove the black hole from the simulation.
                 if decayed_black_hole in black_holes:
                     black_holes.remove(decayed_black_hole)
-                decay_black_holes.remove(decayed_black_hole)
+                decay_blackholes.remove(decayed_black_hole)
 
-            # Update Neutron Stars
+            # Update neutron stars
             for neutron_star in neutron_stars:
+                neutron_star.update_position(units, delta_time)
                 neutron_star.pulse_gravity(units, delta_time)
+                neutron_star.decay()
+                #Draw the neutron star on the screen.
                 neutron_star.draw(screen)
+                #Remove the neutron star from the simulation if its mass is less than the neutron star decay threshold.
+                if neutron_star.mass <= BLACK_HOLE_DECAY_THRESHOLD:
+                    #Add the neutron star to the decay neutron stars list.
+                    decay_neutronstars.append(neutron_star)
+            #Remove the neutron starfrom the simulation if its mass is less than the neutron star decay threshold.
+            for decay_neutronstar in decay_neutronstars.copy():
+                #Remove the neutron star from the simulation.
+                if decay_neutronstar in neutron_stars:
+                    neutron_stars.remove(decay_neutronstar)
+                decay_neutronstars.remove(decay_neutronstar)
 
             #Update units
             for unit in units:
