@@ -30,7 +30,7 @@ UNIT_END_COLOR = (225, 200, 255) #Default: (225, 200, 255) -- Light Purple
 
 
 BLACK_HOLE_THRESHOLD = 50 #Default: 50
-BLACK_HOLE_CHANCE = 0.4 #Default: 0.4
+BLACK_HOLE_CHANCE = 0.6 #Default: 0.4
 BLACK_HOLE_RADIUS = 18 #Default: 18
 BLACK_HOLE_GRAVITY_CONSTANT = 0.04 #Default: 0.04
 BLACK_HOLE_DECAY_RATE = 0.5 #Default: 0.5
@@ -39,9 +39,9 @@ BLACK_HOLE_COLOR = (0,0,0) #Black...
 BLACK_HOLE_BORDER_COLOR = (255, 0, 0) #Red...
 
 
-NEUTRON_STAR_CHANCE = 0.1  #Default: 0.5
+NEUTRON_STAR_CHANCE = 0.15  #Default: 0.5
 NEUTRON_STAR_RADIUS = 2  #Default: 2
-NEUTRON_STAR_MASS = 100  #Default: 100
+NEUTRON_STAR_MASS = 30  #Default: 100
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.025  #Default: 0.025
 NEUTRON_STAR_PULSE_STRENGTH = 100  #Default: 500
 NEUTRON_STAR_EFFECT_RADIUS = 10000  #Default: 10000
@@ -526,7 +526,7 @@ def run_simulation():
             #Increment current_year
             current_year += 1
             #Render time text
-            year_text = font.render(f"TIME(current_year): {current_year}M", True, LABEL_COLOR)
+            year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
             #Blit time text to screen
             screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
 
