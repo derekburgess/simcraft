@@ -360,6 +360,7 @@ def dump_to_csv(list_of_molecular_clouds, black_holes, neutron_stars, current_ye
 def run_simulation():
     try:
         global font
+        pygame.font.init()
         running = True
         angle = 0
         decay_blackholes = []
@@ -370,9 +371,9 @@ def run_simulation():
         sub_window_active = False
         selected_entity = None
         last_frame_time = pygame.time.get_ticks()
-        pygame.font.init()
 
 
+        # Handle user input
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
@@ -404,18 +405,19 @@ def run_simulation():
                                 sub_window_active = True
             
 
+            # Set up the screen and draw the key and timer
             current_time = pygame.time.get_ticks()
             delta_time = (current_time - last_frame_time) / 1000
             last_frame_time = current_time
             screen.fill(BACKGROUND_COLOR)
-            current_year += 1
-            year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
-            screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
-
 
             draw_static_key(screen)
             if current_year % 500 == 0:
                 dump_to_csv(list_of_molecular_clouds, black_holes, neutron_stars, current_year)
+
+            current_year += 1
+            year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
+            screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
             
 
             # Update and draw Attractor Ring
@@ -462,6 +464,7 @@ def run_simulation():
                 if decay_neutronstar in neutron_stars:
                     neutron_stars.remove(decay_neutronstar)
                 decay_neutronstars.remove(decay_neutronstar)
+
 
 
             # Everything Below is for the window-in-window data readout.
