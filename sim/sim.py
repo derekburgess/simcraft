@@ -192,7 +192,7 @@ for _ in range(MOLECULAR_CLOUD_COUNT):
     list_of_molecular_clouds.append(molecular_cloud)
     
 
-black_holes = []
+list_of_black_holes = []
 class BLACK_HOLE:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
@@ -203,12 +203,8 @@ class BLACK_HOLE:
         self.border_radius = int(mass // BLACK_HOLE_RADIUS)
 
     def draw_black_hole(self, screen):
-        if self.selected:
-            highlight_color = (255, 165, 0)
-            pygame.draw.rect(screen, highlight_color, (self.x, self.y, self.size, self.size))
-        else:
-            pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (self.x, self.y), self.border_radius)
-            pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_RADIUS, 0)
+        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (self.x, self.y), self.border_radius)
+        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_RADIUS, 0)
 
     def attract_entities_to_black_holes(self, list_of_molecular_clouds):
         list_of_molecular_clouds_to_remove = []
@@ -241,15 +237,11 @@ class BLACK_HOLE:
     def black_hole_decay(self):
         self.mass -= BLACK_HOLE_DECAY_RATE
         if self.mass < BLACK_HOLE_DECAY_THRESHOLD:
-            if self in black_holes:
-                black_holes.remove(self)
-
-    def black_hole_clicked(self, click_x, click_y):
-        return (self.x <= click_x <= self.x + self.size and
-                self.y <= click_y <= self.y + self.size)
+            if self in list_of_black_holes:
+                list_of_black_holes.remove(self)
 
 
-neutron_stars = []
+list_of_neutron_stars = []
 class NEUTRON_STAR:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
@@ -263,11 +255,7 @@ class NEUTRON_STAR:
         self.time_since_last_pulse = 0
 
     def draw_neotron_star(self, screen):
-        if self.selected:
-            highlight_color = (255, 165, 0)
-            pygame.draw.rect(screen, highlight_color, (self.x, self.y, self.size, self.size))
-        else:
-            pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (self.x, self.y), self.radius)
+        pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (self.x, self.y), self.radius)
 
     def pulse_gravity_from_neutron_star(self, list_of_molecular_clouds, delta_time):
         self.time_since_last_pulse += delta_time
@@ -300,8 +288,8 @@ class NEUTRON_STAR:
     def decay_neutron_star(self):
         self.mass -= NEUTRON_STAR_DECAY_RATE
         if self.mass < NEUTRON_STAR_DECAY_THRESHOLD:
-            if self in neutron_stars:
-                neutron_stars.remove(self)
+            if self in list_of_neutron_stars:
+                list_of_neutron_stars.remove(self)
 
 
 def handle_collisions(list_of_molecular_clouds):
@@ -315,8 +303,8 @@ def handle_collisions(list_of_molecular_clouds):
                 break
 
 
-def update_list_of_molecular_clouds(list_of_molecular_clouds):
-    global black_holes, neutron_stars
+def update_entities(list_of_molecular_clouds):
+    global list_of_black_holes, list_of_neutron_stars
     handle_collisions(list_of_molecular_clouds)
     list_of_molecular_clouds_to_remove = []
     for molecular_cloud in list_of_molecular_clouds:
@@ -324,9 +312,9 @@ def update_list_of_molecular_clouds(list_of_molecular_clouds):
         if molecular_cloud.mass > BLACK_HOLE_THRESHOLD:
             if random.random() < BLACK_HOLE_CHANCE:
                 if random.random() < NEUTRON_STAR_CHANCE:
-                    neutron_stars.append(NEUTRON_STAR(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
+                    list_of_neutron_stars.append(NEUTRON_STAR(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 else:
-                    black_holes.append(BLACK_HOLE(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
+                    list_of_black_holes.append(BLACK_HOLE(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 list_of_molecular_clouds_to_remove.append(molecular_cloud)
             elif random.random() < DEFAULT_STATE_CHANCE:
                 molecular_cloud.mass = MOLECULAR_CLOUD_START_MASS
@@ -336,7 +324,7 @@ def update_list_of_molecular_clouds(list_of_molecular_clouds):
 
 
 global_index_counter = 1
-def dump_to_csv(list_of_molecular_clouds, black_holes, neutron_stars, current_year, filename=sim_data):
+def dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year, filename=sim_data):
     global global_index_counter
     file_exists = os.path.isfile(filename)
     with open(filename, mode='a' if file_exists else 'w', newline='') as file:
@@ -348,11 +336,11 @@ def dump_to_csv(list_of_molecular_clouds, black_holes, neutron_stars, current_ye
             flux = molecular_cloud.opacity if hasattr(molecular_cloud, 'opacity') else 'N/A'
             writer.writerow([row_id, molecular_cloud.id, 'Unit', molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass, molecular_cloud.size, flux, current_year])
             row_id += 1
-        for black_hole in black_holes:
+        for black_hole in list_of_black_holes:
             writer.writerow([row_id, black_hole.id, 'BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, 0, current_year])
             row_id += 1
-        for neutron_stars in neutron_stars:
-            writer.writerow([row_id, neutron_stars.id, 'NeutronStar', neutron_stars.x, neutron_stars.y, neutron_stars.mass, neutron_stars.radius, 0, current_year])
+        for neutron_star in list_of_neutron_stars:
+            writer.writerow([row_id, neutron_star.id, 'NeutronStar', neutron_star.x, neutron_star.y, neutron_star.mass, neutron_star.radius, 0, current_year])
             row_id += 1
         global_index_counter = row_id
 
@@ -379,7 +367,7 @@ def run_simulation():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
                     running = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    dump_to_csv(list_of_molecular_clouds, black_holes, neutron_stars, current_year)
+                    dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     click_x, click_y = event.pos
@@ -413,7 +401,7 @@ def run_simulation():
 
             draw_static_key(screen)
             if current_year % 500 == 0:
-                dump_to_csv(list_of_molecular_clouds, black_holes, neutron_stars, current_year)
+                dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
 
             current_year += 1
             year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
@@ -427,7 +415,7 @@ def run_simulation():
             ring.angle = angle
             ring.points = ring.set_ring_points()
             ring.draw_ring(screen, RING_COLOR, RING_OPACITY)
-            update_list_of_molecular_clouds(list_of_molecular_clouds)
+            update_entities(list_of_molecular_clouds)
             ring.apply_gravity(list_of_molecular_clouds)
 
 
@@ -439,7 +427,7 @@ def run_simulation():
 
 
             # Update and draw Black Holes
-            for black_hole in black_holes:
+            for black_hole in list_of_black_holes:
                 black_hole.attract_entities_to_black_holes(list_of_molecular_clouds)
                 black_hole.update_gravity_of_black_holes(list_of_molecular_clouds)
                 black_hole.black_hole_decay()
@@ -447,13 +435,13 @@ def run_simulation():
                 if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
                     decay_blackholes.append(black_hole)
             for decayed_black_hole in decay_blackholes.copy():
-                if decayed_black_hole in black_holes:
-                    black_holes.remove(decayed_black_hole)
+                if decayed_black_hole in list_of_black_holes:
+                    list_of_black_holes.remove(decayed_black_hole)
                 decay_blackholes.remove(decayed_black_hole)
 
 
             # Update and draw Neutron Stars
-            for neutron_star in neutron_stars:
+            for neutron_star in list_of_neutron_stars:
                 neutron_star.update_position_of_entities_from_pulse(list_of_molecular_clouds, delta_time)
                 neutron_star.pulse_gravity_from_neutron_star(list_of_molecular_clouds, delta_time)
                 neutron_star.decay_neutron_star()
@@ -461,8 +449,8 @@ def run_simulation():
                 if neutron_star.mass <= BLACK_HOLE_DECAY_THRESHOLD:
                     decay_neutronstars.append(neutron_star)
             for decay_neutronstar in decay_neutronstars.copy():
-                if decay_neutronstar in neutron_stars:
-                    neutron_stars.remove(decay_neutronstar)
+                if decay_neutronstar in list_of_neutron_stars:
+                    list_of_neutron_stars.remove(decay_neutronstar)
                 decay_neutronstars.remove(decay_neutronstar)
 
 
