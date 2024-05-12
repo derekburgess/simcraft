@@ -57,21 +57,20 @@ SCREEN_WIDTH = 1536 #Default: 1536
 SCREEN_HEIGHT = 960 #Default: 960
 
 
+global_index_counter = 1
 unit_id_counter = 0
 objects_with_gravity = [] #Units and black holes
+units = []
 black_holes = [] #Black holes
 neutron_stars = [] #Neutron stars
+sim_data_path = os.getenv("SIMCRAFT_DATA")
+sim_data = os.path.join(sim_data_path, 'sim_data.csv')
 
 
 pygame.init()
 pygame.display.set_caption("simcraft")
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 font = pygame.font.SysFont('Monospace', 14) #Font for time text.
-sim_data_path = os.getenv("SIMCRAFT_DATA")
-sim_data = os.path.join(sim_data_path, 'sim_data.csv')
-#Define a global index counter for units and black holes
-global_index_counter = 1
-units = []
 
 
 def generate_unique_id():
@@ -481,7 +480,7 @@ def run_simulation():
                                 sub_window_active = True
             
             current_time = pygame.time.get_ticks()
-            delta_time = (current_time - last_frame_time) / 1000.0  # Convert to seconds
+            delta_time = (current_time - last_frame_time) / 1000  # Convert to seconds
             last_frame_time = current_time
             #Fill screen with background color
             screen.fill(BACKGROUND_COLOR)
@@ -492,6 +491,12 @@ def run_simulation():
             draw_ring(ring_points, RING_COLOR, RING_OPACITY)
             update_units(units)
             apply_gravity(units, ring_points)
+
+            #Update units
+            for unit in units:
+                unit.update_gravity()
+            for unit in units:
+                unit.draw(screen)
 
             #Update black holes
             for black_hole in black_holes:
@@ -532,11 +537,6 @@ def run_simulation():
                     neutron_stars.remove(decay_neutronstar)
                 decay_neutronstars.remove(decay_neutronstar)
 
-            #Update units
-            for unit in units:
-                unit.update_gravity()
-            for unit in units:
-                unit.draw(screen)
 
             #Update screen
             #Draw static key on screen
