@@ -32,6 +32,7 @@ def cluster(df):
     ax.set_ylabel('Distance from Center')
     ax.set_zlabel('Observation Year')
     ax.set_title('Entity Distance from Center over Time')
+
     plt.legend()
     plt.tight_layout()
     plt.show()
@@ -43,6 +44,7 @@ def heatmap(df):
     neutronstars = aggregated_data[aggregated_data['type'] == 'NeutronStar']
     low_flux_bodies = aggregated_data[(aggregated_data['flux'] < 255) & (aggregated_data['type'] != 'BlackHole') & (aggregated_data['type'] != 'NeutronStar')]
     other_bodies = aggregated_data[(aggregated_data['flux'] >= 255) & (aggregated_data['type'] != 'BlackHole') & (aggregated_data['type'] != 'NeutronStar')]
+
     plt.figure(figsize=(12, 8))
     plt.scatter(other_bodies['posx'], other_bodies['posy'], c='gray', alpha=0.5, zorder=1, s=other_bodies['mass'], label='Molecular Clouds')
     plt.scatter(low_flux_bodies['posx'], low_flux_bodies['posy'], c='orange', marker='^', alpha=0.5, zorder=2, s=low_flux_bodies['mass'], label='Low Flux Protostars')
@@ -58,12 +60,15 @@ def heatmap(df):
 def timeseries(df):
     grouped = df.groupby(['observation', 'type']).size().unstack(fill_value=0)
     fig, ax = plt.subplots(figsize=(12, 4))
+
     for category in grouped.columns:
         ax.plot(grouped.index, grouped[category], label=category, color=color_map[category], marker='o', linestyle='-')
+
     ax.set_title('Time Series of Astronomical Entities')
     ax.set_xlabel('Observation Year')
     ax.set_ylabel('Number of Entities')
     ax.grid(True)
+    
     plt.legend()
     plt.show()
 
