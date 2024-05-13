@@ -26,7 +26,7 @@ MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
 MOLECULAR_CLOUD_END_COLOR = (225, 200, 255)
 
 BLACK_HOLE_THRESHOLD = 50
-BLACK_HOLE_CHANCE = 0.8
+BLACK_HOLE_CHANCE = 0.4
 BLACK_HOLE_RADIUS = 16
 BLACK_HOLE_GRAVITY_CONSTANT = 0.0325
 BLACK_HOLE_DECAY_RATE = 0.4
@@ -34,7 +34,7 @@ BLACK_HOLE_DECAY_THRESHOLD = 5
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
 
-NEUTRON_STAR_CHANCE = 0.4
+NEUTRON_STAR_CHANCE = 0.2
 NEUTRON_STAR_RADIUS = 2
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.01
 NEUTRON_STAR_PULSE_STRENGTH = 400
@@ -48,6 +48,8 @@ LABEL_COLOR = (255, 255, 255)
 BORDER_COLOR = (150, 150, 150)
 BACKGROUND_COLOR = (0, 0, 20)
 BOX_BG_COLOR = (0, 0, 10)
+SUB_WINDOW_RECT = pygame.Rect(20, 20, 180, 450)
+CLOSE_BUTTON_RECT = pygame.Rect(180, 20, 20, 20)
 
 SCREEN_WIDTH = 1536
 SCREEN_HEIGHT = 960
@@ -135,6 +137,7 @@ class ATTRACTOR_RING:
                     molecular_cloud.y += (dy / distance) * force
 
 
+list_of_molecular_clouds = []
 class MOLECULAR_CLOUD:
     def __init__(self, x, y, size, mass):
         self.id = generate_unique_id()
@@ -180,16 +183,6 @@ class MOLECULAR_CLOUD:
         return (self.x <= click_x <= self.x + self.size and
                 self.y <= click_y <= self.y + self.size)
 
-
-list_of_molecular_clouds = []
-for _ in range(MOLECULAR_CLOUD_COUNT):
-    radius = random.uniform(0, RING_RADIUS)
-    angle = random.uniform(0, 2 * math.pi)
-    x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
-    y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
-    molecular_cloud = MOLECULAR_CLOUD(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS)
-    list_of_molecular_clouds.append(molecular_cloud)
-    
 
 list_of_black_holes = []
 class BLACK_HOLE:
@@ -329,11 +322,15 @@ def dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_s
     with open(filename, mode='a' if file_exists else 'w', newline='') as file:
         writer = csv.writer(file)
         if not file_exists:
-            writer.writerow(['id', 'body', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation'])
+            writer.writerow(['rowid', 'entityid', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation'])
         row_id = global_index_counter
         for molecular_cloud in list_of_molecular_clouds:
             flux = molecular_cloud.opacity if hasattr(molecular_cloud, 'opacity') else 'N/A'
-            writer.writerow([row_id, molecular_cloud.id, 'Unit', molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass, molecular_cloud.size, flux, current_year])
+            if 20 <= molecular_cloud.mass <= BLACK_HOLE_THRESHOLD:
+                entity_type = 'ProtoStar'
+            else:
+                entity_type = 'MolecularCloud'
+            writer.writerow([row_id, molecular_cloud.id, entity_type, molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass, molecular_cloud.size, flux, current_year])
             row_id += 1
         for black_hole in list_of_black_holes:
             writer.writerow([row_id, black_hole.id, 'BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, 0, current_year])
@@ -346,19 +343,15 @@ def dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_s
 
 def run_simulation():
     try:
+        running = True
         global font
         pygame.font.init()
-        running = True
         angle = 0
-        decay_blackholes = []
-        decay_neutronstars = []
         current_year = 0
-        sub_window_rect = pygame.Rect(20, 20, 180, 450)
-        close_button_rect = pygame.Rect(180, 20, 20, 20)
-        sub_window_active = False
-        selected_entity = None
         last_frame_time = pygame.time.get_ticks()
-
+        selected_entity = None
+        sub_window_active = False
+        
 
         # Handle user input
         while running:
@@ -371,12 +364,12 @@ def run_simulation():
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     click_x, click_y = event.pos
                     if sub_window_active:
-                        if close_button_rect.collidepoint(click_x, click_y):
+                        if CLOSE_BUTTON_RECT.collidepoint(click_x, click_y):
                             if selected_entity:
                                 selected_entity.selected = False
                                 selected_entity = None
                             sub_window_active = False
-                        elif not sub_window_rect.collidepoint(click_x, click_y):
+                        elif not SUB_WINDOW_RECT.collidepoint(click_x, click_y):
                             for molecular_cloud in list_of_molecular_clouds:
                                 molecular_cloud.selected = False
                                 if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
@@ -426,6 +419,7 @@ def run_simulation():
 
 
             # Update and draw Black Holes
+            decay_blackholes = []
             for black_hole in list_of_black_holes:
                 black_hole.attract_entities_to_black_holes(list_of_molecular_clouds)
                 black_hole.update_gravity_of_black_holes(list_of_molecular_clouds)
@@ -440,6 +434,7 @@ def run_simulation():
 
 
             # Update and draw Neutron Stars
+            decay_neutronstars = []
             for neutron_star in list_of_neutron_stars:
                 neutron_star.update_position_of_entities_from_pulse(list_of_molecular_clouds, delta_time)
                 neutron_star.pulse_gravity_from_neutron_star(list_of_molecular_clouds, delta_time)
@@ -461,10 +456,10 @@ def run_simulation():
                     reader = csv.DictReader(file)
                     data = {}
                     for row in reader:
-                        body = row['body']
-                        if body not in data:
-                            data[body] = []
-                        data[body].append(row)
+                        entityid = row['entityid']
+                        if entityid not in data:
+                            data[entityid] = []
+                        data[entityid].append(row)
                     return data
             csv_data = load_csv_data(sim_data)
 
@@ -490,7 +485,7 @@ def run_simulation():
                 
                 live_data_texts = [
                     "LIVE DATA:",
-                    f"ID: {selected_entity.id}",
+                    f"ID: {selected_entity.entityid}",
                     f"POSX: {round(selected_entity.x, 5)}",
                     f"POSY: {round(selected_entity.y, 5)}",
                     f"MASS: {selected_entity.mass}",
@@ -533,12 +528,12 @@ def run_simulation():
                     screen.blit(pygame_surface, (rect.x + 10, rect.y + y_offset))
 
             if sub_window_active:
-                pygame.draw.rect(screen, BORDER_COLOR, sub_window_rect, 1)
-                inner_rect = sub_window_rect.inflate(-2 * 1, -2 * 1)
+                pygame.draw.rect(screen, BORDER_COLOR, SUB_WINDOW_RECT, 1)
+                inner_rect = SUB_WINDOW_RECT.inflate(-2 * 1, -2 * 1)
                 pygame.draw.rect(screen, BOX_BG_COLOR, inner_rect)
-                pygame.draw.rect(screen, BORDER_COLOR, close_button_rect)
+                pygame.draw.rect(screen, BORDER_COLOR, CLOSE_BUTTON_RECT)
                 if selected_entity:
-                    display_molecular_cloud_data(screen, selected_entity, sub_window_rect, font, csv_data)
+                    display_molecular_cloud_data(screen, selected_entity, SUB_WINDOW_RECT, font, csv_data)
 
             # END of window-in-window data readout.
 
@@ -554,7 +549,16 @@ def run_simulation():
 def main():
     if os.path.isfile(sim_data):
         os.remove(sim_data)
-        print(f"sim_data cleared")
+        print(f"Checking and clearing sim_data")
+    
+    print("Populating space with molecular clouds")
+    for _ in range(MOLECULAR_CLOUD_COUNT):
+        radius = random.uniform(0, RING_RADIUS)
+        angle = random.uniform(0, 2 * math.pi)
+        x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
+        y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
+        molecular_cloud = MOLECULAR_CLOUD(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS)
+        list_of_molecular_clouds.append(molecular_cloud)
 
     print("Starting simulation")
     run_simulation()
