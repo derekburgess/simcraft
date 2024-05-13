@@ -70,37 +70,6 @@ def generate_unique_id():
     return entity_id_counter
 
 
-def interpolate_color(start_color, end_color, factor):
-    r = start_color[0] + factor * (end_color[0] - start_color[0])
-    g = start_color[1] + factor * (end_color[1] - start_color[1])
-    b = start_color[2] + factor * (end_color[2] - start_color[2])
-    return int(r), int(g), int(b)
-
-
-def draw_static_key(screen):
-    unknown_obj_pos = (34, SCREEN_HEIGHT - 224)
-    pygame.draw.rect(screen, NEUTRON_STAR_COLOR, (unknown_obj_pos[0], unknown_obj_pos[1], 4, 4))
-    screen.blit(font.render('UNKNOWN OBJECT', True, LABEL_COLOR), (unknown_obj_pos[0] + 30, unknown_obj_pos[1] - 5))  
-    
-    molecular_cloud_pos = (30, SCREEN_HEIGHT - 200)
-    pygame.draw.rect(screen, MOLECULAR_CLOUD_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
-    screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 34, molecular_cloud_pos[1] - 2))  
-    
-    protostar_pos = (34, SCREEN_HEIGHT - 170)
-    pygame.draw.rect(screen, MOLECULAR_CLOUD_END_COLOR, (protostar_pos[0], protostar_pos[1], 6, 6))
-    screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
-    
-    black_hole_pos = (36, SCREEN_HEIGHT - 140)
-    pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
-    pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
-    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
-
-    snapshot_pos = (30, SCREEN_HEIGHT - 110)
-    screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
-    snapshot_pos = (30, SCREEN_HEIGHT - 80)
-    screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-
-
 class ATTRACTOR_RING:
     def __init__(self, center, radius, num_points, angle):
         self.center = center
@@ -137,11 +106,18 @@ class ATTRACTOR_RING:
                     molecular_cloud.y += (dy / distance) * force
 
 
+def interpolate_color(start_color, end_color, factor):
+    r = start_color[0] + factor * (end_color[0] - start_color[0])
+    g = start_color[1] + factor * (end_color[1] - start_color[1])
+    b = start_color[2] + factor * (end_color[2] - start_color[2])
+    return int(r), int(g), int(b)
+
+
 list_of_molecular_clouds = []
 class MOLECULAR_CLOUD:
     def __init__(self, x, y, size, mass):
-        self.id = generate_unique_id()
         self.selected = False
+        self.id = generate_unique_id()
         self.x = x
         self.y = y
         self.size = size
@@ -188,7 +164,6 @@ list_of_black_holes = []
 class BLACK_HOLE:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
-        self.selected = False
         self.x = x
         self.y = y
         self.mass = mass
@@ -237,7 +212,6 @@ list_of_neutron_stars = []
 class NEUTRON_STAR:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
-        self.selected = False
         self.x = x
         self.y = y
         self.mass = mass
@@ -341,6 +315,13 @@ def dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_s
         global_index_counter = row_id
 
 
+def draw_static_key(screen):
+    snapshot_pos = (26, SCREEN_HEIGHT - 110)
+    screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
+    snapshot_pos = (26, SCREEN_HEIGHT - 80)
+    screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1])) 
+
+
 def run_simulation():
     try:
         running = True
@@ -392,6 +373,9 @@ def run_simulation():
             screen.fill(BACKGROUND_COLOR)
 
             draw_static_key(screen)
+            if current_year == 20:
+                dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
+
             if current_year % 500 == 0:
                 dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
 
@@ -485,7 +469,7 @@ def run_simulation():
                 
                 live_data_texts = [
                     "LIVE DATA:",
-                    f"ID: {selected_entity.entityid}",
+                    f"ID: {selected_entity.id}",
                     f"POSX: {round(selected_entity.x, 5)}",
                     f"POSY: {round(selected_entity.y, 5)}",
                     f"MASS: {selected_entity.mass}",
