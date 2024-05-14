@@ -40,13 +40,11 @@ Run `simcraft` for the main game.
 
 Run `simanalysis` with any of the following args:
 
-`--cluster` Clusters units by `type`, `mass`, `distance from center`, and `observation`, returns a 3D plot. Great for exploring the composition of universe over time.
+`--cluster` Clusters units by `type`, `mass`, `distance from center`, and `observation`, returns a 3D cluster plot. Great for exploring the composition of universe over time.
+
+`--time` -- Displays the change in entity type over time.
 
 `--heatmap` -- Shows the distribution of units by `mass` and `flux`, calling out black holes. Interesting for analyzing black hole evolution in proximity to possible exoplanets, i.e. "possible civilizations".
-
-`--time` -- Displays the change in the 3 primary unit `types`, Molecular Clouds, Protostars, and Primordial Black Holes. Calculating the stars from the molecular clouds to add a layer of ambiguity and adjustment in the analysis phase.
-
-`--time_3d`  -- Displays a 3D plot of change in unit `type` over time including `X`an `Y` position.
 
 
 /backups -- Contains older stable versions of the simulator. Earlier examples almost entirelly written by AI.
