@@ -7,12 +7,12 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
-RING_RADIUS = 400
+RING_RADIUS = 500
 RING_ATTRACTOR_COUNT = 40
 RING_ROTATION_SPEED = 0.01
 RING_GRAVITY_CONSTANT = 10
 RING_COLOR = (0, 0, 255)
-RING_OPACITY = 0
+RING_OPACITY = 100
 
 MOLECULAR_CLOUD_COUNT = 6000
 MOLECULAR_CLOUD_START_SIZE = 12
@@ -26,7 +26,7 @@ MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
 MOLECULAR_CLOUD_END_COLOR = (225, 200, 255)
 
 BLACK_HOLE_THRESHOLD = 50
-BLACK_HOLE_CHANCE = 0.6
+BLACK_HOLE_CHANCE = 0.2
 BLACK_HOLE_RADIUS = 16
 BLACK_HOLE_GRAVITY_CONSTANT = 0.0325
 BLACK_HOLE_DECAY_RATE = 0.4
@@ -34,7 +34,7 @@ BLACK_HOLE_DECAY_THRESHOLD = 5
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
 
-NEUTRON_STAR_CHANCE = 0.4
+NEUTRON_STAR_CHANCE = 0.1
 NEUTRON_STAR_RADIUS = 2
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.01
 NEUTRON_STAR_PULSE_STRENGTH = 400
@@ -44,9 +44,10 @@ NEUTRON_STAR_DECAY_THRESHOLD = 0.5
 NEUTRON_STAR_PULSE_RATE = 4
 NEUTRON_STAR_COLOR = (0, 0, 200)
 
+BACKGROUND_COLOR = (0, 0, 20)
+SNAPSHOT_SPEED = 100
 LABEL_COLOR = (255, 255, 255)
 BORDER_COLOR = (150, 150, 150)
-BACKGROUND_COLOR = (0, 0, 20)
 BOX_BG_COLOR = (0, 0, 10)
 SUB_WINDOW_RECT = pygame.Rect(20, 20, 180, 450)
 CLOSE_BUTTON_RECT = pygame.Rect(180, 20, 20, 20)
@@ -376,7 +377,7 @@ def run_simulation():
             if current_year == 20:
                 dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
 
-            if current_year % 500 == 0:
+            if current_year % SNAPSHOT_SPEED == 0:
                 dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
 
             current_year += 1
