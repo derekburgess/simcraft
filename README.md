@@ -49,9 +49,6 @@ Run `simanalysis` with any of the following args:
 `--time_3d`  -- Displays a 3D plot of change in unit `type` over time including `X`an `Y` position.
 
 
-![hehe](/assets/demo_211123.gif)
-
-
 /backups -- Contains older stable versions of the simulator. Earlier examples almost entirelly written by AI.
 
 `clock.py` -- This is a crazy "clock" themed universe simulator. The "great attractor" moves like the old school clocks in a continous minute. This runs like shit after a few minutes (seriously, my rig is no joke), but I ran it for 90 minutes and had some interesting "galaxy clusters" form. In the end, this program was not what I was originally going for but evolved in a fun way and results in fun simulations, forcing you to ponder time and scale. I couldnt get the AI's to reason through concurrency or other performance improvements. Something I will learn and implement myself.
