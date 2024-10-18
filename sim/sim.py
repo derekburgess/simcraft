@@ -25,12 +25,12 @@ DEFAULT_STATE_CHANCE = 1
 MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
 MOLECULAR_CLOUD_END_COLOR = (225, 200, 255)
 
-BLACK_HOLE_THRESHOLD = 38
-BLACK_HOLE_CHANCE = 0.4
-BLACK_HOLE_RADIUS = 14
-BLACK_HOLE_GRAVITY_CONSTANT = 0.04
-BLACK_HOLE_DECAY_RATE = 0.1
-BLACK_HOLE_DECAY_THRESHOLD = 4
+BLACK_HOLE_THRESHOLD = 35
+BLACK_HOLE_CHANCE = 0.2
+BLACK_HOLE_RADIUS = 16
+BLACK_HOLE_GRAVITY_CONSTANT = 0.001
+BLACK_HOLE_DECAY_RATE = 0.50
+BLACK_HOLE_DECAY_THRESHOLD = 5
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
 
@@ -172,27 +172,39 @@ class BLACK_HOLE:
         self.gravity_sources = []
 
     def draw_black_hole(self, screen):
-        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (self.x, self.y), self.border_radius)
-        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (self.x, self.y), self.mass // BLACK_HOLE_RADIUS, 0)
+        radius = int(self.mass // BLACK_HOLE_RADIUS)
+        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
+        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
 
     def attract_entities_to_black_holes(self, list_of_molecular_clouds, list_of_neutron_stars):
         list_of_entities_to_remove = []
         for entity in list_of_molecular_clouds + list_of_neutron_stars:
+            dx = self.x - entity.x
+            dy = self.y - entity.y
+            distance = max(math.hypot(dx, dy), 1)
+            
             if isinstance(entity, BLACK_HOLE) and entity.mass < self.mass:
                 list_of_entities_to_remove.append(entity)
+            elif isinstance(entity, NEUTRON_STAR) and distance < self.border_radius:
+                list_of_entities_to_remove.append(entity)
+                self.mass += entity.mass
+            elif isinstance(entity, MOLECULAR_CLOUD) and distance < self.border_radius:
+                list_of_entities_to_remove.append(entity)
+                self.mass += entity.mass
             else:
-                dx = self.x - entity.x
-                dy = self.y - entity.y
-                distance = max(math.hypot(dx, dy), 1)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
                 entity.x += (dx / distance) * force
                 entity.y += (dy / distance) * force
                 entity.gravity_sources.append(self)
+        
         for entity in list_of_entities_to_remove:
-            list_of_molecular_clouds.remove(entity)
+            if entity in list_of_molecular_clouds:
+                list_of_molecular_clouds.remove(entity)
+            elif entity in list_of_neutron_stars:
+                list_of_neutron_stars.remove(entity)
 
     def update_gravity_of_black_holes(self, list_of_molecular_clouds, list_of_neutron_stars):
-        for entity in list_of_molecular_clouds + list_of_neutron_stars:
+        for entity in list_of_molecular_clouds + list_of_neutron_stars + list_of_black_holes:
             if entity is not self:
                 dx = entity.x - self.x
                 dy = entity.y - self.y
