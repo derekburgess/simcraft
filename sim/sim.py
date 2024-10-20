@@ -7,41 +7,41 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
-RING_RADIUS = 400
+RING_RADIUS = 600
 RING_ATTRACTOR_COUNT = 40
 RING_ROTATION_SPEED = 0.01
-RING_GRAVITY_CONSTANT = 1
+RING_GRAVITY_CONSTANT = 15
 RING_COLOR = (0, 0, 255)
 RING_OPACITY = 0
 
-MOLECULAR_CLOUD_COUNT = 4000
+MOLECULAR_CLOUD_COUNT = 8000
 MOLECULAR_CLOUD_START_SIZE = 18
 MOLECULAR_CLOUD_MIN_SIZE = 4
 MOLECULAR_CLOUD_GROWTH_RATE = 0.8
 MOLECULAR_CLOUD_START_MASS = 1
-MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.02
-MOLECULAR_CLOUD_MAX_MASS = 40
+MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.005
+MOLECULAR_CLOUD_MAX_MASS = 20
 DEFAULT_STATE_CHANCE = 1
 MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
 MOLECULAR_CLOUD_END_COLOR = (225, 200, 255)
 
-BLACK_HOLE_THRESHOLD = 35
-BLACK_HOLE_CHANCE = 0.2
-BLACK_HOLE_RADIUS = 16
-BLACK_HOLE_GRAVITY_CONSTANT = 0.001
-BLACK_HOLE_DECAY_RATE = 0.50
+BLACK_HOLE_THRESHOLD = 18
+BLACK_HOLE_CHANCE = 0.1
+BLACK_HOLE_RADIUS = 10
+BLACK_HOLE_GRAVITY_CONSTANT = 0.01
+BLACK_HOLE_DECAY_RATE = 0.3
 BLACK_HOLE_DECAY_THRESHOLD = 5
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
 
-NEUTRON_STAR_CHANCE = 0.2
+NEUTRON_STAR_CHANCE = 0.4
 NEUTRON_STAR_RADIUS = 2
-NEUTRON_STAR_GRAVITY_CONSTANT = 0.01
-NEUTRON_STAR_PULSE_STRENGTH = 400
-NEUTRON_STAR_EFFECT_RADIUS = 800
+NEUTRON_STAR_GRAVITY_CONSTANT = 0.0075
+NEUTRON_STAR_PULSE_STRENGTH = 1000
+NEUTRON_STAR_EFFECT_RADIUS = 1000
 NEUTRON_STAR_DECAY_RATE = 0.08
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8
-NEUTRON_STAR_PULSE_RATE = 4
+NEUTRON_STAR_PULSE_RATE = 1
 NEUTRON_STAR_COLOR = (0, 0, 200)
 
 BACKGROUND_COLOR = (0, 0, 20)
@@ -329,10 +329,32 @@ def dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_s
 
 
 def draw_static_key(screen):
-    snapshot_pos = (26, SCREEN_HEIGHT - 110)
+    #Unknown Object (Neutron Stars) Key
+    unknown_obj_pos = (34, SCREEN_HEIGHT - 224)
+    pygame.draw.rect(screen, NEUTRON_STAR_COLOR, (unknown_obj_pos[0], unknown_obj_pos[1], 4, 4))
+    screen.blit(font.render('UNKNOWN OBJECT', True, LABEL_COLOR), (unknown_obj_pos[0] + 30, unknown_obj_pos[1] - 5))  
+    
+    #Molecular Cloud Key
+    molecular_cloud_pos = (30, SCREEN_HEIGHT - 200)
+    pygame.draw.rect(screen, MOLECULAR_CLOUD_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
+    screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 34, molecular_cloud_pos[1] - 2))  
+    
+    #Protostar Key
+    protostar_pos = (34, SCREEN_HEIGHT - 170)
+    pygame.draw.rect(screen, MOLECULAR_CLOUD_END_COLOR, (protostar_pos[0], protostar_pos[1], 6, 6))
+    screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
+    
+    #Primordial Black Hole Key
+    black_hole_pos = (36, SCREEN_HEIGHT - 140)
+    pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
+    pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
+    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
+
+    #Data Snapshot Key
+    snapshot_pos = (30, SCREEN_HEIGHT - 110)
+    screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
+    snapshot_pos = (30, SCREEN_HEIGHT - 80)
     screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-    snapshot_pos = (26, SCREEN_HEIGHT - 80)
-    screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1])) 
 
 
 def run_simulation():
@@ -346,7 +368,6 @@ def run_simulation():
         selected_entity = None
         sub_window_active = False
         
-
         # Handle user input
         while running:
             for event in pygame.event.get():
@@ -378,7 +399,6 @@ def run_simulation():
                                 molecular_cloud.selected = True
                                 sub_window_active = True
             
-
             # Set up the screen and draw the key and timer
             current_time = pygame.time.get_ticks()
             delta_time = (current_time - last_frame_time) / 1000
@@ -386,6 +406,7 @@ def run_simulation():
             screen.fill(BACKGROUND_COLOR)
 
             draw_static_key(screen)
+
             if current_year == 20:
                 dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
 
@@ -396,7 +417,6 @@ def run_simulation():
             year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
             screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
             
-
             # Update and draw Attractor Ring
             ring = ATTRACTOR_RING((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
             ring.points = ring.set_ring_points()
@@ -407,13 +427,11 @@ def run_simulation():
             update_entities(list_of_molecular_clouds)
             ring.apply_gravity(list_of_molecular_clouds)
 
-
             # Update and draw Molecular Clouds
             for molecular_cloud in list_of_molecular_clouds:
                 molecular_cloud.update_gravity_of_molecular_clouds()
             for molecular_cloud in list_of_molecular_clouds:
                 molecular_cloud.draw_molecular_cloud(screen)
-
 
             # Update and draw Black Holes
             decay_blackholes = []
@@ -429,7 +447,6 @@ def run_simulation():
                     list_of_black_holes.remove(decayed_black_hole)
                 decay_blackholes.remove(decayed_black_hole)
 
-
             # Update and draw Neutron Stars
             decay_neutronstars = []
             for neutron_star in list_of_neutron_stars:
@@ -444,10 +461,7 @@ def run_simulation():
                     list_of_neutron_stars.remove(decay_neutronstar)
                 decay_neutronstars.remove(decay_neutronstar)
 
-
-
             # Everything Below is for the window-in-window data readout.
-
             def load_csv_data(file_path):
                 with open(file_path, 'r') as file:
                     reader = csv.DictReader(file)
@@ -534,7 +548,6 @@ def run_simulation():
 
             # END of window-in-window data readout.
 
-
             pygame.display.flip()
         print("Exited simulation")
     except Exception as e:
@@ -559,7 +572,6 @@ def main():
 
     print("Starting simulation")
     run_simulation()
-
 
 if __name__ == "__main__":
     main()
