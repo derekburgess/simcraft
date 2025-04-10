@@ -357,6 +357,271 @@ def draw_static_key(screen):
     screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
 
 
+def load_csv_data(file_path):
+    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        return {} 
+    with open(file_path, 'r') as file:
+        try:
+            reader = csv.DictReader(file)
+            data = {}
+            for row in reader:
+                entityid = row['entityid']
+                if entityid not in data:
+                    data[entityid] = []
+                row_data = {
+                    'observation': row.get('observation', '0'),
+                    'mass': row.get('mass', '0'),
+                    'size': row.get('size', '0'),
+                    'flux': row.get('flux', 'N/A'),
+                    'posx': row.get('posx', '0'),
+                    'posy': row.get('posy', '0'),
+                    'rowid': row.get('rowid', 'N/A'),
+                    'entityid': entityid,
+                    'type': row.get('type', 'N/A')
+                }
+                data[entityid].append(row_data)
+            return data
+        except (IOError, csv.Error) as e:
+            print(f"Error reading or parsing CSV: {e}")
+            return {}
+
+
+def plot_graph(x_values, data):
+    fig, ax = plt.subplots(figsize=(2, 1), dpi=80)
+    fig.patch.set_alpha(0.0)
+    ax.patch.set_alpha(0.0)
+    colors = ['white', 'gray', 'purple']
+    linestyles = [':', ':', '-']
+    plot_successful = False
+    for i, (key, y_values) in enumerate(data.items()):
+        if len(x_values) == len(y_values) and len(x_values) > 0:
+            try:
+                numeric_x = [float(x) for x in x_values]
+                numeric_y = [float(y) if y != 'N/A' else 0 for y in y_values]
+                ax.plot(numeric_x, numeric_y, label=key.upper(), color=colors[i % len(colors)], linestyle=linestyles[i % len(linestyles)])
+                plot_successful = True
+            except ValueError as e:
+                print(f"Warning: Could not plot {key}, invalid data: {e}")
+        else:
+             print(f"Warning: Skipping plot for {key} due to mismatched lengths or empty data (x: {len(x_values)}, y: {len(y_values)}).")
+
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    plt.tight_layout()
+    canvas = agg.FigureCanvasAgg(fig)
+    canvas.draw()
+    plt.close(fig)
+    return canvas, plot_successful
+
+
+def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
+    if selected_entity is None:
+        return
+
+    live_data_texts = [
+        "LIVE DATA:",
+        f"ID: {selected_entity.id}",
+        f"POSX: {round(selected_entity.x, 5)}",
+        f"POSY: {round(selected_entity.y, 5)}",
+        f"MASS: {round(selected_entity.mass, 5)}",
+        f"SIZE: {round(selected_entity.size, 5)}",
+        f"FLUX: {selected_entity.opacity if hasattr(selected_entity, 'opacity') else 'N/A'}"
+    ]
+
+    y_offset = 5
+    for text in live_data_texts:
+        text_surface = font.render(text, True, LABEL_COLOR)
+        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
+        y_offset += 20
+
+    y_offset = 160
+    header_surface = font.render("OBSERVATIONAL DATA:", True, LABEL_COLOR)
+    screen.blit(header_surface, (rect.x + 10, rect.y + y_offset))
+    y_offset += 20
+
+    entity_csv_data = csv_data.get(str(selected_entity.id))
+    graph_plotted = False
+    if entity_csv_data:
+        most_recent_observation = entity_csv_data[-1]
+        display_keys = ['rowid', 'entityid', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation']
+        for key in display_keys:
+            value = most_recent_observation.get(key, 'N/A')
+            try:
+                if key in ['posx', 'posy', 'mass', 'size']:
+                    value = round(float(value), 5)
+                elif key == 'observation':
+                     value = int(float(value))
+            except (ValueError, TypeError):
+                 value = 'N/A'
+
+            csv_text = f"{key.upper()}: {value}"
+            text_surface = font.render(csv_text, True, LABEL_COLOR)
+            screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
+            y_offset += 20
+
+        observations = [row['observation'] for row in entity_csv_data if 'observation' in row]
+        plot_data = {}
+        for key in ['mass', 'size', 'flux']:
+             plot_data[key] = [row[key] for row in entity_csv_data if key in row]
+
+        min_len = len(observations)
+        for key in plot_data:
+            min_len = min(min_len, len(plot_data[key]))
+
+        valid_observations = observations[:min_len]
+        valid_plot_data = {k: v[:min_len] for k, v in plot_data.items()}
+
+        if valid_observations and all(valid_plot_data.values()):
+             canvas, plot_successful = plot_graph(valid_observations, valid_plot_data)
+             if plot_successful:
+                width, height = canvas.get_width_height()
+                pygame_surface = pygame.image.fromstring(canvas.tostring_argb(), (width, height), 'ARGB')
+                plot_y_pos = rect.y + y_offset
+                screen.blit(pygame_surface, (rect.x + 10, plot_y_pos))
+                graph_plotted = True
+
+    if not entity_csv_data:
+         no_data_text = "No observational data found."
+         text_surface = font.render(no_data_text, True, LABEL_COLOR)
+         screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
+         y_offset += 20
+    elif not graph_plotted:
+        plot_fail_text = "Could not generate plot."
+        text_surface = font.render(plot_fail_text, True, LABEL_COLOR)
+        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset + 10))
+
+
+def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
+    running = True
+    new_selected_entity = selected_entity
+    new_sub_window_active = sub_window_active
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
+            running = False
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            pass
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            click_x, click_y = event.pos
+            clicked_on_entity = False
+            if new_sub_window_active:
+                if CLOSE_BUTTON_RECT.collidepoint(click_x, click_y):
+                    if new_selected_entity:
+                        new_selected_entity.selected = False
+                    new_selected_entity = None
+                    new_sub_window_active = False
+                elif not SUB_WINDOW_RECT.collidepoint(click_x, click_y):
+                    for molecular_cloud in list_of_molecular_clouds:
+                        if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
+                            if new_selected_entity:
+                                new_selected_entity.selected = False
+                            new_selected_entity = molecular_cloud
+                            new_selected_entity.selected = True
+                            new_sub_window_active = True
+                            clicked_on_entity = True
+                            break
+                    if not clicked_on_entity:
+                         if new_selected_entity:
+                            new_selected_entity.selected = False
+                         new_selected_entity = None
+                         new_sub_window_active = False
+            else:
+                for molecular_cloud in list_of_molecular_clouds:
+                    if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
+                        if new_selected_entity:
+                            new_selected_entity.selected = False
+                        new_selected_entity = molecular_cloud
+                        new_selected_entity.selected = True
+                        new_sub_window_active = True
+                        clicked_on_entity = True
+                        break
+                if not clicked_on_entity and new_selected_entity:
+                     new_selected_entity.selected = False
+                     new_selected_entity = None
+                     new_sub_window_active = False
+
+
+    if new_selected_entity:
+        for mc in list_of_molecular_clouds:
+            if mc is not new_selected_entity:
+                mc.selected = False
+
+    return running, new_selected_entity, new_sub_window_active
+
+
+def update_simulation_state(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, ring, delta_time, current_year):
+    update_entities(list_of_molecular_clouds)
+
+    ring.apply_gravity(list_of_molecular_clouds)
+
+    for molecular_cloud in list_of_molecular_clouds:
+         molecular_cloud.gravity_sources = []
+
+    decay_blackholes = []
+    for black_hole in list_of_black_holes:
+         for entity in list_of_molecular_clouds + list_of_neutron_stars:
+             entity.gravity_sources = []
+         black_hole.attract_entities_to_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
+         black_hole.update_gravity_of_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
+         black_hole.black_hole_decay()
+         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
+              decay_blackholes.append(black_hole)
+    for decayed_black_hole in decay_blackholes:
+        if decayed_black_hole in list_of_black_holes:
+            list_of_black_holes.remove(decayed_black_hole)
+
+    decay_neutronstars = []
+    for neutron_star in list_of_neutron_stars:
+        neutron_star.update_position_of_entities_from_pulse(list_of_molecular_clouds, delta_time)
+        neutron_star.pulse_gravity_from_neutron_star(list_of_molecular_clouds, delta_time)
+        neutron_star.decay_neutron_star()
+        if neutron_star.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
+            decay_neutronstars.append(neutron_star)
+    for decay_neutronstar in decay_neutronstars:
+        if decay_neutronstar in list_of_neutron_stars:
+            list_of_neutron_stars.remove(decay_neutronstar)
+
+    if current_year == 20:
+        dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
+    if current_year % SNAPSHOT_SPEED == 0:
+        dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
+
+
+def draw_simulation(screen, ring, list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars):
+    ring.draw_ring(screen, RING_COLOR, RING_OPACITY)
+
+    for molecular_cloud in list_of_molecular_clouds:
+        molecular_cloud.draw_molecular_cloud(screen)
+
+    for black_hole in list_of_black_holes:
+        black_hole.draw_black_hole(screen)
+
+    for neutron_star in list_of_neutron_stars:
+        neutron_star.draw_neotron_star(screen)
+
+
+def draw_ui(screen, font, current_year, selected_entity, sub_window_active):
+    draw_static_key(screen)
+
+    year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
+    screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
+
+    if sub_window_active:
+        csv_data = load_csv_data(sim_data)
+
+        pygame.draw.rect(screen, BORDER_COLOR, SUB_WINDOW_RECT, 1)
+        inner_rect = SUB_WINDOW_RECT.inflate(-2 * 1, -2 * 1)
+        pygame.draw.rect(screen, BOX_BG_COLOR, inner_rect)
+        pygame.draw.rect(screen, BORDER_COLOR, CLOSE_BUTTON_RECT)
+
+        if selected_entity:
+            display_molecular_cloud_data(screen, selected_entity, SUB_WINDOW_RECT, font, csv_data)
+        else:
+             no_selection_text = font.render("No entity selected", True, LABEL_COLOR)
+             screen.blit(no_selection_text, (SUB_WINDOW_RECT.x + 10, SUB_WINDOW_RECT.y + 10))
+
+
 def run_simulation():
     try:
         running = True
@@ -367,191 +632,48 @@ def run_simulation():
         last_frame_time = pygame.time.get_ticks()
         selected_entity = None
         sub_window_active = False
-        
-        # Handle user input
+
+        ring = ATTRACTOR_RING((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
+
         while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
-                    running = False
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
-
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    click_x, click_y = event.pos
-                    if sub_window_active:
-                        if CLOSE_BUTTON_RECT.collidepoint(click_x, click_y):
-                            if selected_entity:
-                                selected_entity.selected = False
-                                selected_entity = None
-                            sub_window_active = False
-                        elif not SUB_WINDOW_RECT.collidepoint(click_x, click_y):
-                            for molecular_cloud in list_of_molecular_clouds:
-                                molecular_cloud.selected = False
-                                if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
-                                    selected_entity = molecular_cloud
-                                    molecular_cloud.selected = True
-                                    sub_window_active = True
-                    else:
-                        for molecular_cloud in list_of_molecular_clouds:
-                            molecular_cloud.selected = False
-                            if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
-                                selected_entity = molecular_cloud
-                                molecular_cloud.selected = True
-                                sub_window_active = True
-            
-            # Set up the screen and draw the key and timer
             current_time = pygame.time.get_ticks()
-            delta_time = (current_time - last_frame_time) / 1000
+            delta_time = (current_time - last_frame_time) / 1000.0
             last_frame_time = current_time
-            screen.fill(BACKGROUND_COLOR)
 
-            draw_static_key(screen)
+            running, selected_entity, sub_window_active = handle_input(
+                list_of_molecular_clouds, selected_entity, sub_window_active
+            )
+            if not running:
+                break
 
-            if current_year == 20:
-                dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
-
-            if current_year % SNAPSHOT_SPEED == 0:
-                dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
-
-            current_year += 1
-            year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
-            screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
-            
-            # Update and draw Attractor Ring
-            ring = ATTRACTOR_RING((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
-            ring.points = ring.set_ring_points()
-            angle += RING_ROTATION_SPEED
+            angle += RING_ROTATION_SPEED * delta_time * 60
             ring.angle = angle
             ring.points = ring.set_ring_points()
-            ring.draw_ring(screen, RING_COLOR, RING_OPACITY)
-            update_entities(list_of_molecular_clouds)
-            ring.apply_gravity(list_of_molecular_clouds)
 
-            # Update and draw Molecular Clouds
-            for molecular_cloud in list_of_molecular_clouds:
-                molecular_cloud.update_gravity_of_molecular_clouds()
-            for molecular_cloud in list_of_molecular_clouds:
-                molecular_cloud.draw_molecular_cloud(screen)
+            update_simulation_state(
+                list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars,
+                ring, delta_time, current_year
+            )
 
-            # Update and draw Black Holes
-            decay_blackholes = []
-            for black_hole in list_of_black_holes:
-                black_hole.attract_entities_to_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
-                black_hole.update_gravity_of_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
-                black_hole.black_hole_decay()
-                black_hole.draw_black_hole(screen)
-                if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
-                    decay_blackholes.append(black_hole)
-            for decayed_black_hole in decay_blackholes.copy():
-                if decayed_black_hole in list_of_black_holes:
-                    list_of_black_holes.remove(decayed_black_hole)
-                decay_blackholes.remove(decayed_black_hole)
+            screen.fill(BACKGROUND_COLOR)
 
-            # Update and draw Neutron Stars
-            decay_neutronstars = []
-            for neutron_star in list_of_neutron_stars:
-                neutron_star.update_position_of_entities_from_pulse(list_of_molecular_clouds, delta_time)
-                neutron_star.pulse_gravity_from_neutron_star(list_of_molecular_clouds, delta_time)
-                neutron_star.decay_neutron_star()
-                neutron_star.draw_neotron_star(screen)
-                if neutron_star.mass <= BLACK_HOLE_DECAY_THRESHOLD:
-                    decay_neutronstars.append(neutron_star)
-            for decay_neutronstar in decay_neutronstars.copy():
-                if decay_neutronstar in list_of_neutron_stars:
-                    list_of_neutron_stars.remove(decay_neutronstar)
-                decay_neutronstars.remove(decay_neutronstar)
+            draw_simulation(
+                screen, ring, list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars
+            )
 
-            # Everything Below is for the window-in-window data readout.
-            def load_csv_data(file_path):
-                with open(file_path, 'r') as file:
-                    reader = csv.DictReader(file)
-                    data = {}
-                    for row in reader:
-                        entityid = row['entityid']
-                        if entityid not in data:
-                            data[entityid] = []
-                        data[entityid].append(row)
-                    return data
-            csv_data = load_csv_data(sim_data)
+            draw_ui(
+                screen, font, current_year, selected_entity, sub_window_active
+            )
 
-            def plot_graph(x_values, data, title):
-                fig, ax = plt.subplots(figsize=(2, 1), dpi=80)
-                fig.patch.set_alpha(0.0)
-                ax.patch.set_alpha(0.0)
-                colors = ['white', 'gray', 'purple']
-                linestyles = [':', ':', '-']
-                for i, (key, y_values) in enumerate(data.items()):
-                    ax.plot(x_values, y_values, label=key.upper(), color=colors[i % len(colors)], linestyle=linestyles[i % len(linestyles)])
-                ax.set_xticklabels([])
-                ax.set_yticklabels([])
-                plt.tight_layout()
-                canvas = agg.FigureCanvasAgg(fig)
-                canvas.draw()
-                plt.close(fig)
-                return canvas
-
-            def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
-                if selected_entity is None:
-                    return
-                
-                live_data_texts = [
-                    "LIVE DATA:",
-                    f"ID: {selected_entity.id}",
-                    f"POSX: {round(selected_entity.x, 5)}",
-                    f"POSY: {round(selected_entity.y, 5)}",
-                    f"MASS: {selected_entity.mass}",
-                    f"SIZE: {selected_entity.size}",
-                    f"FLUX: {selected_entity.opacity}"
-                ]
-
-                y_offset = 5
-                for text in live_data_texts:
-                    text_surface = font.render(text, True, LABEL_COLOR)
-                    screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-                    y_offset += 20
-
-                y_offset = 160
-                molecular_cloud_csv_data = csv_data.get(str(selected_entity.id))
-                if molecular_cloud_csv_data:
-                    csv_header_text = "OBSERVATIONAL DATA:"
-                    header_surface = font.render(csv_header_text, True, LABEL_COLOR)
-                    screen.blit(header_surface, (rect.x + 10, rect.y + y_offset))
-                    y_offset += 20
-
-                    most_recent_observation = molecular_cloud_csv_data[-1]
-                    for key, value in most_recent_observation.items():
-                        if key == 'posx' or key == 'posy':
-                            value = round(float(value), 5)
-
-                        csv_text = f"{key.upper()}: {value}"
-                        text_surface = font.render(csv_text, True, LABEL_COLOR)
-                        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-                        y_offset += 20
-
-                    x_values = [float(row['observation']) for row in molecular_cloud_csv_data]
-                    data = {key: [float(row[key]) for row in molecular_cloud_csv_data] for key in ['mass', 'size', 'flux']}
-                    min_length = min(len(x_values), min(len(v) for v in data.values()))
-                    x_values = x_values[:min_length]
-                    data = {k: v[:min_length] for k, v in data.items()}
-                    canvas = plot_graph(x_values, data, "OBSERVATIONAL DATA")
-                    width, height = canvas.get_width_height()
-                    pygame_surface = pygame.image.fromstring(canvas.tostring_argb(), (width, height), 'ARGB')
-                    screen.blit(pygame_surface, (rect.x + 10, rect.y + y_offset))
-
-            if sub_window_active:
-                pygame.draw.rect(screen, BORDER_COLOR, SUB_WINDOW_RECT, 1)
-                inner_rect = SUB_WINDOW_RECT.inflate(-2 * 1, -2 * 1)
-                pygame.draw.rect(screen, BOX_BG_COLOR, inner_rect)
-                pygame.draw.rect(screen, BORDER_COLOR, CLOSE_BUTTON_RECT)
-                if selected_entity:
-                    display_molecular_cloud_data(screen, selected_entity, SUB_WINDOW_RECT, font, csv_data)
-
-            # END of window-in-window data readout.
+            current_year += 1
 
             pygame.display.flip()
+
         print("Exited simulation")
     except Exception as e:
-        print(f"Error occurred: {e}")
+        import traceback
+        print(f"Error occurred in simulation loop: {e}")
+        traceback.print_exc()
     finally:
         pygame.quit()
 
