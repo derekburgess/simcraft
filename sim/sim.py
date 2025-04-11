@@ -8,11 +8,11 @@ import matplotlib.backends.backend_agg as agg
 
 
 RING_RADIUS = 600
-RING_ATTRACTOR_COUNT = 40
-RING_ROTATION_SPEED = 0.01
+RING_ATTRACTOR_COUNT = 200
+RING_ROTATION_SPEED = 0.1
 RING_GRAVITY_CONSTANT = 15
 RING_COLOR = (0, 0, 255)
-RING_OPACITY = 0
+RING_OPACITY = 100
 
 MOLECULAR_CLOUD_COUNT = 10000
 MOLECULAR_CLOUD_START_SIZE = 18
@@ -21,7 +21,7 @@ MOLECULAR_CLOUD_GROWTH_RATE = 0.8
 MOLECULAR_CLOUD_START_MASS = 1
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.005
 MOLECULAR_CLOUD_MAX_MASS = 20
-DEFAULT_STATE_CHANCE = 0.5
+DEFAULT_STATE_CHANCE = 1
 MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
 MOLECULAR_CLOUD_END_COLOR = (225, 200, 255)
 
@@ -37,12 +37,15 @@ BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
 NEUTRON_STAR_CHANCE = 0.2
 NEUTRON_STAR_RADIUS = 2
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.0075
-NEUTRON_STAR_PULSE_STRENGTH = 1000
-NEUTRON_STAR_EFFECT_RADIUS = 1000
+NEUTRON_STAR_PULSE_STRENGTH = 10
 NEUTRON_STAR_DECAY_RATE = 0.08
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8
 NEUTRON_STAR_PULSE_RATE = 1
 NEUTRON_STAR_COLOR = (0, 0, 200)
+NEUTRON_STAR_PULSE_COLOR = (0, 0, 60, 100)
+NEUTRON_STAR_PULSE_WIDTH = 2
+NEUTRON_STAR_RIPPLE_SPEED = 50
+NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 10
 
 BACKGROUND_COLOR = (0, 0, 20)
 SNAPSHOT_SPEED = 100
@@ -232,32 +235,76 @@ class NEUTRON_STAR:
         self.pulse_strength = NEUTRON_STAR_PULSE_STRENGTH
         self.time_since_last_pulse = 0
         self.gravity_sources = []
+        self.active_pulses = []  # List of [radius, time_alive] for active pulses
 
     def draw_neotron_star(self, screen):
-        pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (self.x, self.y), self.radius)
+        pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (int(self.x), int(self.y)), self.radius)
+        
+        # Draw active pulse ripples
+        for pulse in self.active_pulses:
+            pulse_radius, _ = pulse
+            pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
+            pygame.draw.circle(pulse_surface, NEUTRON_STAR_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, NEUTRON_STAR_PULSE_WIDTH)
+            screen.blit(pulse_surface, (self.x - pulse_radius, self.y - pulse_radius))
 
     def pulse_gravity_from_neutron_star(self, list_of_molecular_clouds, delta_time):
         self.time_since_last_pulse += delta_time
-        if self.time_since_last_pulse >= self.pulse_rate:
+        
+        # Update existing pulses
+        pulses_to_remove = []
+        for i, pulse in enumerate(self.active_pulses):
+            radius, time_alive = pulse
+            # Update pulse radius based on time
+            new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time)
+            new_time = time_alive + delta_time
+            
+            self.active_pulses[i] = [new_radius, new_time]
+            
+            # Apply pulse force to nearby objects
             for molecular_cloud in list_of_molecular_clouds:
                 dx = molecular_cloud.x - self.x
                 dy = molecular_cloud.y - self.y
-                distance = max(math.hypot(dx, dy), 1)
+                distance = math.hypot(dx, dy)
                 
-                if distance < NEUTRON_STAR_EFFECT_RADIUS:
-                    force = self.pulse_strength / (distance ** 2)
-                    molecular_cloud.x += (dx / distance) * force
-                    molecular_cloud.y += (dy / distance) * force
+                # Only affect objects near the ripple wave
+                ripple_dist = abs(distance - radius)
+                if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:  # Within ripple effect range
+                    # Calculate force - stronger at the center of the ripple
+                    effect_factor = 1.0 - (ripple_dist / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
+                    force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 1.5)
                     
+                    # Push outward from neutron star
+                    if distance > 0:
+                        molecular_cloud.x += (dx / distance) * force * delta_time
+                        molecular_cloud.y += (dy / distance) * force * delta_time
+            
+            # Remove pulses that have expanded beyond the ring radius
+            if new_radius > RING_RADIUS:
+                pulses_to_remove.append(i)
+        
+        # Remove finished pulses (in reverse to avoid index issues)
+        for i in sorted(pulses_to_remove, reverse=True):
+            if i < len(self.active_pulses):
+                self.active_pulses.pop(i)
+        
+        # Create new pulse if it's time
+        if self.time_since_last_pulse >= self.pulse_rate:
+            self.active_pulses.append([0, 0])  # Start a new pulse with radius 0
             self.time_since_last_pulse = 0
 
     def update_position_of_entities_from_pulse(self, list_of_molecular_clouds, delta_time):
+        # This method now handles the continuous gravitational attraction
+        # The pulse effect is handled in pulse_gravity_from_neutron_star
         for molecular_cloud in list_of_molecular_clouds:
             if molecular_cloud is not self:
                 dx = molecular_cloud.x - self.x
                 dy = molecular_cloud.y - self.y
                 distance = max(math.hypot(dx, dy), 1)
+                
+                # Standard gravitational attraction - weaker than the pulse effect
                 force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * molecular_cloud.mass) / (distance**2)
+                
+                # Apply the force to both objects
                 molecular_cloud.x += (dx / distance) * force * delta_time
                 molecular_cloud.y += (dy / distance) * force * delta_time
                 

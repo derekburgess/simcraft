@@ -69,7 +69,7 @@ def heatmap(df):
     plt.grid(True, linestyle='--', color='#ffffff', alpha=0.5, zorder=0)
     plt.legend()
     legend_labels = plt.legend()
-    for handle in legend_labels.legendHandles:
+    for handle in legend_labels.legend_handles:
         handle._sizes = [30]
     plt.tight_layout()
     plt.show()
