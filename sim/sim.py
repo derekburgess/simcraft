@@ -187,7 +187,7 @@ class MOLECULAR_CLOUD:
 
 
 list_of_black_holes = []
-list_of_black_hole_pulses = []  # Add list to track pulses from black holes
+list_of_black_hole_pulses = []
 
 class BLACK_HOLE:
     def __init__(self, x, y, mass):
@@ -200,7 +200,7 @@ class BLACK_HOLE:
 
     def draw_black_hole(self, screen):
         radius = int(self.mass // BLACK_HOLE_RADIUS)
-        self.border_radius = radius  # Update border radius based on current mass
+        self.border_radius = radius
         pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
         pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
 
@@ -217,7 +217,6 @@ class BLACK_HOLE:
                     list_of_entities_to_remove.append(black_hole)
                     self.mass += black_hole.mass
                     self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
-                    # Create a pulse when consuming another black hole
                     list_of_black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
                 elif distance > 0:
                     force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
@@ -664,46 +663,40 @@ def update_simulation_state(list_of_molecular_clouds, list_of_black_holes, list_
     for molecular_cloud in list_of_molecular_clouds:
          molecular_cloud.gravity_sources = []
 
-    # Update black hole pulses
     pulses_to_remove = []
     for i, pulse in enumerate(list_of_black_hole_pulses):
         x, y, radius, consumed_mass = pulse
-        new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time * 1.5)  # Make black hole pulses faster
+        new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time * 1.5)
         list_of_black_hole_pulses[i] = [x, y, new_radius, consumed_mass]
         
-        # Apply effect to molecular clouds
         for molecular_cloud in list_of_molecular_clouds:
             dx = molecular_cloud.x - x
             dy = molecular_cloud.y - y
             distance = math.hypot(dx, dy)
             
             ripple_dist = abs(distance - radius)
-            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:  # Wider effect
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
                 effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2))
-                # Scale pulse strength based on consumed mass - much stronger
                 force = NEUTRON_STAR_PULSE_STRENGTH * 5 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 1.5)
                 
                 if distance > 0:
                     molecular_cloud.x += (dx / distance) * force * delta_time
                     molecular_cloud.y += (dy / distance) * force * delta_time
         
-        # Apply effect to other black holes
         for black_hole in list_of_black_holes:
             dx = black_hole.x - x
             dy = black_hole.y - y
             distance = math.hypot(dx, dy)
             
             ripple_dist = abs(distance - radius)
-            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:  # Even wider effect for black holes
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
                 effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3))
-                # Black holes are affected less than molecular clouds, but still influenced
                 force = NEUTRON_STAR_PULSE_STRENGTH * 2 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 2)
                 
                 if distance > 0:
                     black_hole.x += (dx / distance) * force * delta_time * 0.5
                     black_hole.y += (dy / distance) * force * delta_time * 0.5
 
-        # Apply effect to neutron stars
         for neutron_star in list_of_neutron_stars:
             dx = neutron_star.x - x
             dy = neutron_star.y - y
@@ -715,11 +708,9 @@ def update_simulation_state(list_of_molecular_clouds, list_of_black_holes, list_
                 force = NEUTRON_STAR_PULSE_STRENGTH * 3 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 1.8)
                 
                 if distance > 0:
-                    # Neutron stars are affected significantly by black hole pulses
                     neutron_star.x += (dx / distance) * force * delta_time * 1.5
                     neutron_star.y += (dy / distance) * force * delta_time * 1.5
         
-        # Remove pulse if it's too large
         if new_radius > RING_RADIUS:
             pulses_to_remove.append(i)
     
@@ -764,11 +755,9 @@ def draw_simulation(screen, ring, list_of_molecular_clouds, list_of_black_holes,
     for molecular_cloud in list_of_molecular_clouds:
         molecular_cloud.draw_molecular_cloud(screen)
 
-    # Draw black hole pulses first (behind black holes)
     for pulse in list_of_black_hole_pulses[:]:
         x, y, pulse_radius, consumed_mass = pulse
         if pulse_radius > 0:
-            # Scale the pulse width based on consumed mass
             pulse_width = max(2, int(consumed_mass / 20))
             pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
             pygame.draw.circle(pulse_surface, BLACK_HOLE_MERGE_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, pulse_width)
