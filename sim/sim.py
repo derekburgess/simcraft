@@ -22,14 +22,15 @@ MOLECULAR_CLOUD_START_MASS = 1
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01
 MOLECULAR_CLOUD_MAX_MASS = 20
 MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
+MOLECULAR_CLOUD_MID_COLOR = (20, 0, 140)
 MOLECULAR_CLOUD_END_COLOR = (225, 200, 255)
 DEFAULT_STATE_CHANCE = 1
 
-BLACK_HOLE_THRESHOLD = 18
+BLACK_HOLE_THRESHOLD = 16
 BLACK_HOLE_CHANCE = 0.3
 BLACK_HOLE_RADIUS = 10
 BLACK_HOLE_GRAVITY_CONSTANT = 0.05
-BLACK_HOLE_DECAY_RATE = 0.05
+BLACK_HOLE_DECAY_RATE = 0.08
 BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
@@ -142,6 +143,28 @@ def interpolate_color(start_color, end_color, factor):
     return int(r), int(g), int(b)
 
 
+def interpolate_multi_color(colors, factor):
+    # If factor is 0, return the first color, if 1, return the last color
+    if factor <= 0:
+        return colors[0]
+    if factor >= 1:
+        return colors[-1]
+    
+    # Calculate which segment of the gradient we're in
+    num_segments = len(colors) - 1
+    segment_size = 1.0 / num_segments
+    segment_index = min(int(factor / segment_size), num_segments - 1)
+    
+    # Calculate factor within the segment (0 to 1)
+    segment_factor = (factor - segment_index * segment_size) / segment_size
+    
+    # Interpolate between the segment's start and end colors
+    start_color = colors[segment_index]
+    end_color = colors[segment_index + 1]
+    
+    return interpolate_color(start_color, end_color, segment_factor)
+
+
 list_of_molecular_clouds = []
 class MOLECULAR_CLOUD:
     def __init__(self, x, y, size, mass):
@@ -160,7 +183,7 @@ class MOLECULAR_CLOUD:
             pygame.draw.rect(screen, highlight_color, (self.x, self.y, self.size, self.size))
         else:
             factor = self.mass / MOLECULAR_CLOUD_MAX_MASS
-            self.color = interpolate_color(MOLECULAR_CLOUD_START_COLOR, MOLECULAR_CLOUD_END_COLOR, factor)
+            self.color = interpolate_multi_color([MOLECULAR_CLOUD_START_COLOR, MOLECULAR_CLOUD_MID_COLOR, MOLECULAR_CLOUD_END_COLOR], factor)
             pygame.draw.rect(screen, self.color, (self.x, self.y, self.size, self.size))
 
     def update_molecular_cloud(self):
