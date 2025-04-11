@@ -8,41 +8,49 @@ import matplotlib.backends.backend_agg as agg
 
 
 RING_RADIUS = 600
-RING_ATTRACTOR_COUNT = 40
-RING_ROTATION_SPEED = 0.01
-RING_GRAVITY_CONSTANT = 15
-RING_COLOR = (0, 0, 255)
+RING_ATTRACTOR_COUNT = 200
+RING_ROTATION_SPEED = 0.2
+RING_GRAVITY_CONSTANT = 2
+RING_COLOR = (0, 0, 120)
 RING_OPACITY = 0
 
-MOLECULAR_CLOUD_COUNT = 8000
+MOLECULAR_CLOUD_COUNT = 15000
 MOLECULAR_CLOUD_START_SIZE = 18
 MOLECULAR_CLOUD_MIN_SIZE = 4
 MOLECULAR_CLOUD_GROWTH_RATE = 0.8
 MOLECULAR_CLOUD_START_MASS = 1
-MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.005
+MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01
 MOLECULAR_CLOUD_MAX_MASS = 20
-DEFAULT_STATE_CHANCE = 1
 MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
 MOLECULAR_CLOUD_END_COLOR = (225, 200, 255)
+DEFAULT_STATE_CHANCE = 1
 
 BLACK_HOLE_THRESHOLD = 18
-BLACK_HOLE_CHANCE = 0.1
+BLACK_HOLE_CHANCE = 0.3
 BLACK_HOLE_RADIUS = 10
-BLACK_HOLE_GRAVITY_CONSTANT = 0.01
-BLACK_HOLE_DECAY_RATE = 0.3
-BLACK_HOLE_DECAY_THRESHOLD = 5
+BLACK_HOLE_GRAVITY_CONSTANT = 0.05
+BLACK_HOLE_DECAY_RATE = 0.05
+BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
+BLACK_HOLE_MAX_MASS = 100
+BLACK_HOLE_MERGE_COLOR = (0, 0, 160, 200)
+DISK_COLOR = (255, 100, 100)
+DISK_SIZE = 1
+DISK_ROTATION = 10.0
 
-NEUTRON_STAR_CHANCE = 0.4
-NEUTRON_STAR_RADIUS = 2
+NEUTRON_STAR_CHANCE = 0.2
+NEUTRON_STAR_RADIUS = 1
 NEUTRON_STAR_GRAVITY_CONSTANT = 0.0075
-NEUTRON_STAR_PULSE_STRENGTH = 1000
-NEUTRON_STAR_EFFECT_RADIUS = 1000
 NEUTRON_STAR_DECAY_RATE = 0.08
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8
+NEUTRON_STAR_COLOR = (0, 120, 255)
 NEUTRON_STAR_PULSE_RATE = 1
-NEUTRON_STAR_COLOR = (0, 0, 200)
+NEUTRON_STAR_PULSE_STRENGTH = 2
+NEUTRON_STAR_PULSE_COLOR = (0, 0, 60, 100)
+NEUTRON_STAR_PULSE_WIDTH = 2
+NEUTRON_STAR_RIPPLE_SPEED = 50
+NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 6
 
 BACKGROUND_COLOR = (0, 0, 20)
 SNAPSHOT_SPEED = 100
@@ -90,12 +98,12 @@ class ATTRACTOR_RING:
 
     def draw_ring(self, screen, color, opacity):
         for point in self.points:
-            surface = pygame.Surface((10, 10), pygame.SRCALPHA)
+            surface = pygame.Surface((4, 4), pygame.SRCALPHA)
             rgba_color = color + (opacity,)
             pygame.draw.circle(surface, rgba_color, (5, 5), 5)
             screen.blit(surface, (point[0] - 5, point[1] - 5))
 
-    def apply_gravity(self, list_of_molecular_clouds):
+    def apply_gravity(self, list_of_molecular_clouds, list_of_black_holes=None, list_of_neutron_stars=None):
         for molecular_cloud in list_of_molecular_clouds:
             for point in self.points:
                 dx = point[0] - molecular_cloud.x
@@ -105,6 +113,26 @@ class ATTRACTOR_RING:
                 if distance > molecular_cloud.size / 2:
                     molecular_cloud.x += (dx / distance) * force
                     molecular_cloud.y += (dy / distance) * force
+        
+        if list_of_black_holes:
+            for black_hole in list_of_black_holes:
+                for point in self.points:
+                    dx = point[0] - black_hole.x
+                    dy = point[1] - black_hole.y
+                    distance = max(math.hypot(dx, dy), 1)
+                    force = (RING_GRAVITY_CONSTANT * black_hole.mass / (distance**2)) * 0.5
+                    black_hole.x += (dx / distance) * force
+                    black_hole.y += (dy / distance) * force
+        
+        if list_of_neutron_stars:
+            for neutron_star in list_of_neutron_stars:
+                for point in self.points:
+                    dx = point[0] - neutron_star.x
+                    dy = point[1] - neutron_star.y
+                    distance = max(math.hypot(dx, dy), 1)
+                    force = (RING_GRAVITY_CONSTANT * neutron_star.mass / (distance**2)) * 0.7
+                    neutron_star.x += (dx / distance) * force
+                    neutron_star.y += (dy / distance) * force
 
 
 def interpolate_color(start_color, end_color, factor):
@@ -162,35 +190,62 @@ class MOLECULAR_CLOUD:
 
 
 list_of_black_holes = []
+list_of_black_hole_pulses = []
+
 class BLACK_HOLE:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
         self.x = x
         self.y = y
-        self.mass = mass
-        self.border_radius = int(mass // BLACK_HOLE_RADIUS)
+        self.mass = min(mass, BLACK_HOLE_MAX_MASS)
+        self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.gravity_sources = []
+        self.tracer_angle = random.uniform(0, 2 * math.pi)  # Random starting angle for the white pixel
 
     def draw_black_hole(self, screen):
         radius = int(self.mass // BLACK_HOLE_RADIUS)
+        self.border_radius = radius
         pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
         pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
+        
+        # Draw white pixel tracer around black hole border
+        tracer_x = self.x + self.border_radius * math.cos(self.tracer_angle)
+        tracer_y = self.y + self.border_radius * math.sin(self.tracer_angle)
+        pygame.draw.circle(screen, DISK_COLOR, (int(tracer_x), int(tracer_y)), DISK_SIZE)
 
     def attract_entities_to_black_holes(self, list_of_molecular_clouds, list_of_neutron_stars):
         list_of_entities_to_remove = []
+        
+        for black_hole in list_of_black_holes:
+            if black_hole is not self:
+                dx = self.x - black_hole.x
+                dy = self.y - black_hole.y
+                distance = max(math.hypot(dx, dy), 1)
+                
+                if self.mass > black_hole.mass and distance < self.border_radius:
+                    list_of_entities_to_remove.append(black_hole)
+                    self.mass += black_hole.mass
+                    self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
+                    list_of_black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
+                elif distance > 0:
+                    force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
+                    black_hole.x += (dx / distance) * force
+                    black_hole.y += (dy / distance) * force
+                    black_hole.gravity_sources.append(self)
+        
         for entity in list_of_molecular_clouds + list_of_neutron_stars:
             dx = self.x - entity.x
             dy = self.y - entity.y
             distance = max(math.hypot(dx, dy), 1)
             
-            if isinstance(entity, BLACK_HOLE) and entity.mass < self.mass:
-                list_of_entities_to_remove.append(entity)
-            elif isinstance(entity, NEUTRON_STAR) and distance < self.border_radius:
+            if isinstance(entity, NEUTRON_STAR) and distance < self.border_radius:
                 list_of_entities_to_remove.append(entity)
                 self.mass += entity.mass
+                self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
             elif isinstance(entity, MOLECULAR_CLOUD) and distance < self.border_radius:
                 list_of_entities_to_remove.append(entity)
                 self.mass += entity.mass
+                self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
             else:
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
                 entity.x += (dx / distance) * force
@@ -202,6 +257,8 @@ class BLACK_HOLE:
                 list_of_molecular_clouds.remove(entity)
             elif entity in list_of_neutron_stars:
                 list_of_neutron_stars.remove(entity)
+            elif entity in list_of_black_holes:
+                list_of_black_holes.remove(entity)
 
     def update_gravity_of_black_holes(self, list_of_molecular_clouds, list_of_neutron_stars):
         for entity in list_of_molecular_clouds + list_of_neutron_stars + list_of_black_holes:
@@ -232,23 +289,65 @@ class NEUTRON_STAR:
         self.pulse_strength = NEUTRON_STAR_PULSE_STRENGTH
         self.time_since_last_pulse = 0
         self.gravity_sources = []
+        self.active_pulses = []
 
     def draw_neotron_star(self, screen):
-        pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (self.x, self.y), self.radius)
+        pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (int(self.x), int(self.y)), self.radius)
+        
+        for pulse in self.active_pulses:
+            pulse_radius, _ = pulse
+            pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
+            pygame.draw.circle(pulse_surface, NEUTRON_STAR_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, NEUTRON_STAR_PULSE_WIDTH)
+            screen.blit(pulse_surface, (self.x - pulse_radius, self.y - pulse_radius))
 
     def pulse_gravity_from_neutron_star(self, list_of_molecular_clouds, delta_time):
         self.time_since_last_pulse += delta_time
-        if self.time_since_last_pulse >= self.pulse_rate:
+        
+        pulses_to_remove = []
+        for i, pulse in enumerate(self.active_pulses):
+            radius, time_alive = pulse
+            new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time)
+            new_time = time_alive + delta_time
+            
+            self.active_pulses[i] = [new_radius, new_time]
+            
             for molecular_cloud in list_of_molecular_clouds:
                 dx = molecular_cloud.x - self.x
                 dy = molecular_cloud.y - self.y
-                distance = max(math.hypot(dx, dy), 1)
+                distance = math.hypot(dx, dy)
                 
-                if distance < NEUTRON_STAR_EFFECT_RADIUS:
-                    force = self.pulse_strength / (distance ** 2)
-                    molecular_cloud.x += (dx / distance) * force
-                    molecular_cloud.y += (dy / distance) * force
+                ripple_dist = abs(distance - radius)
+                if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:
+                    effect_factor = 1.0 - (ripple_dist / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
+                    force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 1.5)
                     
+                    if distance > 0:
+                        molecular_cloud.x += (dx / distance) * force * delta_time
+                        molecular_cloud.y += (dy / distance) * force * delta_time
+            
+            for black_hole in list_of_black_holes:
+                dx = black_hole.x - self.x
+                dy = black_hole.y - self.y
+                distance = math.hypot(dx, dy)
+                
+                ripple_dist = abs(distance - radius)
+                if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:
+                    effect_factor = (1.0 - (ripple_dist / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)) * 0.3
+                    force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 2)
+                    
+                    if distance > 0:
+                        black_hole.x += (dx / distance) * force * delta_time * 0.2
+                        black_hole.y += (dy / distance) * force * delta_time * 0.2
+            
+            if new_radius > RING_RADIUS:
+                pulses_to_remove.append(i)
+        
+        for i in sorted(pulses_to_remove, reverse=True):
+            if i < len(self.active_pulses):
+                self.active_pulses.pop(i)
+        
+        if self.time_since_last_pulse >= self.pulse_rate:
+            self.active_pulses.append([0, 0])
             self.time_since_last_pulse = 0
 
     def update_position_of_entities_from_pulse(self, list_of_molecular_clouds, delta_time):
@@ -257,12 +356,27 @@ class NEUTRON_STAR:
                 dx = molecular_cloud.x - self.x
                 dy = molecular_cloud.y - self.y
                 distance = max(math.hypot(dx, dy), 1)
+                
                 force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * molecular_cloud.mass) / (distance**2)
+                
                 molecular_cloud.x += (dx / distance) * force * delta_time
                 molecular_cloud.y += (dy / distance) * force * delta_time
                 
                 self.x -= (dx / distance) * force * delta_time
                 self.y -= (dy / distance) * force * delta_time
+        
+        for black_hole in list_of_black_holes:
+            dx = black_hole.x - self.x
+            dy = black_hole.y - self.y
+            distance = max(math.hypot(dx, dy), 1)
+            
+            force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
+            
+            self.x += (dx / distance) * force * delta_time * 1.5
+            self.y += (dy / distance) * force * delta_time * 1.5
+            
+            black_hole.x -= (dx / distance) * force * delta_time * 0.3
+            black_hole.y -= (dy / distance) * force * delta_time * 0.3
     
     def decay_neutron_star(self):
         self.mass -= NEUTRON_STAR_DECAY_RATE
@@ -345,7 +459,7 @@ def draw_static_key(screen):
     screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
     
     #Primordial Black Hole Key
-    black_hole_pos = (36, SCREEN_HEIGHT - 140)
+    black_hole_pos = (38, SCREEN_HEIGHT - 140)
     pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
     pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
     screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
@@ -355,6 +469,339 @@ def draw_static_key(screen):
     screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
     snapshot_pos = (30, SCREEN_HEIGHT - 80)
     screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
+
+
+def load_csv_data(file_path):
+    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        return {} 
+    with open(file_path, 'r') as file:
+        try:
+            reader = csv.DictReader(file)
+            data = {}
+            for row in reader:
+                entityid = row['entityid']
+                if entityid not in data:
+                    data[entityid] = []
+                row_data = {
+                    'observation': row.get('observation', '0'),
+                    'mass': row.get('mass', '0'),
+                    'size': row.get('size', '0'),
+                    'flux': row.get('flux', 'N/A'),
+                    'posx': row.get('posx', '0'),
+                    'posy': row.get('posy', '0'),
+                    'rowid': row.get('rowid', 'N/A'),
+                    'entityid': entityid,
+                    'type': row.get('type', 'N/A')
+                }
+                data[entityid].append(row_data)
+            return data
+        except (IOError, csv.Error) as e:
+            print(f"Error reading or parsing CSV: {e}")
+            return {}
+
+
+def plot_graph(x_values, data):
+    fig, ax = plt.subplots(figsize=(2, 1), dpi=80)
+    fig.patch.set_alpha(0.0)
+    ax.patch.set_alpha(0.0)
+    colors = ['white', 'gray', 'purple']
+    linestyles = [':', ':', '-']
+    plot_successful = False
+    for i, (key, y_values) in enumerate(data.items()):
+        if len(x_values) == len(y_values) and len(x_values) > 0:
+            try:
+                numeric_x = [float(x) for x in x_values]
+                numeric_y = [float(y) if y != 'N/A' else 0 for y in y_values]
+                ax.plot(numeric_x, numeric_y, label=key.upper(), color=colors[i % len(colors)], linestyle=linestyles[i % len(linestyles)])
+                plot_successful = True
+            except ValueError as e:
+                print(f"Warning: Could not plot {key}, invalid data: {e}")
+        else:
+             print(f"Warning: Skipping plot for {key} due to mismatched lengths or empty data (x: {len(x_values)}, y: {len(y_values)}).")
+
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    plt.tight_layout()
+    canvas = agg.FigureCanvasAgg(fig)
+    canvas.draw()
+    plt.close(fig)
+    return canvas, plot_successful
+
+
+def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
+    if selected_entity is None:
+        return
+
+    live_data_texts = [
+        "LIVE DATA:",
+        f"ID: {selected_entity.id}",
+        f"POSX: {round(selected_entity.x, 5)}",
+        f"POSY: {round(selected_entity.y, 5)}",
+        f"MASS: {round(selected_entity.mass, 5)}",
+        f"SIZE: {round(selected_entity.size, 5)}",
+        f"FLUX: {selected_entity.opacity if hasattr(selected_entity, 'opacity') else 'N/A'}"
+    ]
+
+    y_offset = 5
+    for text in live_data_texts:
+        text_surface = font.render(text, True, LABEL_COLOR)
+        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
+        y_offset += 20
+
+    y_offset = 160
+    header_surface = font.render("OBSERVATIONAL DATA:", True, LABEL_COLOR)
+    screen.blit(header_surface, (rect.x + 10, rect.y + y_offset))
+    y_offset += 20
+
+    entity_csv_data = csv_data.get(str(selected_entity.id))
+    graph_plotted = False
+    if entity_csv_data:
+        most_recent_observation = entity_csv_data[-1]
+        display_keys = ['rowid', 'entityid', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation']
+        for key in display_keys:
+            value = most_recent_observation.get(key, 'N/A')
+            try:
+                if key in ['posx', 'posy', 'mass', 'size']:
+                    value = round(float(value), 5)
+                elif key == 'observation':
+                     value = int(float(value))
+            except (ValueError, TypeError):
+                 value = 'N/A'
+
+            csv_text = f"{key.upper()}: {value}"
+            text_surface = font.render(csv_text, True, LABEL_COLOR)
+            screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
+            y_offset += 20
+
+        observations = [row['observation'] for row in entity_csv_data if 'observation' in row]
+        plot_data = {}
+        for key in ['mass', 'size', 'flux']:
+             plot_data[key] = [row[key] for row in entity_csv_data if key in row]
+
+        min_len = len(observations)
+        for key in plot_data:
+            min_len = min(min_len, len(plot_data[key]))
+
+        valid_observations = observations[:min_len]
+        valid_plot_data = {k: v[:min_len] for k, v in plot_data.items()}
+
+        if valid_observations and all(valid_plot_data.values()):
+             canvas, plot_successful = plot_graph(valid_observations, valid_plot_data)
+             if plot_successful:
+                width, height = canvas.get_width_height()
+                pygame_surface = pygame.image.fromstring(canvas.tostring_argb(), (width, height), 'ARGB')
+                plot_y_pos = rect.y + y_offset
+                screen.blit(pygame_surface, (rect.x + 10, plot_y_pos))
+                graph_plotted = True
+
+    if not entity_csv_data:
+         no_data_text = "No observational data found."
+         text_surface = font.render(no_data_text, True, LABEL_COLOR)
+         screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
+         y_offset += 20
+    elif not graph_plotted:
+        plot_fail_text = "Could not generate plot."
+        text_surface = font.render(plot_fail_text, True, LABEL_COLOR)
+        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset + 10))
+
+
+def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
+    running = True
+    new_selected_entity = selected_entity
+    new_sub_window_active = sub_window_active
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
+            running = False
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            pass
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            click_x, click_y = event.pos
+            clicked_on_entity = False
+            if new_sub_window_active:
+                if CLOSE_BUTTON_RECT.collidepoint(click_x, click_y):
+                    if new_selected_entity:
+                        new_selected_entity.selected = False
+                    new_selected_entity = None
+                    new_sub_window_active = False
+                elif not SUB_WINDOW_RECT.collidepoint(click_x, click_y):
+                    for molecular_cloud in list_of_molecular_clouds:
+                        if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
+                            if new_selected_entity:
+                                new_selected_entity.selected = False
+                            new_selected_entity = molecular_cloud
+                            new_selected_entity.selected = True
+                            new_sub_window_active = True
+                            clicked_on_entity = True
+                            break
+                    if not clicked_on_entity:
+                         if new_selected_entity:
+                            new_selected_entity.selected = False
+                         new_selected_entity = None
+                         new_sub_window_active = False
+            else:
+                for molecular_cloud in list_of_molecular_clouds:
+                    if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
+                        if new_selected_entity:
+                            new_selected_entity.selected = False
+                        new_selected_entity = molecular_cloud
+                        new_selected_entity.selected = True
+                        new_sub_window_active = True
+                        clicked_on_entity = True
+                        break
+                if not clicked_on_entity and new_selected_entity:
+                     new_selected_entity.selected = False
+                     new_selected_entity = None
+                     new_sub_window_active = False
+
+
+    if new_selected_entity:
+        for mc in list_of_molecular_clouds:
+            if mc is not new_selected_entity:
+                mc.selected = False
+
+    return running, new_selected_entity, new_sub_window_active
+
+
+def update_simulation_state(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, ring, delta_time, current_year):
+    update_entities(list_of_molecular_clouds)
+
+    ring.apply_gravity(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars)
+
+    for molecular_cloud in list_of_molecular_clouds:
+         molecular_cloud.gravity_sources = []
+
+    # Update white pixel tracers for each black hole
+    for black_hole in list_of_black_holes:
+        black_hole.tracer_angle += DISK_ROTATION * delta_time
+
+    pulses_to_remove = []
+    for i, pulse in enumerate(list_of_black_hole_pulses):
+        x, y, radius, consumed_mass = pulse
+        new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time * 1.5)
+        list_of_black_hole_pulses[i] = [x, y, new_radius, consumed_mass]
+        
+        for molecular_cloud in list_of_molecular_clouds:
+            dx = molecular_cloud.x - x
+            dy = molecular_cloud.y - y
+            distance = math.hypot(dx, dy)
+            
+            ripple_dist = abs(distance - radius)
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
+                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2))
+                force = NEUTRON_STAR_PULSE_STRENGTH * 5 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 1.5)
+                
+                if distance > 0:
+                    molecular_cloud.x += (dx / distance) * force * delta_time
+                    molecular_cloud.y += (dy / distance) * force * delta_time
+        
+        for black_hole in list_of_black_holes:
+            dx = black_hole.x - x
+            dy = black_hole.y - y
+            distance = math.hypot(dx, dy)
+            
+            ripple_dist = abs(distance - radius)
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
+                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3))
+                force = NEUTRON_STAR_PULSE_STRENGTH * 2 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 2)
+                
+                if distance > 0:
+                    black_hole.x += (dx / distance) * force * delta_time * 0.5
+                    black_hole.y += (dy / distance) * force * delta_time * 0.5
+
+        for neutron_star in list_of_neutron_stars:
+            dx = neutron_star.x - x
+            dy = neutron_star.y - y
+            distance = math.hypot(dx, dy)
+            
+            ripple_dist = abs(distance - radius)
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
+                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2))
+                force = NEUTRON_STAR_PULSE_STRENGTH * 3 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 1.8)
+                
+                if distance > 0:
+                    neutron_star.x += (dx / distance) * force * delta_time * 1.5
+                    neutron_star.y += (dy / distance) * force * delta_time * 1.5
+        
+        if new_radius > RING_RADIUS:
+            pulses_to_remove.append(i)
+    
+    for i in sorted(pulses_to_remove, reverse=True):
+        if i < len(list_of_black_hole_pulses):
+            list_of_black_hole_pulses.pop(i)
+
+    decay_blackholes = []
+    for black_hole in list_of_black_holes:
+         for entity in list_of_molecular_clouds + list_of_neutron_stars + list_of_black_holes:
+             if entity is not black_hole: 
+                 entity.gravity_sources = []
+         black_hole.attract_entities_to_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
+         black_hole.update_gravity_of_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
+         black_hole.black_hole_decay()
+         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
+              decay_blackholes.append(black_hole)
+    for decayed_black_hole in decay_blackholes:
+        if decayed_black_hole in list_of_black_holes:
+            list_of_black_holes.remove(decayed_black_hole)
+
+    decay_neutronstars = []
+    for neutron_star in list_of_neutron_stars:
+        neutron_star.update_position_of_entities_from_pulse(list_of_molecular_clouds, delta_time)
+        neutron_star.pulse_gravity_from_neutron_star(list_of_molecular_clouds, delta_time)
+        neutron_star.decay_neutron_star()
+        if neutron_star.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
+            decay_neutronstars.append(neutron_star)
+    for decay_neutronstar in decay_neutronstars:
+        if decay_neutronstar in list_of_neutron_stars:
+            list_of_neutron_stars.remove(decay_neutronstar)
+
+    if current_year == 20:
+        dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
+    if current_year % SNAPSHOT_SPEED == 0:
+        dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
+
+
+def draw_simulation(screen, ring, list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars):
+    ring.draw_ring(screen, RING_COLOR, RING_OPACITY)
+
+    for molecular_cloud in list_of_molecular_clouds:
+        molecular_cloud.draw_molecular_cloud(screen)
+
+    for pulse in list_of_black_hole_pulses[:]:
+        x, y, pulse_radius, consumed_mass = pulse
+        if pulse_radius > 0:
+            pulse_width = max(2, int(consumed_mass / 20))
+            pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
+            pygame.draw.circle(pulse_surface, BLACK_HOLE_MERGE_COLOR, (pulse_radius, pulse_radius), pulse_radius, pulse_width)
+            screen.blit(pulse_surface, (x - pulse_radius, y - pulse_radius))
+
+    for black_hole in list_of_black_holes:
+        black_hole.draw_black_hole(screen)
+
+    for neutron_star in list_of_neutron_stars:
+        neutron_star.draw_neotron_star(screen)
+
+
+def draw_ui(screen, font, current_year, selected_entity, sub_window_active):
+    draw_static_key(screen)
+
+    year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
+    screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
+
+    if sub_window_active:
+        csv_data = load_csv_data(sim_data)
+
+        pygame.draw.rect(screen, BORDER_COLOR, SUB_WINDOW_RECT, 1)
+        inner_rect = SUB_WINDOW_RECT.inflate(-2 * 1, -2 * 1)
+        pygame.draw.rect(screen, BOX_BG_COLOR, inner_rect)
+        pygame.draw.rect(screen, BORDER_COLOR, CLOSE_BUTTON_RECT)
+
+        if selected_entity:
+            display_molecular_cloud_data(screen, selected_entity, SUB_WINDOW_RECT, font, csv_data)
+        else:
+             no_selection_text = font.render("No entity selected", True, LABEL_COLOR)
+             screen.blit(no_selection_text, (SUB_WINDOW_RECT.x + 10, SUB_WINDOW_RECT.y + 10))
 
 
 def run_simulation():
@@ -367,191 +814,48 @@ def run_simulation():
         last_frame_time = pygame.time.get_ticks()
         selected_entity = None
         sub_window_active = False
-        
-        # Handle user input
+
+        ring = ATTRACTOR_RING((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
+
         while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
-                    running = False
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
-
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    click_x, click_y = event.pos
-                    if sub_window_active:
-                        if CLOSE_BUTTON_RECT.collidepoint(click_x, click_y):
-                            if selected_entity:
-                                selected_entity.selected = False
-                                selected_entity = None
-                            sub_window_active = False
-                        elif not SUB_WINDOW_RECT.collidepoint(click_x, click_y):
-                            for molecular_cloud in list_of_molecular_clouds:
-                                molecular_cloud.selected = False
-                                if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
-                                    selected_entity = molecular_cloud
-                                    molecular_cloud.selected = True
-                                    sub_window_active = True
-                    else:
-                        for molecular_cloud in list_of_molecular_clouds:
-                            molecular_cloud.selected = False
-                            if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
-                                selected_entity = molecular_cloud
-                                molecular_cloud.selected = True
-                                sub_window_active = True
-            
-            # Set up the screen and draw the key and timer
             current_time = pygame.time.get_ticks()
-            delta_time = (current_time - last_frame_time) / 1000
+            delta_time = (current_time - last_frame_time) / 1000.0
             last_frame_time = current_time
-            screen.fill(BACKGROUND_COLOR)
 
-            draw_static_key(screen)
+            running, selected_entity, sub_window_active = handle_input(
+                list_of_molecular_clouds, selected_entity, sub_window_active
+            )
+            if not running:
+                break
 
-            if current_year == 20:
-                dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
-
-            if current_year % SNAPSHOT_SPEED == 0:
-                dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, current_year)
-
-            current_year += 1
-            year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
-            screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
-            
-            # Update and draw Attractor Ring
-            ring = ATTRACTOR_RING((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), RING_RADIUS, RING_ATTRACTOR_COUNT, 0)
-            ring.points = ring.set_ring_points()
-            angle += RING_ROTATION_SPEED
+            angle += RING_ROTATION_SPEED * delta_time * 60
             ring.angle = angle
             ring.points = ring.set_ring_points()
-            ring.draw_ring(screen, RING_COLOR, RING_OPACITY)
-            update_entities(list_of_molecular_clouds)
-            ring.apply_gravity(list_of_molecular_clouds)
 
-            # Update and draw Molecular Clouds
-            for molecular_cloud in list_of_molecular_clouds:
-                molecular_cloud.update_gravity_of_molecular_clouds()
-            for molecular_cloud in list_of_molecular_clouds:
-                molecular_cloud.draw_molecular_cloud(screen)
+            update_simulation_state(
+                list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars,
+                ring, delta_time, current_year
+            )
 
-            # Update and draw Black Holes
-            decay_blackholes = []
-            for black_hole in list_of_black_holes:
-                black_hole.attract_entities_to_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
-                black_hole.update_gravity_of_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
-                black_hole.black_hole_decay()
-                black_hole.draw_black_hole(screen)
-                if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
-                    decay_blackholes.append(black_hole)
-            for decayed_black_hole in decay_blackholes.copy():
-                if decayed_black_hole in list_of_black_holes:
-                    list_of_black_holes.remove(decayed_black_hole)
-                decay_blackholes.remove(decayed_black_hole)
+            screen.fill(BACKGROUND_COLOR)
 
-            # Update and draw Neutron Stars
-            decay_neutronstars = []
-            for neutron_star in list_of_neutron_stars:
-                neutron_star.update_position_of_entities_from_pulse(list_of_molecular_clouds, delta_time)
-                neutron_star.pulse_gravity_from_neutron_star(list_of_molecular_clouds, delta_time)
-                neutron_star.decay_neutron_star()
-                neutron_star.draw_neotron_star(screen)
-                if neutron_star.mass <= BLACK_HOLE_DECAY_THRESHOLD:
-                    decay_neutronstars.append(neutron_star)
-            for decay_neutronstar in decay_neutronstars.copy():
-                if decay_neutronstar in list_of_neutron_stars:
-                    list_of_neutron_stars.remove(decay_neutronstar)
-                decay_neutronstars.remove(decay_neutronstar)
+            draw_simulation(
+                screen, ring, list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars
+            )
 
-            # Everything Below is for the window-in-window data readout.
-            def load_csv_data(file_path):
-                with open(file_path, 'r') as file:
-                    reader = csv.DictReader(file)
-                    data = {}
-                    for row in reader:
-                        entityid = row['entityid']
-                        if entityid not in data:
-                            data[entityid] = []
-                        data[entityid].append(row)
-                    return data
-            csv_data = load_csv_data(sim_data)
+            draw_ui(
+                screen, font, current_year, selected_entity, sub_window_active
+            )
 
-            def plot_graph(x_values, data, title):
-                fig, ax = plt.subplots(figsize=(2, 1), dpi=80)
-                fig.patch.set_alpha(0.0)
-                ax.patch.set_alpha(0.0)
-                colors = ['white', 'gray', 'purple']
-                linestyles = [':', ':', '-']
-                for i, (key, y_values) in enumerate(data.items()):
-                    ax.plot(x_values, y_values, label=key.upper(), color=colors[i % len(colors)], linestyle=linestyles[i % len(linestyles)])
-                ax.set_xticklabels([])
-                ax.set_yticklabels([])
-                plt.tight_layout()
-                canvas = agg.FigureCanvasAgg(fig)
-                canvas.draw()
-                plt.close(fig)
-                return canvas
-
-            def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
-                if selected_entity is None:
-                    return
-                
-                live_data_texts = [
-                    "LIVE DATA:",
-                    f"ID: {selected_entity.id}",
-                    f"POSX: {round(selected_entity.x, 5)}",
-                    f"POSY: {round(selected_entity.y, 5)}",
-                    f"MASS: {selected_entity.mass}",
-                    f"SIZE: {selected_entity.size}",
-                    f"FLUX: {selected_entity.opacity}"
-                ]
-
-                y_offset = 5
-                for text in live_data_texts:
-                    text_surface = font.render(text, True, LABEL_COLOR)
-                    screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-                    y_offset += 20
-
-                y_offset = 160
-                molecular_cloud_csv_data = csv_data.get(str(selected_entity.id))
-                if molecular_cloud_csv_data:
-                    csv_header_text = "OBSERVATIONAL DATA:"
-                    header_surface = font.render(csv_header_text, True, LABEL_COLOR)
-                    screen.blit(header_surface, (rect.x + 10, rect.y + y_offset))
-                    y_offset += 20
-
-                    most_recent_observation = molecular_cloud_csv_data[-1]
-                    for key, value in most_recent_observation.items():
-                        if key == 'posx' or key == 'posy':
-                            value = round(float(value), 5)
-
-                        csv_text = f"{key.upper()}: {value}"
-                        text_surface = font.render(csv_text, True, LABEL_COLOR)
-                        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-                        y_offset += 20
-
-                    x_values = [float(row['observation']) for row in molecular_cloud_csv_data]
-                    data = {key: [float(row[key]) for row in molecular_cloud_csv_data] for key in ['mass', 'size', 'flux']}
-                    min_length = min(len(x_values), min(len(v) for v in data.values()))
-                    x_values = x_values[:min_length]
-                    data = {k: v[:min_length] for k, v in data.items()}
-                    canvas = plot_graph(x_values, data, "OBSERVATIONAL DATA")
-                    width, height = canvas.get_width_height()
-                    pygame_surface = pygame.image.fromstring(canvas.tostring_argb(), (width, height), 'ARGB')
-                    screen.blit(pygame_surface, (rect.x + 10, rect.y + y_offset))
-
-            if sub_window_active:
-                pygame.draw.rect(screen, BORDER_COLOR, SUB_WINDOW_RECT, 1)
-                inner_rect = SUB_WINDOW_RECT.inflate(-2 * 1, -2 * 1)
-                pygame.draw.rect(screen, BOX_BG_COLOR, inner_rect)
-                pygame.draw.rect(screen, BORDER_COLOR, CLOSE_BUTTON_RECT)
-                if selected_entity:
-                    display_molecular_cloud_data(screen, selected_entity, SUB_WINDOW_RECT, font, csv_data)
-
-            # END of window-in-window data readout.
+            current_year += 1
 
             pygame.display.flip()
+
         print("Exited simulation")
     except Exception as e:
-        print(f"Error occurred: {e}")
+        import traceback
+        print(f"Error occurred in simulation loop: {e}")
+        traceback.print_exc()
     finally:
         pygame.quit()
 

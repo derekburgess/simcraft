@@ -3,7 +3,11 @@
 
 2023 CE //
 
-A "blocky" (like minecraft) 2D Universe Simulator (Simcraft). Original base structure (seen in /backups) written with OpenAI GPT4 and VSCode Copilot. Enhanced, tested, and debugged by Derek. Uses `pygame`.
+A "blocky" (like minecraft) 2D Universe Simulator (Simcraft). Original base structure (seen in /backups) written with OpenAI GPT4 and VSCode Copilot. Enhanced, tested, and debugged by Derek. Uses `pip install pygame` https://www.pygame.org/
+
+2025 CE // 
+
+As the project has grown and AI models have become more capable, agentic IDE's more user friendly, this project has shifted to function as a sort of test. Models that have contributed: `Github Copilot/GPT-3`, `GPT-4`, `GPT-4o`, `GPT-4o-mini`, `Claude 3.5 Sonnet`, `Claude 3.7 Sonnet`, `Gemini 2.5 Pro`, `Grok-2`
 
 Inspired by https://en.m.wikipedia.org/wiki/Zero-player_game
 
