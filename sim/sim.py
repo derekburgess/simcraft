@@ -34,7 +34,10 @@ BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
 BLACK_HOLE_MAX_MASS = 100
-BLACK_HOLE_MERGE_PULSE_COLOR = (0, 0, 160, 200)
+BLACK_HOLE_MERGE_COLOR = (0, 0, 160, 200)
+DISK_COLOR = (255, 100, 100)
+DISK_SIZE = 1
+DISK_ROTATION = 10.0
 
 NEUTRON_STAR_CHANCE = 0.2
 NEUTRON_STAR_RADIUS = 1
@@ -197,12 +200,18 @@ class BLACK_HOLE:
         self.mass = min(mass, BLACK_HOLE_MAX_MASS)
         self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.gravity_sources = []
+        self.tracer_angle = random.uniform(0, 2 * math.pi)  # Random starting angle for the white pixel
 
     def draw_black_hole(self, screen):
         radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.border_radius = radius
         pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
         pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
+        
+        # Draw white pixel tracer around black hole border
+        tracer_x = self.x + self.border_radius * math.cos(self.tracer_angle)
+        tracer_y = self.y + self.border_radius * math.sin(self.tracer_angle)
+        pygame.draw.circle(screen, DISK_COLOR, (int(tracer_x), int(tracer_y)), DISK_SIZE)
 
     def attract_entities_to_black_holes(self, list_of_molecular_clouds, list_of_neutron_stars):
         list_of_entities_to_remove = []
@@ -663,6 +672,10 @@ def update_simulation_state(list_of_molecular_clouds, list_of_black_holes, list_
     for molecular_cloud in list_of_molecular_clouds:
          molecular_cloud.gravity_sources = []
 
+    # Update white pixel tracers for each black hole
+    for black_hole in list_of_black_holes:
+        black_hole.tracer_angle += DISK_ROTATION * delta_time
+
     pulses_to_remove = []
     for i, pulse in enumerate(list_of_black_hole_pulses):
         x, y, radius, consumed_mass = pulse
@@ -760,7 +773,7 @@ def draw_simulation(screen, ring, list_of_molecular_clouds, list_of_black_holes,
         if pulse_radius > 0:
             pulse_width = max(2, int(consumed_mass / 20))
             pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
-            pygame.draw.circle(pulse_surface, BLACK_HOLE_MERGE_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, pulse_width)
+            pygame.draw.circle(pulse_surface, BLACK_HOLE_MERGE_COLOR, (pulse_radius, pulse_radius), pulse_radius, pulse_width)
             screen.blit(pulse_surface, (x - pulse_radius, y - pulse_radius))
 
     for black_hole in list_of_black_holes:
