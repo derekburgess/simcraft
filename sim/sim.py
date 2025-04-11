@@ -98,7 +98,7 @@ class ATTRACTOR_RING:
             pygame.draw.circle(surface, rgba_color, (5, 5), 5)
             screen.blit(surface, (point[0] - 5, point[1] - 5))
 
-    def apply_gravity(self, list_of_molecular_clouds):
+    def apply_gravity(self, list_of_molecular_clouds, list_of_black_holes=None, list_of_neutron_stars=None):
         for molecular_cloud in list_of_molecular_clouds:
             for point in self.points:
                 dx = point[0] - molecular_cloud.x
@@ -108,6 +108,26 @@ class ATTRACTOR_RING:
                 if distance > molecular_cloud.size / 2:
                     molecular_cloud.x += (dx / distance) * force
                     molecular_cloud.y += (dy / distance) * force
+        
+        if list_of_black_holes:
+            for black_hole in list_of_black_holes:
+                for point in self.points:
+                    dx = point[0] - black_hole.x
+                    dy = point[1] - black_hole.y
+                    distance = max(math.hypot(dx, dy), 1)
+                    force = (RING_GRAVITY_CONSTANT * black_hole.mass / (distance**2)) * 0.5
+                    black_hole.x += (dx / distance) * force
+                    black_hole.y += (dy / distance) * force
+        
+        if list_of_neutron_stars:
+            for neutron_star in list_of_neutron_stars:
+                for point in self.points:
+                    dx = point[0] - neutron_star.x
+                    dy = point[1] - neutron_star.y
+                    distance = max(math.hypot(dx, dy), 1)
+                    force = (RING_GRAVITY_CONSTANT * neutron_star.mass / (distance**2)) * 0.7
+                    neutron_star.x += (dx / distance) * force
+                    neutron_star.y += (dy / distance) * force
 
 
 def interpolate_color(start_color, end_color, factor):
@@ -181,14 +201,28 @@ class BLACK_HOLE:
 
     def attract_entities_to_black_holes(self, list_of_molecular_clouds, list_of_neutron_stars):
         list_of_entities_to_remove = []
+        
+        for black_hole in list_of_black_holes:
+            if black_hole is not self:
+                dx = self.x - black_hole.x
+                dy = self.y - black_hole.y
+                distance = max(math.hypot(dx, dy), 1)
+                
+                if self.mass > black_hole.mass and distance < self.border_radius:
+                    list_of_entities_to_remove.append(black_hole)
+                    self.mass += black_hole.mass
+                elif distance > 0:
+                    force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
+                    black_hole.x += (dx / distance) * force
+                    black_hole.y += (dy / distance) * force
+                    black_hole.gravity_sources.append(self)
+        
         for entity in list_of_molecular_clouds + list_of_neutron_stars:
             dx = self.x - entity.x
             dy = self.y - entity.y
             distance = max(math.hypot(dx, dy), 1)
             
-            if isinstance(entity, BLACK_HOLE) and entity.mass < self.mass:
-                list_of_entities_to_remove.append(entity)
-            elif isinstance(entity, NEUTRON_STAR) and distance < self.border_radius:
+            if isinstance(entity, NEUTRON_STAR) and distance < self.border_radius:
                 list_of_entities_to_remove.append(entity)
                 self.mass += entity.mass
             elif isinstance(entity, MOLECULAR_CLOUD) and distance < self.border_radius:
@@ -205,6 +239,8 @@ class BLACK_HOLE:
                 list_of_molecular_clouds.remove(entity)
             elif entity in list_of_neutron_stars:
                 list_of_neutron_stars.remove(entity)
+            elif entity in list_of_black_holes:
+                list_of_black_holes.remove(entity)
 
     def update_gravity_of_black_holes(self, list_of_molecular_clouds, list_of_neutron_stars):
         for entity in list_of_molecular_clouds + list_of_neutron_stars + list_of_black_holes:
@@ -235,12 +271,11 @@ class NEUTRON_STAR:
         self.pulse_strength = NEUTRON_STAR_PULSE_STRENGTH
         self.time_since_last_pulse = 0
         self.gravity_sources = []
-        self.active_pulses = []  # List of [radius, time_alive] for active pulses
+        self.active_pulses = []
 
     def draw_neotron_star(self, screen):
         pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (int(self.x), int(self.y)), self.radius)
         
-        # Draw active pulse ripples
         for pulse in self.active_pulses:
             pulse_radius, _ = pulse
             pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
@@ -250,66 +285,80 @@ class NEUTRON_STAR:
     def pulse_gravity_from_neutron_star(self, list_of_molecular_clouds, delta_time):
         self.time_since_last_pulse += delta_time
         
-        # Update existing pulses
         pulses_to_remove = []
         for i, pulse in enumerate(self.active_pulses):
             radius, time_alive = pulse
-            # Update pulse radius based on time
             new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time)
             new_time = time_alive + delta_time
             
             self.active_pulses[i] = [new_radius, new_time]
             
-            # Apply pulse force to nearby objects
             for molecular_cloud in list_of_molecular_clouds:
                 dx = molecular_cloud.x - self.x
                 dy = molecular_cloud.y - self.y
                 distance = math.hypot(dx, dy)
                 
-                # Only affect objects near the ripple wave
                 ripple_dist = abs(distance - radius)
-                if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:  # Within ripple effect range
-                    # Calculate force - stronger at the center of the ripple
+                if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:
                     effect_factor = 1.0 - (ripple_dist / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
                     force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 1.5)
                     
-                    # Push outward from neutron star
                     if distance > 0:
                         molecular_cloud.x += (dx / distance) * force * delta_time
                         molecular_cloud.y += (dy / distance) * force * delta_time
             
-            # Remove pulses that have expanded beyond the ring radius
+            for black_hole in list_of_black_holes:
+                dx = black_hole.x - self.x
+                dy = black_hole.y - self.y
+                distance = math.hypot(dx, dy)
+                
+                ripple_dist = abs(distance - radius)
+                if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:
+                    effect_factor = (1.0 - (ripple_dist / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)) * 0.3
+                    force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 2)
+                    
+                    if distance > 0:
+                        black_hole.x += (dx / distance) * force * delta_time * 0.2
+                        black_hole.y += (dy / distance) * force * delta_time * 0.2
+            
             if new_radius > RING_RADIUS:
                 pulses_to_remove.append(i)
         
-        # Remove finished pulses (in reverse to avoid index issues)
         for i in sorted(pulses_to_remove, reverse=True):
             if i < len(self.active_pulses):
                 self.active_pulses.pop(i)
         
-        # Create new pulse if it's time
         if self.time_since_last_pulse >= self.pulse_rate:
-            self.active_pulses.append([0, 0])  # Start a new pulse with radius 0
+            self.active_pulses.append([0, 0])
             self.time_since_last_pulse = 0
 
     def update_position_of_entities_from_pulse(self, list_of_molecular_clouds, delta_time):
-        # This method now handles the continuous gravitational attraction
-        # The pulse effect is handled in pulse_gravity_from_neutron_star
         for molecular_cloud in list_of_molecular_clouds:
             if molecular_cloud is not self:
                 dx = molecular_cloud.x - self.x
                 dy = molecular_cloud.y - self.y
                 distance = max(math.hypot(dx, dy), 1)
                 
-                # Standard gravitational attraction - weaker than the pulse effect
                 force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * molecular_cloud.mass) / (distance**2)
                 
-                # Apply the force to both objects
                 molecular_cloud.x += (dx / distance) * force * delta_time
                 molecular_cloud.y += (dy / distance) * force * delta_time
                 
                 self.x -= (dx / distance) * force * delta_time
                 self.y -= (dy / distance) * force * delta_time
+        
+        for black_hole in list_of_black_holes:
+            dx = black_hole.x - self.x
+            dy = black_hole.y - self.y
+            distance = max(math.hypot(dx, dy), 1)
+            
+            force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
+            
+            self.x += (dx / distance) * force * delta_time * 1.5
+            self.y += (dy / distance) * force * delta_time * 1.5
+            
+            black_hole.x -= (dx / distance) * force * delta_time * 0.3
+            black_hole.y -= (dy / distance) * force * delta_time * 0.3
     
     def decay_neutron_star(self):
         self.mass -= NEUTRON_STAR_DECAY_RATE
@@ -392,7 +441,7 @@ def draw_static_key(screen):
     screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
     
     #Primordial Black Hole Key
-    black_hole_pos = (36, SCREEN_HEIGHT - 140)
+    black_hole_pos = (38, SCREEN_HEIGHT - 140)
     pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
     pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
     screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
@@ -600,15 +649,16 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
 def update_simulation_state(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars, ring, delta_time, current_year):
     update_entities(list_of_molecular_clouds)
 
-    ring.apply_gravity(list_of_molecular_clouds)
+    ring.apply_gravity(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_stars)
 
     for molecular_cloud in list_of_molecular_clouds:
          molecular_cloud.gravity_sources = []
 
     decay_blackholes = []
     for black_hole in list_of_black_holes:
-         for entity in list_of_molecular_clouds + list_of_neutron_stars:
-             entity.gravity_sources = []
+         for entity in list_of_molecular_clouds + list_of_neutron_stars + list_of_black_holes:
+             if entity is not black_hole: 
+                 entity.gravity_sources = []
          black_hole.attract_entities_to_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
          black_hole.update_gravity_of_black_holes(list_of_molecular_clouds, list_of_neutron_stars)
          black_hole.black_hole_decay()
