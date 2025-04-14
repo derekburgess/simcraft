@@ -15,26 +15,27 @@ RING_COLOR = (0, 0, 120)
 RING_OPACITY = 0
 
 MOLECULAR_CLOUD_COUNT = 15000
-MOLECULAR_CLOUD_START_SIZE = 18
-MOLECULAR_CLOUD_MIN_SIZE = 4
-MOLECULAR_CLOUD_GROWTH_RATE = 0.8
+MOLECULAR_CLOUD_START_SIZE = 20
+MOLECULAR_CLOUD_MIN_SIZE = 2
+MOLECULAR_CLOUD_GROWTH_RATE = 1
 MOLECULAR_CLOUD_START_MASS = 1
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01
-MOLECULAR_CLOUD_MAX_MASS = 20
+MOLECULAR_CLOUD_MAX_MASS = 22
 MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
 MOLECULAR_CLOUD_MID_COLOR = (20, 0, 140)
-MOLECULAR_CLOUD_END_COLOR = (225, 200, 255)
+MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
 DEFAULT_STATE_CHANCE = 1
+PROTOSTAR_THRESHOLD = 18
 
-BLACK_HOLE_THRESHOLD = 16
+BLACK_HOLE_THRESHOLD = 20
 BLACK_HOLE_CHANCE = 0.3
-BLACK_HOLE_RADIUS = 10
-BLACK_HOLE_GRAVITY_CONSTANT = 0.05
+BLACK_HOLE_RADIUS = 8
+BLACK_HOLE_MAX_MASS = 40
+BLACK_HOLE_GRAVITY_CONSTANT = 0.1
 BLACK_HOLE_DECAY_RATE = 0.08
 BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
-BLACK_HOLE_MAX_MASS = 100
 BLACK_HOLE_MERGE_COLOR = (0, 0, 160, 200)
 DISK_COLOR = (255, 100, 100)
 DISK_SIZE = 1
@@ -42,13 +43,13 @@ DISK_ROTATION = 10.0
 
 NEUTRON_STAR_CHANCE = 0.2
 NEUTRON_STAR_RADIUS = 1
-NEUTRON_STAR_GRAVITY_CONSTANT = 0.0075
+NEUTRON_STAR_GRAVITY_CONSTANT = 0.02
 NEUTRON_STAR_DECAY_RATE = 0.08
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8
 NEUTRON_STAR_COLOR = (0, 120, 255)
-NEUTRON_STAR_PULSE_RATE = 1
+NEUTRON_STAR_PULSE_RATE = 0.5
 NEUTRON_STAR_PULSE_STRENGTH = 2
-NEUTRON_STAR_PULSE_COLOR = (0, 0, 60, 100)
+NEUTRON_STAR_PULSE_COLOR = (0, 0, 160, 40)
 NEUTRON_STAR_PULSE_WIDTH = 2
 NEUTRON_STAR_RIPPLE_SPEED = 50
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 6
@@ -144,21 +145,15 @@ def interpolate_color(start_color, end_color, factor):
 
 
 def interpolate_multi_color(colors, factor):
-    # If factor is 0, return the first color, if 1, return the last color
     if factor <= 0:
         return colors[0]
     if factor >= 1:
         return colors[-1]
     
-    # Calculate which segment of the gradient we're in
     num_segments = len(colors) - 1
     segment_size = 1.0 / num_segments
     segment_index = min(int(factor / segment_size), num_segments - 1)
-    
-    # Calculate factor within the segment (0 to 1)
     segment_factor = (factor - segment_index * segment_size) / segment_size
-    
-    # Interpolate between the segment's start and end colors
     start_color = colors[segment_index]
     end_color = colors[segment_index + 1]
     
@@ -313,9 +308,12 @@ class NEUTRON_STAR:
         self.time_since_last_pulse = 0
         self.gravity_sources = []
         self.active_pulses = []
+        self.pulse_color_state = 0  # 0: normal color, 1: white during pulse
+        self.pulse_color_duration = 0.1  # Duration of white color in seconds
 
     def draw_neotron_star(self, screen):
-        pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (int(self.x), int(self.y)), self.radius)
+        current_color = (255, 255, 255) if self.pulse_color_state == 1 else NEUTRON_STAR_COLOR
+        pygame.draw.circle(screen, current_color, (int(self.x), int(self.y)), self.radius)
         
         for pulse in self.active_pulses:
             pulse_radius, _ = pulse
@@ -325,6 +323,13 @@ class NEUTRON_STAR:
 
     def pulse_gravity_from_neutron_star(self, list_of_molecular_clouds, delta_time):
         self.time_since_last_pulse += delta_time
+        
+        # Update pulse color state
+        if self.pulse_color_state == 1:
+            self.pulse_color_duration -= delta_time
+            if self.pulse_color_duration <= 0:
+                self.pulse_color_state = 0
+                self.pulse_color_duration = 0.1
         
         pulses_to_remove = []
         for i, pulse in enumerate(self.active_pulses):
@@ -372,6 +377,8 @@ class NEUTRON_STAR:
         if self.time_since_last_pulse >= self.pulse_rate:
             self.active_pulses.append([0, 0])
             self.time_since_last_pulse = 0
+            self.pulse_color_state = 1  # Set to white during pulse
+            self.pulse_color_duration = 0.1  # Reset duration
 
     def update_position_of_entities_from_pulse(self, list_of_molecular_clouds, delta_time):
         for molecular_cloud in list_of_molecular_clouds:
@@ -450,7 +457,7 @@ def dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_s
         row_id = global_index_counter
         for molecular_cloud in list_of_molecular_clouds:
             flux = molecular_cloud.opacity if hasattr(molecular_cloud, 'opacity') else 'N/A'
-            if 20 <= molecular_cloud.mass <= BLACK_HOLE_THRESHOLD:
+            if PROTOSTAR_THRESHOLD <= molecular_cloud.mass <= BLACK_HOLE_THRESHOLD:
                 entity_type = 'ProtoStar'
             else:
                 entity_type = 'MolecularCloud'
