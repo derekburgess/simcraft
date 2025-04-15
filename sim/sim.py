@@ -60,7 +60,7 @@ NEUTRON_STAR_PULSE_WIDTH = 2
 NEUTRON_STAR_RIPPLE_SPEED = 50
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 6
 
-BACKGROUND_COLOR = (0, 0, 10)
+BACKGROUND_COLOR = (0, 5, 2)
 SNAPSHOT_SPEED = 100
 LABEL_COLOR = (255, 255, 255)
 BORDER_COLOR = (150, 150, 150)
@@ -187,7 +187,6 @@ class MOLECULAR_CLOUD:
         self.opacity = 255
         self.gravity_sources = []
         
-        # Select color based on elemental abundance
         rand = random.random()
         for i, (start, end) in enumerate(ELEMENTAL_ABUNDANCE):
             if start <= rand < end:
@@ -355,13 +354,9 @@ class NEUTRON_STAR:
         
         for pulse in self.active_pulses:
             pulse_radius, _ = pulse
-            center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
-            distance_from_center = math.hypot(self.x - center_x, self.y - center_y)
-            
-            if distance_from_center + pulse_radius <= RING_RADIUS:
-                pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
-                pygame.draw.circle(pulse_surface, NEUTRON_STAR_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, NEUTRON_STAR_PULSE_WIDTH)
-                screen.blit(pulse_surface, (self.x - pulse_radius, self.y - pulse_radius))
+            pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
+            pygame.draw.circle(pulse_surface, NEUTRON_STAR_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, NEUTRON_STAR_PULSE_WIDTH)
+            screen.blit(pulse_surface, (self.x - pulse_radius, self.y - pulse_radius))
 
     def neutron_star_clicked(self, click_x, click_y):
         distance = math.hypot(click_x - self.x, click_y - self.y)
@@ -518,7 +513,6 @@ def dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_s
 
 
 def draw_static_key(screen):
-    #Data Snapshot Key
     snapshot_pos = (30, SCREEN_HEIGHT - 110)
     screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
     snapshot_pos = (30, SCREEN_HEIGHT - 80)
@@ -586,7 +580,6 @@ def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
     if selected_entity is None:
         return
 
-    # Common data for all entities
     live_data_texts = [
         "LIVE DATA:",
         f"ID: {selected_entity.id}",
@@ -595,7 +588,6 @@ def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
         f"MASS: {round(selected_entity.mass, 5)}"
     ]
 
-    # Add size/radius information based on entity type
     if isinstance(selected_entity, MOLECULAR_CLOUD):
         live_data_texts.append(f"SIZE: {round(selected_entity.size, 5)}")
         live_data_texts.append(f"FLUX: {selected_entity.opacity if hasattr(selected_entity, 'opacity') else 'N/A'}")
@@ -631,9 +623,9 @@ def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
                     if isinstance(selected_entity, MOLECULAR_CLOUD):
                         value = round(float(value), 5)
                     elif isinstance(selected_entity, BLACK_HOLE):
-                        value = round(float(value), 5)  # Using size as border_radius
+                        value = round(float(value), 5)
                     elif isinstance(selected_entity, NEUTRON_STAR):
-                        value = round(float(value), 5)  # Using size as radius
+                        value = round(float(value), 5)
                 elif key == 'observation':
                     value = int(float(value))
             except (ValueError, TypeError):
@@ -744,33 +736,33 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                         new_sub_window_active = True
                         clicked_on_entity = True
                         break
-                
-                if not clicked_on_entity:
-                    for black_hole in list_of_black_holes:
-                        if black_hole.black_hole_clicked(click_x, click_y):
-                            if new_selected_entity:
-                                new_selected_entity.selected = False
-                            new_selected_entity = black_hole
-                            new_selected_entity.selected = True
-                            new_sub_window_active = True
-                            clicked_on_entity = True
-                            break
-                
-                if not clicked_on_entity:
-                    for neutron_star in list_of_neutron_stars:
-                        if neutron_star.neutron_star_clicked(click_x, click_y):
-                            if new_selected_entity:
-                                new_selected_entity.selected = False
-                            new_selected_entity = neutron_star
-                            new_selected_entity.selected = True
-                            new_sub_window_active = True
-                            clicked_on_entity = True
-                            break
-                
-                if not clicked_on_entity and new_selected_entity:
-                    new_selected_entity.selected = False
-                    new_selected_entity = None
-                    new_sub_window_active = False
+                    
+                    if not clicked_on_entity:
+                        for black_hole in list_of_black_holes:
+                            if black_hole.black_hole_clicked(click_x, click_y):
+                                if new_selected_entity:
+                                    new_selected_entity.selected = False
+                                new_selected_entity = black_hole
+                                new_selected_entity.selected = True
+                                new_sub_window_active = True
+                                clicked_on_entity = True
+                                break
+                    
+                    if not clicked_on_entity:
+                        for neutron_star in list_of_neutron_stars:
+                            if neutron_star.neutron_star_clicked(click_x, click_y):
+                                if new_selected_entity:
+                                    new_selected_entity.selected = False
+                                new_selected_entity = neutron_star
+                                new_selected_entity.selected = True
+                                new_sub_window_active = True
+                                clicked_on_entity = True
+                                break
+                    
+                    if not clicked_on_entity and new_selected_entity:
+                        new_selected_entity.selected = False
+                        new_selected_entity = None
+                        new_sub_window_active = False
 
     if new_selected_entity:
         for mc in list_of_molecular_clouds:
@@ -892,14 +884,10 @@ def draw_simulation(screen, ring, list_of_molecular_clouds, list_of_black_holes,
     for pulse in list_of_black_hole_pulses[:]:
         x, y, pulse_radius, consumed_mass = pulse
         if pulse_radius > 0:
-            center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
-            distance_from_center = math.hypot(x - center_x, y - center_y)
-            
-            if distance_from_center + pulse_radius <= RING_RADIUS:
-                pulse_width = max(2, int(consumed_mass / 20))
-                pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
-                pygame.draw.circle(pulse_surface, BLACK_HOLE_MERGE_COLOR, (pulse_radius, pulse_radius), pulse_radius, pulse_width)
-                screen.blit(pulse_surface, (x - pulse_radius, y - pulse_radius))
+            pulse_width = max(2, int(consumed_mass / 20))
+            pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
+            pygame.draw.circle(pulse_surface, BLACK_HOLE_MERGE_COLOR, (pulse_radius, pulse_radius), pulse_radius, pulse_width)
+            screen.blit(pulse_surface, (x - pulse_radius, y - pulse_radius))
 
     for black_hole in list_of_black_holes:
         black_hole.draw_black_hole(screen)
