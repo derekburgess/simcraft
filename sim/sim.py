@@ -213,6 +213,7 @@ list_of_black_hole_pulses = []
 class BLACK_HOLE:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
+        self.selected = False
         self.x = x
         self.y = y
         self.mass = min(mass, BLACK_HOLE_MAX_MASS)
@@ -223,13 +224,21 @@ class BLACK_HOLE:
     def draw_black_hole(self, screen):
         radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.border_radius = radius
-        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
-        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
+        if self.selected:
+            highlight_color = (255, 165, 0)
+            pygame.draw.circle(screen, highlight_color, (int(self.x), int(self.y)), radius)
+        else:
+            pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
+            pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
         
         # Draw white pixel tracer around black hole border
         tracer_x = self.x + self.border_radius * math.cos(self.tracer_angle)
         tracer_y = self.y + self.border_radius * math.sin(self.tracer_angle)
         pygame.draw.circle(screen, DISK_COLOR, (int(tracer_x), int(tracer_y)), DISK_SIZE)
+
+    def black_hole_clicked(self, click_x, click_y):
+        distance = math.hypot(click_x - self.x, click_y - self.y)
+        return distance <= self.border_radius
 
     def attract_entities_to_black_holes(self, list_of_molecular_clouds, list_of_neutron_stars):
         list_of_entities_to_remove = []
@@ -299,6 +308,7 @@ list_of_neutron_stars = []
 class NEUTRON_STAR:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
+        self.selected = False
         self.x = x
         self.y = y
         self.mass = mass
@@ -312,14 +322,22 @@ class NEUTRON_STAR:
         self.pulse_color_duration = 0.1  # Duration of white color in seconds
 
     def draw_neotron_star(self, screen):
-        current_color = (255, 255, 255) if self.pulse_color_state == 1 else NEUTRON_STAR_COLOR
-        pygame.draw.circle(screen, current_color, (int(self.x), int(self.y)), self.radius)
+        if self.selected:
+            highlight_color = (255, 165, 0)
+            pygame.draw.circle(screen, highlight_color, (int(self.x), int(self.y)), self.radius)
+        else:
+            current_color = (255, 255, 255) if self.pulse_color_state == 1 else NEUTRON_STAR_COLOR
+            pygame.draw.circle(screen, current_color, (int(self.x), int(self.y)), self.radius)
         
         for pulse in self.active_pulses:
             pulse_radius, _ = pulse
             pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
             pygame.draw.circle(pulse_surface, NEUTRON_STAR_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, NEUTRON_STAR_PULSE_WIDTH)
             screen.blit(pulse_surface, (self.x - pulse_radius, self.y - pulse_radius))
+
+    def neutron_star_clicked(self, click_x, click_y):
+        distance = math.hypot(click_x - self.x, click_y - self.y)
+        return distance <= self.radius
 
     def pulse_gravity_from_neutron_star(self, list_of_molecular_clouds, delta_time):
         self.time_since_last_pulse += delta_time
@@ -562,15 +580,25 @@ def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
     if selected_entity is None:
         return
 
+    # Common data for all entities
     live_data_texts = [
         "LIVE DATA:",
         f"ID: {selected_entity.id}",
         f"POSX: {round(selected_entity.x, 5)}",
         f"POSY: {round(selected_entity.y, 5)}",
-        f"MASS: {round(selected_entity.mass, 5)}",
-        f"SIZE: {round(selected_entity.size, 5)}",
-        f"FLUX: {selected_entity.opacity if hasattr(selected_entity, 'opacity') else 'N/A'}"
+        f"MASS: {round(selected_entity.mass, 5)}"
     ]
+
+    # Add size/radius information based on entity type
+    if isinstance(selected_entity, MOLECULAR_CLOUD):
+        live_data_texts.append(f"SIZE: {round(selected_entity.size, 5)}")
+        live_data_texts.append(f"FLUX: {selected_entity.opacity if hasattr(selected_entity, 'opacity') else 'N/A'}")
+    elif isinstance(selected_entity, BLACK_HOLE):
+        live_data_texts.append(f"RADIUS: {round(selected_entity.border_radius, 5)}")
+        live_data_texts.append("FLUX: N/A")
+    elif isinstance(selected_entity, NEUTRON_STAR):
+        live_data_texts.append(f"RADIUS: {round(selected_entity.radius, 5)}")
+        live_data_texts.append("FLUX: N/A")
 
     y_offset = 5
     for text in live_data_texts:
@@ -591,12 +619,19 @@ def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
         for key in display_keys:
             value = most_recent_observation.get(key, 'N/A')
             try:
-                if key in ['posx', 'posy', 'mass', 'size']:
+                if key in ['posx', 'posy', 'mass']:
                     value = round(float(value), 5)
+                elif key == 'size':
+                    if isinstance(selected_entity, MOLECULAR_CLOUD):
+                        value = round(float(value), 5)
+                    elif isinstance(selected_entity, BLACK_HOLE):
+                        value = round(float(value), 5)  # Using size as border_radius
+                    elif isinstance(selected_entity, NEUTRON_STAR):
+                        value = round(float(value), 5)  # Using size as radius
                 elif key == 'observation':
-                     value = int(float(value))
+                    value = int(float(value))
             except (ValueError, TypeError):
-                 value = 'N/A'
+                value = 'N/A'
 
             csv_text = f"{key.upper()}: {value}"
             text_surface = font.render(csv_text, True, LABEL_COLOR)
@@ -606,7 +641,7 @@ def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
         observations = [row['observation'] for row in entity_csv_data if 'observation' in row]
         plot_data = {}
         for key in ['mass', 'size', 'flux']:
-             plot_data[key] = [row[key] for row in entity_csv_data if key in row]
+            plot_data[key] = [row[key] for row in entity_csv_data if key in row]
 
         min_len = len(observations)
         for key in plot_data:
@@ -616,8 +651,8 @@ def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
         valid_plot_data = {k: v[:min_len] for k, v in plot_data.items()}
 
         if valid_observations and all(valid_plot_data.values()):
-             canvas, plot_successful = plot_graph(valid_observations, valid_plot_data)
-             if plot_successful:
+            canvas, plot_successful = plot_graph(valid_observations, valid_plot_data)
+            if plot_successful:
                 width, height = canvas.get_width_height()
                 pygame_surface = pygame.image.fromstring(canvas.tostring_argb(), (width, height), 'ARGB')
                 plot_y_pos = rect.y + y_offset
@@ -625,10 +660,10 @@ def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
                 graph_plotted = True
 
     if not entity_csv_data:
-         no_data_text = "No observational data found."
-         text_surface = font.render(no_data_text, True, LABEL_COLOR)
-         screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-         y_offset += 20
+        no_data_text = "No observational data found."
+        text_surface = font.render(no_data_text, True, LABEL_COLOR)
+        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
+        y_offset += 20
     elif not graph_plotted:
         plot_fail_text = "Could not generate plot."
         text_surface = font.render(plot_fail_text, True, LABEL_COLOR)
@@ -656,6 +691,7 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                     new_selected_entity = None
                     new_sub_window_active = False
                 elif not SUB_WINDOW_RECT.collidepoint(click_x, click_y):
+                    # Check for clicks on molecular clouds
                     for molecular_cloud in list_of_molecular_clouds:
                         if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
                             if new_selected_entity:
@@ -665,12 +701,38 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                             new_sub_window_active = True
                             clicked_on_entity = True
                             break
+                    
+                    # Check for clicks on black holes
                     if not clicked_on_entity:
-                         if new_selected_entity:
+                        for black_hole in list_of_black_holes:
+                            if black_hole.black_hole_clicked(click_x, click_y):
+                                if new_selected_entity:
+                                    new_selected_entity.selected = False
+                                new_selected_entity = black_hole
+                                new_selected_entity.selected = True
+                                new_sub_window_active = True
+                                clicked_on_entity = True
+                                break
+                    
+                    # Check for clicks on neutron stars
+                    if not clicked_on_entity:
+                        for neutron_star in list_of_neutron_stars:
+                            if neutron_star.neutron_star_clicked(click_x, click_y):
+                                if new_selected_entity:
+                                    new_selected_entity.selected = False
+                                new_selected_entity = neutron_star
+                                new_selected_entity.selected = True
+                                new_sub_window_active = True
+                                clicked_on_entity = True
+                                break
+                    
+                    if not clicked_on_entity:
+                        if new_selected_entity:
                             new_selected_entity.selected = False
-                         new_selected_entity = None
-                         new_sub_window_active = False
+                        new_selected_entity = None
+                        new_sub_window_active = False
             else:
+                # Check for clicks on molecular clouds
                 for molecular_cloud in list_of_molecular_clouds:
                     if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
                         if new_selected_entity:
@@ -680,16 +742,47 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                         new_sub_window_active = True
                         clicked_on_entity = True
                         break
+                
+                # Check for clicks on black holes
+                if not clicked_on_entity:
+                    for black_hole in list_of_black_holes:
+                        if black_hole.black_hole_clicked(click_x, click_y):
+                            if new_selected_entity:
+                                new_selected_entity.selected = False
+                            new_selected_entity = black_hole
+                            new_selected_entity.selected = True
+                            new_sub_window_active = True
+                            clicked_on_entity = True
+                            break
+                
+                # Check for clicks on neutron stars
+                if not clicked_on_entity:
+                    for neutron_star in list_of_neutron_stars:
+                        if neutron_star.neutron_star_clicked(click_x, click_y):
+                            if new_selected_entity:
+                                new_selected_entity.selected = False
+                            new_selected_entity = neutron_star
+                            new_selected_entity.selected = True
+                            new_sub_window_active = True
+                            clicked_on_entity = True
+                            break
+                
                 if not clicked_on_entity and new_selected_entity:
-                     new_selected_entity.selected = False
-                     new_selected_entity = None
-                     new_sub_window_active = False
-
+                    new_selected_entity.selected = False
+                    new_selected_entity = None
+                    new_sub_window_active = False
 
     if new_selected_entity:
+        # Deselect all other entities
         for mc in list_of_molecular_clouds:
             if mc is not new_selected_entity:
                 mc.selected = False
+        for bh in list_of_black_holes:
+            if bh is not new_selected_entity:
+                bh.selected = False
+        for ns in list_of_neutron_stars:
+            if ns is not new_selected_entity:
+                ns.selected = False
 
     return running, new_selected_entity, new_sub_window_active
 
