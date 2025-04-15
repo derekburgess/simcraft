@@ -21,8 +21,14 @@ MOLECULAR_CLOUD_GROWTH_RATE = 1
 MOLECULAR_CLOUD_START_MASS = 1
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01
 MOLECULAR_CLOUD_MAX_MASS = 22
-MOLECULAR_CLOUD_START_COLOR = (60, 0, 60)
-MOLECULAR_CLOUD_MID_COLOR = (20, 0, 140)
+MOLECULAR_CLOUD_START_COLORS = [
+    (50, 0, 0),    # Hydrogen - Red (H-alpha) - 75%
+    (50, 50, 0),   # Helium - Yellow (D3) - 23%
+    (0, 50, 0),    # Oxygen - Green (OI) - 1%
+    (0, 0, 50),    # Carbon - Blue (C2) - 0.5%
+    (60, 165, 0),  # Neon - Orange (NeI) - 0.1%
+    (25, 0, 50)    # Nitrogen - Violet (NII) - 0.1%
+]
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
 DEFAULT_STATE_CHANCE = 1
 PROTOSTAR_THRESHOLD = 18
@@ -54,7 +60,7 @@ NEUTRON_STAR_PULSE_WIDTH = 2
 NEUTRON_STAR_RIPPLE_SPEED = 50
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 6
 
-BACKGROUND_COLOR = (0, 0, 20)
+BACKGROUND_COLOR = (0, 0, 10)
 SNAPSHOT_SPEED = 100
 LABEL_COLOR = (255, 255, 255)
 BORDER_COLOR = (150, 150, 150)
@@ -161,6 +167,15 @@ def interpolate_multi_color(colors, factor):
 
 
 list_of_molecular_clouds = []
+ELEMENTAL_ABUNDANCE = [
+    (0, 0.75),     # Hydrogen range: 0-75%
+    (0.75, 0.98),  # Helium range: 75-98%
+    (0.98, 0.99),  # Oxygen range: 98-99%
+    (0.99, 0.995), # Carbon range: 99-99.5%
+    (0.995, 0.996),# Neon range: 99.5-99.6%
+    (0.996, 1.0)   # Nitrogen range: 99.6-100%
+]
+
 class MOLECULAR_CLOUD:
     def __init__(self, x, y, size, mass):
         self.selected = False
@@ -171,20 +186,30 @@ class MOLECULAR_CLOUD:
         self.mass = mass
         self.opacity = 255
         self.gravity_sources = []
+        
+        # Select color based on elemental abundance
+        rand = random.random()
+        for i, (start, end) in enumerate(ELEMENTAL_ABUNDANCE):
+            if start <= rand < end:
+                self.start_color = MOLECULAR_CLOUD_START_COLORS[i]
+                break
 
     def draw_molecular_cloud(self, screen):
         if self.selected:
             highlight_color = (255, 165, 0)
             pygame.draw.rect(screen, highlight_color, (self.x, self.y, self.size, self.size))
         else:
-            factor = self.mass / MOLECULAR_CLOUD_MAX_MASS
-            self.color = interpolate_multi_color([MOLECULAR_CLOUD_START_COLOR, MOLECULAR_CLOUD_MID_COLOR, MOLECULAR_CLOUD_END_COLOR], factor)
+            if self.size <= 4:
+                self.color = MOLECULAR_CLOUD_END_COLOR
+            else:
+                factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
+                self.color = interpolate_color(self.start_color, MOLECULAR_CLOUD_END_COLOR, factor)
             pygame.draw.rect(screen, self.color, (self.x, self.y, self.size, self.size))
 
     def update_molecular_cloud(self):
         self.size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((self.mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
         self.mass = min(self.mass, MOLECULAR_CLOUD_MAX_MASS)
-        if self.size < 6:
+        if self.size < 4:
             self.opacity = random.randint(0, 255)
 
     def check_collisions_with_molecular_clouds(self, other):
@@ -219,7 +244,7 @@ class BLACK_HOLE:
         self.mass = min(mass, BLACK_HOLE_MAX_MASS)
         self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.gravity_sources = []
-        self.tracer_angle = random.uniform(0, 2 * math.pi)  # Random starting angle for the white pixel
+        self.tracer_angle = random.uniform(0, 2 * math.pi)
 
     def draw_black_hole(self, screen):
         radius = int(self.mass // BLACK_HOLE_RADIUS)
@@ -231,7 +256,6 @@ class BLACK_HOLE:
             pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
             pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
         
-        # Draw white pixel tracer around black hole border
         tracer_x = self.x + self.border_radius * math.cos(self.tracer_angle)
         tracer_y = self.y + self.border_radius * math.sin(self.tracer_angle)
         pygame.draw.circle(screen, DISK_COLOR, (int(tracer_x), int(tracer_y)), DISK_SIZE)
@@ -331,9 +355,13 @@ class NEUTRON_STAR:
         
         for pulse in self.active_pulses:
             pulse_radius, _ = pulse
-            pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
-            pygame.draw.circle(pulse_surface, NEUTRON_STAR_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, NEUTRON_STAR_PULSE_WIDTH)
-            screen.blit(pulse_surface, (self.x - pulse_radius, self.y - pulse_radius))
+            center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+            distance_from_center = math.hypot(self.x - center_x, self.y - center_y)
+            
+            if distance_from_center + pulse_radius <= RING_RADIUS:
+                pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
+                pygame.draw.circle(pulse_surface, NEUTRON_STAR_PULSE_COLOR, (pulse_radius, pulse_radius), pulse_radius, NEUTRON_STAR_PULSE_WIDTH)
+                screen.blit(pulse_surface, (self.x - pulse_radius, self.y - pulse_radius))
 
     def neutron_star_clicked(self, click_x, click_y):
         distance = math.hypot(click_x - self.x, click_y - self.y)
@@ -342,7 +370,6 @@ class NEUTRON_STAR:
     def pulse_gravity_from_neutron_star(self, list_of_molecular_clouds, delta_time):
         self.time_since_last_pulse += delta_time
         
-        # Update pulse color state
         if self.pulse_color_state == 1:
             self.pulse_color_duration -= delta_time
             if self.pulse_color_duration <= 0:
@@ -491,27 +518,6 @@ def dump_to_csv(list_of_molecular_clouds, list_of_black_holes, list_of_neutron_s
 
 
 def draw_static_key(screen):
-    #Unknown Object (Neutron Stars) Key
-    unknown_obj_pos = (34, SCREEN_HEIGHT - 224)
-    pygame.draw.rect(screen, NEUTRON_STAR_COLOR, (unknown_obj_pos[0], unknown_obj_pos[1], 4, 4))
-    screen.blit(font.render('UNKNOWN OBJECT', True, LABEL_COLOR), (unknown_obj_pos[0] + 30, unknown_obj_pos[1] - 5))  
-    
-    #Molecular Cloud Key
-    molecular_cloud_pos = (30, SCREEN_HEIGHT - 200)
-    pygame.draw.rect(screen, MOLECULAR_CLOUD_START_COLOR, (molecular_cloud_pos[0], molecular_cloud_pos[1], 15, 15))
-    screen.blit(font.render('MOLECULAR CLOUD', True, LABEL_COLOR), (molecular_cloud_pos[0] + 34, molecular_cloud_pos[1] - 2))  
-    
-    #Protostar Key
-    protostar_pos = (34, SCREEN_HEIGHT - 170)
-    pygame.draw.rect(screen, MOLECULAR_CLOUD_END_COLOR, (protostar_pos[0], protostar_pos[1], 6, 6))
-    screen.blit(font.render('PROTOSTAR', True, LABEL_COLOR), (protostar_pos[0] + 30, protostar_pos[1] - 5))  
-    
-    #Primordial Black Hole Key
-    black_hole_pos = (38, SCREEN_HEIGHT - 140)
-    pygame.draw.circle(screen, (0, 0, 0), black_hole_pos, 6)
-    pygame.draw.circle(screen, (255, 0, 0), black_hole_pos, 6, 2)
-    screen.blit(font.render('PRIMORDIAL BLACK HOLE', True, LABEL_COLOR), (black_hole_pos[0] + 27, black_hole_pos[1] - 8))  
-
     #Data Snapshot Key
     snapshot_pos = (30, SCREEN_HEIGHT - 110)
     screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))  
@@ -691,7 +697,6 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                     new_selected_entity = None
                     new_sub_window_active = False
                 elif not SUB_WINDOW_RECT.collidepoint(click_x, click_y):
-                    # Check for clicks on molecular clouds
                     for molecular_cloud in list_of_molecular_clouds:
                         if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
                             if new_selected_entity:
@@ -702,7 +707,6 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                             clicked_on_entity = True
                             break
                     
-                    # Check for clicks on black holes
                     if not clicked_on_entity:
                         for black_hole in list_of_black_holes:
                             if black_hole.black_hole_clicked(click_x, click_y):
@@ -714,7 +718,6 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                                 clicked_on_entity = True
                                 break
                     
-                    # Check for clicks on neutron stars
                     if not clicked_on_entity:
                         for neutron_star in list_of_neutron_stars:
                             if neutron_star.neutron_star_clicked(click_x, click_y):
@@ -732,7 +735,6 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                         new_selected_entity = None
                         new_sub_window_active = False
             else:
-                # Check for clicks on molecular clouds
                 for molecular_cloud in list_of_molecular_clouds:
                     if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
                         if new_selected_entity:
@@ -743,7 +745,6 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                         clicked_on_entity = True
                         break
                 
-                # Check for clicks on black holes
                 if not clicked_on_entity:
                     for black_hole in list_of_black_holes:
                         if black_hole.black_hole_clicked(click_x, click_y):
@@ -755,7 +756,6 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                             clicked_on_entity = True
                             break
                 
-                # Check for clicks on neutron stars
                 if not clicked_on_entity:
                     for neutron_star in list_of_neutron_stars:
                         if neutron_star.neutron_star_clicked(click_x, click_y):
@@ -773,7 +773,6 @@ def handle_input(list_of_molecular_clouds, selected_entity, sub_window_active):
                     new_sub_window_active = False
 
     if new_selected_entity:
-        # Deselect all other entities
         for mc in list_of_molecular_clouds:
             if mc is not new_selected_entity:
                 mc.selected = False
@@ -795,7 +794,6 @@ def update_simulation_state(list_of_molecular_clouds, list_of_black_holes, list_
     for molecular_cloud in list_of_molecular_clouds:
          molecular_cloud.gravity_sources = []
 
-    # Update white pixel tracers for each black hole
     for black_hole in list_of_black_holes:
         black_hole.tracer_angle += DISK_ROTATION * delta_time
 
@@ -894,10 +892,14 @@ def draw_simulation(screen, ring, list_of_molecular_clouds, list_of_black_holes,
     for pulse in list_of_black_hole_pulses[:]:
         x, y, pulse_radius, consumed_mass = pulse
         if pulse_radius > 0:
-            pulse_width = max(2, int(consumed_mass / 20))
-            pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
-            pygame.draw.circle(pulse_surface, BLACK_HOLE_MERGE_COLOR, (pulse_radius, pulse_radius), pulse_radius, pulse_width)
-            screen.blit(pulse_surface, (x - pulse_radius, y - pulse_radius))
+            center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+            distance_from_center = math.hypot(x - center_x, y - center_y)
+            
+            if distance_from_center + pulse_radius <= RING_RADIUS:
+                pulse_width = max(2, int(consumed_mass / 20))
+                pulse_surface = pygame.Surface((pulse_radius*2, pulse_radius*2), pygame.SRCALPHA)
+                pygame.draw.circle(pulse_surface, BLACK_HOLE_MERGE_COLOR, (pulse_radius, pulse_radius), pulse_radius, pulse_width)
+                screen.blit(pulse_surface, (x - pulse_radius, y - pulse_radius))
 
     for black_hole in list_of_black_holes:
         black_hole.draw_black_hole(screen)
