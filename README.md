@@ -9,6 +9,8 @@ A "blocky" (like minecraft) 2D Universe Simulator (Simcraft). Original base stru
 
 As the project has grown and AI models have become more capable, agentic IDE's more user friendly, this project has shifted to function as a sort of test. Models that have contributed: `Github Copilot/GPT-3`, `GPT-4`, `GPT-4o`, `GPT-4o-mini`, `Claude 3.5 Sonnet`, `Claude 3.7 Sonnet`, `Gemini 2.5 Pro`, `Grok-2`
 
+Added `rng` command for fun...
+
 Inspired by https://en.m.wikipedia.org/wiki/Zero-player_game
 
 Why? I had this drunken thought one afternoon along the lines of, "what if the 'great attractor' was actually just gravity caused by mass collecting at the edge of our universe' expanding manifold?" and so I wanted to see if I could make a dumb little 2D simulation using OpenAI- Run it and find out. The simulation will automatically log data every 500m years...but you can also hit the spacebar to add data to a CSV file. Spam it as needed like you are "observing" the universe. Further more, by using the `simanalysis` command you can see how the universe evolves over time.
