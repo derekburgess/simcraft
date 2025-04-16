@@ -6,8 +6,8 @@ from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
 
-MIN = 10000000000000
-MAX = 99999999999999
+MIN = 10000000000000000000
+MAX = 99999999999999999999
 
 def observe_state():
     data_path_var = os.getenv("SIMCRAFT_DATA")
