@@ -344,7 +344,7 @@ class NEUTRON_STAR:
         self.pulse_color_state = 0  # 0: normal color, 1: white during pulse
         self.pulse_color_duration = 0.1  # Duration of white color in seconds
 
-    def draw_neotron_star(self, screen):
+    def draw_neutron_star(self, screen):
         if self.selected:
             highlight_color = (255, 165, 0)
             pygame.draw.circle(screen, highlight_color, (int(self.x), int(self.y)), self.radius)
@@ -893,7 +893,7 @@ def draw_simulation(screen, ring, list_of_molecular_clouds, list_of_black_holes,
         black_hole.draw_black_hole(screen)
 
     for neutron_star in list_of_neutron_stars:
-        neutron_star.draw_neotron_star(screen)
+        neutron_star.draw_neutron_star(screen)
 
 
 def draw_ui(screen, font, current_year, selected_entity, sub_window_active):

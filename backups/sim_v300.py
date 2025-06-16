@@ -253,7 +253,7 @@ class NEUTRON_STAR:
         self.pulse_strength = NEUTRON_STAR_PULSE_STRENGTH
         self.time_since_last_pulse = 0
 
-    def draw_neotron_star(self, screen):
+    def draw_neutron_star(self, screen):
         pygame.draw.circle(screen, NEUTRON_STAR_COLOR, (self.x, self.y), self.radius)
 
     def pulse_gravity_from_neutron_star(self, list_of_molecular_clouds, delta_time):
@@ -444,7 +444,7 @@ def run_simulation():
                 neutron_star.update_position_of_entities_from_pulse(list_of_molecular_clouds, delta_time)
                 neutron_star.pulse_gravity_from_neutron_star(list_of_molecular_clouds, delta_time)
                 neutron_star.decay_neutron_star()
-                neutron_star.draw_neotron_star(screen)
+                neutron_star.draw_neutron_star(screen)
                 if neutron_star.mass <= BLACK_HOLE_DECAY_THRESHOLD:
                     decay_neutronstars.append(neutron_star)
             for decay_neutronstar in decay_neutronstars.copy():
