@@ -77,7 +77,7 @@ def heatmap(df):
 
 def main():
     parser = argparse.ArgumentParser(description="Run various analysis against the simulation data")
-    parser.add_argument("--cluster", action="store_true", help="View a cluste plot of entity Distance from Center")
+    parser.add_argument("--cluster", action="store_true", help="View a cluster plot of entity distance from center.")
     parser.add_argument("--time", action="store_true", help="View a time series of Astronomical Entities")
     parser.add_argument("--heatmap", action="store_true", help="View a heatmap of Event Distribution")
 
