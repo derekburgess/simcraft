@@ -51,11 +51,11 @@ BLACK_HOLE_THRESHOLD = 20
 BLACK_HOLE_CHANCE = 0.001
 BLACK_HOLE_RADIUS = 8
 BLACK_HOLE_MAX_MASS = 40
-BLACK_HOLE_GRAVITY_CONSTANT = 8.0 * GRAVITY_SCALE
+BLACK_HOLE_GRAVITY_CONSTANT = 10.0 * GRAVITY_SCALE
 BLACK_HOLE_DECAY_RATE = 2.0
 BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
-BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
+BLACK_HOLE_BORDER_COLOR = (100, 0, 0)
 BLACK_HOLE_MERGE_COLOR = (0, 0, 160, 200)
 DISK_COLOR = (255, 100, 100)
 DISK_SIZE = 1
@@ -68,7 +68,7 @@ NEUTRON_STAR_DECAY_RATE = 1.2
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8
 NEUTRON_STAR_COLOR = (0, 120, 255)
 NEUTRON_STAR_PULSE_RATE = 1.5
-NEUTRON_STAR_PULSE_STRENGTH = 2
+NEUTRON_STAR_PULSE_STRENGTH = 1.5
 NEUTRON_STAR_PULSE_COLOR = (0, 0, 160, 40)
 NEUTRON_STAR_PULSE_WIDTH = 2
 NEUTRON_STAR_RIPPLE_SPEED = 50
@@ -93,7 +93,7 @@ BOX_BG_COLOR = (0, 0, 10)
 SUB_WINDOW_RECT = pygame.Rect(20, 20, 180, 450)
 CLOSE_BUTTON_RECT = pygame.Rect(180, 20, 20, 20)
 
-SCREEN_WIDTH = 1536
+SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 960
 
 
@@ -218,6 +218,8 @@ class BARRIER:
         proximity_threshold = self.rest_radius * 0.3
 
         for mc in state.molecular_clouds:
+            if mc.mass < PROTOSTAR_THRESHOLD:
+                continue
             angle, dist, _, _ = self._entity_angle_and_dist(mc)
             barrier_r = self.get_radius_at_angle(angle)
             if abs(dist - barrier_r) < proximity_threshold:
