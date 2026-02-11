@@ -14,6 +14,8 @@ Added `rng` command for fun...
 2026 CE //
 
 Huge refactor using Claude Code Opus 4.6
+The "Ring" concept has been changed to a dynamic manifold barrier that is manipulated by gravity and gravitational events.
+Many other little improvements and bug fixes. Improved RNG and now output number on quit.
 
 Original Context:
 

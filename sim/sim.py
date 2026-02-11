@@ -11,17 +11,20 @@ import matplotlib.backends.backend_agg as agg
 GRAVITY_SCALE = 0.15
 
 BARRIER_RADIUS = 450
-BARRIER_POINT_COUNT = 400
+BARRIER_POINT_COUNT = 600
 BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE
-BARRIER_COLOR = (15, 30, 180)
-BARRIER_BASE_OPACITY = 90
-BARRIER_FLASH_OPACITY = 220
+BARRIER_COLOR = (30, 60, 220)
+BARRIER_BASE_OPACITY = 150
+BARRIER_FLASH_COLOR = (0, 184, 106)
+BARRIER_FLASH_OPACITY = 255
 BARRIER_FLASH_DECAY = 3.0
 BARRIER_WAVE_PUSH = 400.0
 BARRIER_DAMPING = 0.05
 BARRIER_DEFORM_THRESHOLD = 0.1
 BARRIER_MIN_RADIUS = 100
 BARRIER_HEAVY_MASS_THRESHOLD = 60
+BARRIER_SMOOTHING_PASSES = 3
+BARRIER_SMOOTHING_WINDOW = 5
 
 MOLECULAR_CLOUD_COUNT = 30000
 MOLECULAR_CLOUD_START_SIZE = 20
@@ -39,13 +42,13 @@ MOLECULAR_CLOUD_START_COLORS = [
     (25, 0, 50)    # Nitrogen - Violet (NII) - 0.1%
 ]
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
-DEFAULT_STATE_CHANCE = 1
+DEFAULT_STATE_CHANCE = 0.05
 PROTOSTAR_THRESHOLD = 18
-PROTOSTAR_EJECTA_COUNT = 3
+PROTOSTAR_EJECTA_COUNT = 10
 PROTOSTAR_EJECTA_SPREAD = 30
 
 BLACK_HOLE_THRESHOLD = 20
-BLACK_HOLE_CHANCE = 0.005
+BLACK_HOLE_CHANCE = 0.001
 BLACK_HOLE_RADIUS = 8
 BLACK_HOLE_MAX_MASS = 40
 BLACK_HOLE_GRAVITY_CONSTANT = 8.0 * GRAVITY_SCALE
@@ -58,7 +61,7 @@ DISK_COLOR = (255, 100, 100)
 DISK_SIZE = 1
 DISK_ROTATION = 10.0
 
-NEUTRON_STAR_CHANCE = 0.05
+NEUTRON_STAR_CHANCE = 0.2
 NEUTRON_STAR_RADIUS = 1
 NEUTRON_STAR_GRAVITY_CONSTANT = 1.2 * GRAVITY_SCALE
 NEUTRON_STAR_DECAY_RATE = 1.2
@@ -301,10 +304,21 @@ class BARRIER:
 
     def draw_barrier(self, screen):
         cx, cy = self.center
+        smoothed = list(self.radii)
+        half_w = BARRIER_SMOOTHING_WINDOW // 2
+        n = self.num_points
+        for _ in range(BARRIER_SMOOTHING_PASSES):
+            prev = list(smoothed)
+            for i in range(n):
+                total = 0.0
+                for k in range(-half_w, half_w + 1):
+                    total += prev[(i + k) % n]
+                smoothed[i] = total / BARRIER_SMOOTHING_WINDOW
+
         points = []
         for i in range(self.num_points):
             a = self.angles[i]
-            r = self.radii[i]
+            r = smoothed[i]
             points.append((int(cx + r * math.cos(a)), int(cy + r * math.sin(a))))
 
         barrier_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
@@ -317,7 +331,10 @@ class BARRIER:
             flash_val = max(self.flash[i], self.flash[j])
             if flash_val > 0.01:
                 opacity = int(BARRIER_BASE_OPACITY + flash_val * (BARRIER_FLASH_OPACITY - BARRIER_BASE_OPACITY))
-                color = BARRIER_COLOR + (min(255, opacity),)
+                r = int(BARRIER_COLOR[0] + flash_val * (BARRIER_FLASH_COLOR[0] - BARRIER_COLOR[0]))
+                g = int(BARRIER_COLOR[1] + flash_val * (BARRIER_FLASH_COLOR[1] - BARRIER_COLOR[1]))
+                b = int(BARRIER_COLOR[2] + flash_val * (BARRIER_FLASH_COLOR[2] - BARRIER_COLOR[2]))
+                color = (r, g, b, min(255, opacity))
                 pygame.draw.line(barrier_surface, color, points[i], points[j], 3)
 
         screen.blit(barrier_surface, (0, 0))
@@ -355,8 +372,17 @@ ELEMENTAL_ABUNDANCE = [
     (0.996, 1.0)   # Nitrogen range: 99.6-100%
 ]
 
+EJECTA_ELEMENTAL_ABUNDANCE = [
+    (0, 0.50),     # Hydrogen range: 0-50%
+    (0.50, 0.80),  # Helium range: 50-80%
+    (0.80, 0.90),  # Oxygen range: 80-90%
+    (0.90, 0.96),  # Carbon range: 90-96%
+    (0.96, 0.98),  # Neon range: 96-98%
+    (0.98, 1.0)    # Nitrogen range: 98-100%
+]
+
 class MOLECULAR_CLOUD:
-    def __init__(self, x, y, size, mass):
+    def __init__(self, x, y, size, mass, abundance=None):
         self.selected = False
         self.id = generate_unique_id()
         self.x = x
@@ -368,7 +394,7 @@ class MOLECULAR_CLOUD:
         self.opacity = 255
 
         rand = random.random()
-        for i, (start, end) in enumerate(ELEMENTAL_ABUNDANCE):
+        for i, (start, end) in enumerate(abundance or ELEMENTAL_ABUNDANCE):
             if start <= rand < end:
                 self.start_color = MOLECULAR_CLOUD_START_COLORS[i]
                 break
@@ -383,13 +409,22 @@ class MOLECULAR_CLOUD:
             else:
                 factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
                 self.color = interpolate_color(self.start_color, MOLECULAR_CLOUD_END_COLOR, factor)
-            pygame.draw.rect(screen, self.color, (self.x, self.y, self.size, self.size))
+            if self.opacity < 255:
+                s = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+                s.fill(self.color + (self.opacity,))
+                screen.blit(s, (self.x, self.y))
+            else:
+                pygame.draw.rect(screen, self.color, (self.x, self.y, self.size, self.size))
 
     def update_molecular_cloud(self):
         self.size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((self.mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
         self.mass = min(self.mass, MOLECULAR_CLOUD_MAX_MASS)
-        if self.size < 4:
+        if self.mass >= PROTOSTAR_THRESHOLD:
+            self.opacity = 255
+        elif self.size < 4:
             self.opacity = random.randint(0, 255)
+        else:
+            self.opacity = 150
 
     def check_collisions_with_molecular_clouds(self, other):
         return (self.x < other.x + other.size and
@@ -720,7 +755,7 @@ def update_entities(state):
                     offset_dist = random.uniform(5, PROTOSTAR_EJECTA_SPREAD)
                     ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
                     ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
-                    child = MOLECULAR_CLOUD(ex, ey, MOLECULAR_CLOUD_START_SIZE, ejecta_mass)
+                    child = MOLECULAR_CLOUD(ex, ey, MOLECULAR_CLOUD_START_SIZE, ejecta_mass, EJECTA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
                     child.vy = math.sin(offset_angle) * offset_dist * 0.5
                     new_clouds.append(child)
@@ -1109,6 +1144,17 @@ def update_simulation_state(state, ring, delta_time, current_year, sim_data):
                     neutron_star.vx += (dx / distance) * force * delta_time * 1.5
                     neutron_star.vy += (dy / distance) * force * delta_time * 1.5
 
+        cx, cy = ring.center
+        pulse_fade = max(0.0, 1.0 - new_radius / BARRIER_RADIUS)
+        for bi in range(ring.num_points):
+            bx = cx + ring.radii[bi] * math.cos(ring.angles[bi])
+            by = cy + ring.radii[bi] * math.sin(ring.angles[bi])
+            dist_to_pulse = math.hypot(bx - x, by - y)
+            if abs(dist_to_pulse - new_radius) < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
+                ring.flash[bi] = max(ring.flash[bi], pulse_fade * 0.8)
+                if ring.radii[bi] < ring.rest_radius:
+                    ring.radii_vel[bi] += BARRIER_WAVE_PUSH * 1.5 * pulse_fade * delta_time
+
         if new_radius > BARRIER_RADIUS:
             pulses_to_remove.append(i)
 
@@ -1276,6 +1322,19 @@ def run_simulation(screen, font, sim_data, state, ring):
                 state, ring, delta_time, current_year, sim_data
             )
 
+            entity_count = len(state.molecular_clouds) + len(state.black_holes) + len(state.neutron_stars)
+            total_mass = (
+                sum(mc.mass for mc in state.molecular_clouds)
+                + sum(bh.mass for bh in state.black_holes)
+                + sum(ns.mass for ns in state.neutron_stars)
+            )
+            if entity_count == 0 or total_mass <= 0:
+                print(f"Reset at year {current_year}: entities={entity_count}, mass={total_mass}")
+                state, ring = initialize_state()
+                current_year = 0
+                selected_entity = None
+                sub_window_active = False
+
             screen.fill(BACKGROUND_COLOR)
 
             draw_simulation(screen, ring, state)
@@ -1305,23 +1364,10 @@ def run_simulation(screen, font, sim_data, state, ring):
         pygame.quit()
 
 
-def main():
-    pygame.init()
-    pygame.display.set_caption("simcraft")
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    font = pygame.font.SysFont('Monospace', 14)
-    sim_data_path = os.getenv("SIMCRAFT_DATA")
-    sim_data = os.path.join(sim_data_path, 'sim_data.csv')
-
-    if os.path.isfile(sim_data):
-        os.remove(sim_data)
-        print(f"Checking and clearing sim_data")
-
+def initialize_state():
     state = SimulationState()
-
     ring = BARRIER((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), BARRIER_RADIUS, BARRIER_POINT_COUNT)
 
-    print("Populating space with molecular clouds")
     density_weights = [max(0.0, 1.0 - CMB_DENSITY_CONTRAST * ring.perturbation[i]) for i in range(ring.num_points)]
     total_weight = sum(density_weights)
     density_weights = [w / total_weight for w in density_weights]
@@ -1343,6 +1389,24 @@ def main():
         y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
         molecular_cloud = MOLECULAR_CLOUD(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS)
         state.molecular_clouds.append(molecular_cloud)
+
+    return state, ring
+
+
+def main():
+    pygame.init()
+    pygame.display.set_caption("simcraft")
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    font = pygame.font.SysFont('Monospace', 14)
+    sim_data_path = os.getenv("SIMCRAFT_DATA")
+    sim_data = os.path.join(sim_data_path, 'sim_data.csv')
+
+    if os.path.isfile(sim_data):
+        os.remove(sim_data)
+        print(f"Checking and clearing sim_data")
+
+    print("Populating space with molecular clouds")
+    state, ring = initialize_state()
 
     print("Starting simulation")
     run_simulation(screen, font, sim_data, state, ring)
