@@ -26,7 +26,7 @@ BARRIER_HEAVY_MASS_THRESHOLD = 60
 BARRIER_SMOOTHING_PASSES = 3
 BARRIER_SMOOTHING_WINDOW = 5
 
-MOLECULAR_CLOUD_COUNT = 30000
+MOLECULAR_CLOUD_COUNT = 20000
 MOLECULAR_CLOUD_START_SIZE = 20
 MOLECULAR_CLOUD_MIN_SIZE = 2
 MOLECULAR_CLOUD_GROWTH_RATE = 1
@@ -42,13 +42,13 @@ MOLECULAR_CLOUD_START_COLORS = [
     (25, 0, 50)    # Nitrogen - Violet (NII) - 0.1%
 ]
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
-DEFAULT_STATE_CHANCE = 0.05
+DEFAULT_STATE_CHANCE = 0.1
 PROTOSTAR_THRESHOLD = 18
-PROTOSTAR_EJECTA_COUNT = 10
-PROTOSTAR_EJECTA_SPREAD = 30
+PROTOSTAR_EJECTA_COUNT = 80
+PROTOSTAR_EJECTA_SPREAD = 100
 
 BLACK_HOLE_THRESHOLD = 20
-BLACK_HOLE_CHANCE = 0.001
+BLACK_HOLE_CHANCE = 0.005
 BLACK_HOLE_RADIUS = 8
 BLACK_HOLE_MAX_MASS = 40
 BLACK_HOLE_GRAVITY_CONSTANT = 10.0 * GRAVITY_SCALE
@@ -56,23 +56,23 @@ BLACK_HOLE_DECAY_RATE = 2.0
 BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (100, 0, 0)
-BLACK_HOLE_MERGE_COLOR = (0, 0, 160, 200)
+BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)
 DISK_COLOR = (255, 100, 100)
 DISK_SIZE = 1
 DISK_ROTATION = 10.0
 
-NEUTRON_STAR_CHANCE = 0.2
+NEUTRON_STAR_CHANCE = 0.08
 NEUTRON_STAR_RADIUS = 1
 NEUTRON_STAR_GRAVITY_CONSTANT = 1.2 * GRAVITY_SCALE
-NEUTRON_STAR_DECAY_RATE = 1.2
+NEUTRON_STAR_DECAY_RATE = 0.6
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8
 NEUTRON_STAR_COLOR = (0, 120, 255)
-NEUTRON_STAR_PULSE_RATE = 1.5
-NEUTRON_STAR_PULSE_STRENGTH = 1.5
-NEUTRON_STAR_PULSE_COLOR = (0, 0, 160, 40)
+NEUTRON_STAR_PULSE_RATE = 0.1
+NEUTRON_STAR_PULSE_STRENGTH = 20
+NEUTRON_STAR_PULSE_COLOR = (0, 60, 180, 80)
 NEUTRON_STAR_PULSE_WIDTH = 2
-NEUTRON_STAR_RIPPLE_SPEED = 50
-NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 6
+NEUTRON_STAR_RIPPLE_SPEED = 40
+NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 10
 
 BH_BARRIER_GRAVITY_FACTOR = 0.5
 NS_BARRIER_GRAVITY_FACTOR = 0.7
@@ -625,7 +625,7 @@ class NEUTRON_STAR:
                 ripple_dist = abs(distance - radius)
                 if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:
                     effect_factor = 1.0 - (ripple_dist / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
-                    force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 1.5)
+                    force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 0.8)
 
                     if distance > 0:
                         molecular_cloud.vx += (dx / distance) * force * delta_time
@@ -639,7 +639,7 @@ class NEUTRON_STAR:
                 ripple_dist = abs(distance - radius)
                 if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:
                     effect_factor = (1.0 - (ripple_dist / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)) * 0.3
-                    force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 2)
+                    force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 1.2)
 
                     if distance > 0:
                         black_hole.vx += (dx / distance) * force * delta_time * 0.2
