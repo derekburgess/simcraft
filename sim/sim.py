@@ -3,13 +3,16 @@ import csv
 import pygame
 import math
 import random
+import bisect
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_agg as agg
 
 
+GRAVITY_SCALE = 0.15
+
 BARRIER_RADIUS = 450
 BARRIER_POINT_COUNT = 400
-BARRIER_GRAVITY_CONSTANT = 120
+BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE
 BARRIER_COLOR = (15, 30, 180)
 BARRIER_BASE_OPACITY = 90
 BARRIER_FLASH_OPACITY = 220
@@ -20,12 +23,12 @@ BARRIER_DEFORM_THRESHOLD = 0.1
 BARRIER_MIN_RADIUS = 100
 BARRIER_HEAVY_MASS_THRESHOLD = 60
 
-MOLECULAR_CLOUD_COUNT = 15000
+MOLECULAR_CLOUD_COUNT = 30000
 MOLECULAR_CLOUD_START_SIZE = 20
 MOLECULAR_CLOUD_MIN_SIZE = 2
 MOLECULAR_CLOUD_GROWTH_RATE = 1
 MOLECULAR_CLOUD_START_MASS = 1
-MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01
+MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01 * GRAVITY_SCALE
 MOLECULAR_CLOUD_MAX_MASS = 22
 MOLECULAR_CLOUD_START_COLORS = [
     (50, 0, 0),    # Hydrogen - Red (H-alpha) - 75%
@@ -38,13 +41,15 @@ MOLECULAR_CLOUD_START_COLORS = [
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
 DEFAULT_STATE_CHANCE = 1
 PROTOSTAR_THRESHOLD = 18
+PROTOSTAR_EJECTA_COUNT = 3
+PROTOSTAR_EJECTA_SPREAD = 30
 
 BLACK_HOLE_THRESHOLD = 20
-BLACK_HOLE_CHANCE = 0.3
+BLACK_HOLE_CHANCE = 0.005
 BLACK_HOLE_RADIUS = 8
 BLACK_HOLE_MAX_MASS = 40
-BLACK_HOLE_GRAVITY_CONSTANT = 5.0
-BLACK_HOLE_DECAY_RATE = 4.8
+BLACK_HOLE_GRAVITY_CONSTANT = 8.0 * GRAVITY_SCALE
+BLACK_HOLE_DECAY_RATE = 2.0
 BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
 BLACK_HOLE_BORDER_COLOR = (200, 0, 0)
@@ -53,18 +58,27 @@ DISK_COLOR = (255, 100, 100)
 DISK_SIZE = 1
 DISK_ROTATION = 10.0
 
-NEUTRON_STAR_CHANCE = 0.2
+NEUTRON_STAR_CHANCE = 0.05
 NEUTRON_STAR_RADIUS = 1
-NEUTRON_STAR_GRAVITY_CONSTANT = 1.2
-NEUTRON_STAR_DECAY_RATE = 4.8
+NEUTRON_STAR_GRAVITY_CONSTANT = 1.2 * GRAVITY_SCALE
+NEUTRON_STAR_DECAY_RATE = 1.2
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8
 NEUTRON_STAR_COLOR = (0, 120, 255)
-NEUTRON_STAR_PULSE_RATE = 0.5
+NEUTRON_STAR_PULSE_RATE = 1.5
 NEUTRON_STAR_PULSE_STRENGTH = 2
 NEUTRON_STAR_PULSE_COLOR = (0, 0, 160, 40)
 NEUTRON_STAR_PULSE_WIDTH = 2
 NEUTRON_STAR_RIPPLE_SPEED = 50
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 6
+
+BH_BARRIER_GRAVITY_FACTOR = 0.5
+NS_BARRIER_GRAVITY_FACTOR = 0.7
+NS_TO_BH_GRAVITY_FACTOR = 1.5
+BH_RECOIL_FROM_NS_FACTOR = 0.3
+
+CMB_PERTURBATION_MODES = 6
+CMB_PERTURBATION_SCALE = 0.08
+CMB_DENSITY_CONTRAST = 0.6
 
 VELOCITY_DAMPING = 0.74
 
@@ -134,7 +148,15 @@ class BARRIER:
         self.rest_radius = radius
         self.num_points = num_points
         self.angles = [(2 * math.pi / num_points) * i for i in range(num_points)]
-        self.radii = [float(radius)] * num_points
+
+        self.perturbation = [0.0] * num_points
+        for mode in range(1, CMB_PERTURBATION_MODES + 1):
+            amplitude = random.gauss(0, CMB_PERTURBATION_SCALE / mode)
+            phase = random.uniform(0, 2 * math.pi)
+            for i in range(num_points):
+                self.perturbation[i] += amplitude * math.sin(mode * self.angles[i] + phase)
+
+        self.radii = [float(radius) * (1.0 + self.perturbation[i]) for i in range(num_points)]
         self.radii_vel = [0.0] * num_points
         self.flash = [0.0] * num_points
 
@@ -162,7 +184,7 @@ class BARRIER:
             target_dx = cx + barrier_r * math.cos(angle) - mc.x
             target_dy = cy + barrier_r * math.sin(angle) - mc.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = BARRIER_GRAVITY_CONSTANT * mc.mass / (target_dist ** 2)
+            force = BARRIER_GRAVITY_CONSTANT * math.sqrt(mc.mass) / (target_dist ** 2)
             if target_dist > mc.size / 2:
                 mc.vx += (target_dx / target_dist) * force * delta_time
                 mc.vy += (target_dy / target_dist) * force * delta_time
@@ -173,7 +195,7 @@ class BARRIER:
             target_dx = cx + barrier_r * math.cos(angle) - bh.x
             target_dy = cy + barrier_r * math.sin(angle) - bh.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * bh.mass / (target_dist ** 2)) * 0.5
+            force = (BARRIER_GRAVITY_CONSTANT * bh.mass / (target_dist ** 2)) * BH_BARRIER_GRAVITY_FACTOR
             bh.vx += (target_dx / target_dist) * force * delta_time
             bh.vy += (target_dy / target_dist) * force * delta_time
 
@@ -183,7 +205,7 @@ class BARRIER:
             target_dx = cx + barrier_r * math.cos(angle) - ns.x
             target_dy = cy + barrier_r * math.sin(angle) - ns.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * ns.mass / (target_dist ** 2)) * 0.7
+            force = (BARRIER_GRAVITY_CONSTANT * ns.mass / (target_dist ** 2)) * NS_BARRIER_GRAVITY_FACTOR
             ns.vx += (target_dx / target_dist) * force * delta_time
             ns.vy += (target_dy / target_dist) * force * delta_time
 
@@ -200,12 +222,13 @@ class BARRIER:
                 i0 = int(idx) % self.num_points
                 i1 = (i0 + 1) % self.num_points
                 t = idx - int(idx)
-                mass_accum[i0] += mc.mass * (1 - t)
-                mass_accum[i1] += mc.mass * t
+                effective_mass = math.sqrt(mc.mass)
+                mass_accum[i0] += effective_mass * (1 - t)
+                mass_accum[i1] += effective_mass * t
 
         damping = BARRIER_DAMPING ** delta_time
         for i in range(self.num_points):
-            inward_force = mass_accum[i] * 4.0
+            inward_force = mass_accum[i] * 2.0
             self.radii_vel[i] -= inward_force * delta_time
             self.radii_vel[i] *= damping
             old_radius = self.radii[i]
@@ -620,11 +643,11 @@ class NEUTRON_STAR:
 
             force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
 
-            self.vx += (dx / distance) * force * delta_time * 1.5
-            self.vy += (dy / distance) * force * delta_time * 1.5
+            self.vx += (dx / distance) * force * delta_time * NS_TO_BH_GRAVITY_FACTOR
+            self.vy += (dy / distance) * force * delta_time * NS_TO_BH_GRAVITY_FACTOR
 
-            black_hole.vx -= (dx / distance) * force * delta_time * 0.3
-            black_hole.vy -= (dy / distance) * force * delta_time * 0.3
+            black_hole.vx -= (dx / distance) * force * delta_time * BH_RECOIL_FROM_NS_FACTOR
+            black_hole.vy -= (dy / distance) * force * delta_time * BH_RECOIL_FROM_NS_FACTOR
 
     def decay_neutron_star(self, delta_time):
         self.mass -= NEUTRON_STAR_DECAY_RATE * delta_time
@@ -636,6 +659,26 @@ def integrate_entity(entity, delta_time):
     entity.vy *= damping
     entity.x += entity.vx * delta_time
     entity.y += entity.vy * delta_time
+
+
+def apply_mc_gravity(state, delta_time):
+    for mc in state.molecular_clouds:
+        neighbors = state.spatial_hash.query_neighbors(mc)
+        ax, ay = 0.0, 0.0
+        for other in neighbors:
+            if other is mc:
+                continue
+            dx = other.x - mc.x
+            dy = other.y - mc.y
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < 1:
+                continue
+            dist = math.sqrt(dist_sq)
+            force = MOLECULAR_CLOUD_GRAVITY_CONSTANT * (mc.mass * other.mass) / dist_sq
+            ax += (dx / dist) * force
+            ay += (dy / dist) * force
+        mc.vx += ax * delta_time
+        mc.vy += ay * delta_time
 
 
 def handle_collisions(state):
@@ -660,6 +703,7 @@ def handle_collisions(state):
 def update_entities(state):
     handle_collisions(state)
     list_of_molecular_clouds_to_remove = []
+    new_clouds = []
     for molecular_cloud in state.molecular_clouds:
         molecular_cloud.update_molecular_cloud()
         if molecular_cloud.mass > BLACK_HOLE_THRESHOLD:
@@ -670,10 +714,21 @@ def update_entities(state):
                     state.black_holes.append(BLACK_HOLE(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 list_of_molecular_clouds_to_remove.append(molecular_cloud)
             elif random.random() < DEFAULT_STATE_CHANCE:
-                molecular_cloud.mass = MOLECULAR_CLOUD_START_MASS
+                ejecta_mass = molecular_cloud.mass / (PROTOSTAR_EJECTA_COUNT + 1)
+                for _ in range(PROTOSTAR_EJECTA_COUNT):
+                    offset_angle = random.uniform(0, 2 * math.pi)
+                    offset_dist = random.uniform(5, PROTOSTAR_EJECTA_SPREAD)
+                    ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
+                    ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
+                    child = MOLECULAR_CLOUD(ex, ey, MOLECULAR_CLOUD_START_SIZE, ejecta_mass)
+                    child.vx = math.cos(offset_angle) * offset_dist * 0.5
+                    child.vy = math.sin(offset_angle) * offset_dist * 0.5
+                    new_clouds.append(child)
+                molecular_cloud.mass = ejecta_mass
                 molecular_cloud.size = MOLECULAR_CLOUD_START_SIZE
     for molecular_cloud in list_of_molecular_clouds_to_remove:
         state.molecular_clouds.remove(molecular_cloud)
+    state.molecular_clouds.extend(new_clouds)
 
 
 global_index_counter = 1
@@ -997,6 +1052,7 @@ def update_simulation_state(state, ring, delta_time, current_year, sim_data):
     state.spatial_hash.clear()
     state.spatial_hash.bulk_insert(state.molecular_clouds)
 
+    apply_mc_gravity(state, delta_time)
     update_entities(state)
 
     ring.apply_gravity(state, delta_time)
@@ -1194,7 +1250,7 @@ def draw_ui(screen, font, current_year, selected_entity, sub_window_active, sim_
              screen.blit(no_selection_text, (SUB_WINDOW_RECT.x + 10, SUB_WINDOW_RECT.y + 10))
 
 
-def run_simulation(screen, font, sim_data, state):
+def run_simulation(screen, font, sim_data, state, ring):
     try:
         running = True
         clock = pygame.time.Clock()
@@ -1202,8 +1258,6 @@ def run_simulation(screen, font, sim_data, state):
         last_frame_time = pygame.time.get_ticks()
         selected_entity = None
         sub_window_active = False
-
-        ring = BARRIER((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), BARRIER_RADIUS, BARRIER_POINT_COUNT)
 
         while running:
             current_time = pygame.time.get_ticks()
@@ -1256,17 +1310,33 @@ def main():
 
     state = SimulationState()
 
+    ring = BARRIER((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), BARRIER_RADIUS, BARRIER_POINT_COUNT)
+
     print("Populating space with molecular clouds")
+    density_weights = [max(0.0, 1.0 - CMB_DENSITY_CONTRAST * ring.perturbation[i]) for i in range(ring.num_points)]
+    total_weight = sum(density_weights)
+    density_weights = [w / total_weight for w in density_weights]
+    cumulative_weights = []
+    running_sum = 0.0
+    for w in density_weights:
+        running_sum += w
+        cumulative_weights.append(running_sum)
+
     for _ in range(MOLECULAR_CLOUD_COUNT):
-        radius = math.sqrt(random.uniform(0, 1)) * BARRIER_RADIUS
-        angle = random.uniform(0, 2 * math.pi)
+        r = random.random()
+        idx = bisect.bisect_left(cumulative_weights, r)
+        idx = min(idx, ring.num_points - 1)
+        step = 2 * math.pi / ring.num_points
+        angle = ring.angles[idx] + random.uniform(0, step)
+        local_radius = ring.get_radius_at_angle(angle)
+        radius = math.sqrt(random.uniform(0, 1)) * local_radius
         x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
         y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
         molecular_cloud = MOLECULAR_CLOUD(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS)
         state.molecular_clouds.append(molecular_cloud)
 
     print("Starting simulation")
-    run_simulation(screen, font, sim_data, state)
+    run_simulation(screen, font, sim_data, state, ring)
 
 if __name__ == "__main__":
     main()
