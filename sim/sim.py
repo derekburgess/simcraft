@@ -1288,6 +1288,15 @@ def run_simulation(screen, font, sim_data, state, ring):
             clock.tick(60)
 
         print("Exited simulation")
+
+        try:
+            from analysis.rng import serialize_state, generate
+            state_bytes, entity_count = serialize_state(state)
+            result = generate(state_bytes, 10000000000000000000, 99999999999999999999)
+            print(f"{result['random_number']}")
+        except Exception as rng_err:
+            print(f"RNG generation failed: {rng_err}")
+
     except Exception as e:
         import traceback
         print(f"Error occurred in simulation loop: {e}")
