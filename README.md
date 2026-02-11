@@ -11,6 +11,12 @@ As the project has grown and AI models have become more capable, agentic IDE's m
 
 Added `rng` command for fun...
 
+2026 CE //
+
+Huge refactor using Claude Code Opus 4.6
+
+Original Context:
+
 Inspired by https://en.m.wikipedia.org/wiki/Zero-player_game
 
 Why? I had this drunken thought one afternoon along the lines of, "what if the 'great attractor' was actually just gravity caused by mass collecting at the edge of our universe' expanding manifold?" and so I wanted to see if I could make a dumb little 2D simulation using OpenAI- Run it and find out. The simulation will automatically log data every 500m years...but you can also hit the spacebar to add data to a CSV file. Spam it as needed like you are "observing" the universe. Further more, by using the `simanalysis` command you can see how the universe evolves over time.
