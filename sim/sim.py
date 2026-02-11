@@ -1275,10 +1275,21 @@ def draw_simulation(screen, ring, state):
         neutron_star.draw_neutron_star(screen, ring, all_pulses)
 
 
+def format_year_display(current_year):
+    if current_year >= 1_000_000_000:
+        return "TIME(YEARS): \u221e"
+    elif current_year >= 1_000_000:
+        return f"TIME(YEARS): {current_year / 1_000_000:.1f}T"
+    elif current_year >= 1_000:
+        return f"TIME(YEARS): {current_year / 1_000:.1f}B"
+    else:
+        return f"TIME(YEARS): {current_year}M"
+
+
 def draw_ui(screen, font, current_year, selected_entity, sub_window_active, sim_data):
     draw_static_key(screen, font)
 
-    year_text = font.render(f"TIME(YEARS): {current_year}M", True, LABEL_COLOR)
+    year_text = font.render(format_year_display(current_year), True, LABEL_COLOR)
     screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
 
     if sub_window_active:
