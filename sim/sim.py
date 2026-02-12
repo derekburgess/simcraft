@@ -10,7 +10,6 @@ import matplotlib.backends.backend_agg as agg
 
 GRAVITY_SCALE = 0.15
 
-BARRIER_RADIUS = 450
 BARRIER_POINT_COUNT = 600
 BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE
 BARRIER_COLOR = (30, 60, 220)
@@ -21,7 +20,6 @@ BARRIER_FLASH_DECAY = 3.0
 BARRIER_WAVE_PUSH = 400.0
 BARRIER_DAMPING = 0.05
 BARRIER_DEFORM_THRESHOLD = 0.1
-BARRIER_MIN_RADIUS = 100
 BARRIER_HEAVY_MASS_THRESHOLD = 60
 BARRIER_SMOOTHING_PASSES = 3
 BARRIER_SMOOTHING_WINDOW = 5
@@ -95,6 +93,10 @@ NS_PULSE_MASS_BOOST = 0.1
 
 BH_BARRIER_GRAVITY_FACTOR = 0.5
 NS_BARRIER_GRAVITY_FACTOR = 0.7
+
+MC_BARRIER_DEFORM_FACTOR = 1.0
+BH_BARRIER_DEFORM_FACTOR = 20.
+NS_BARRIER_DEFORM_FACTOR = 8.0
 NS_TO_BH_GRAVITY_FACTOR = 1.5
 BH_RECOIL_FROM_NS_FACTOR = 0.3
 
@@ -239,6 +241,18 @@ class BARRIER:
             ns.vx += (target_dx / target_dist) * force * delta_time
             ns.vy += (target_dy / target_dist) * force * delta_time
 
+    def _accum_deformation(self, entity, mass_accum, step, proximity_threshold, factor):
+        angle, dist, _, _ = self._entity_angle_and_dist(entity)
+        barrier_r = self.get_radius_at_angle(angle)
+        if abs(dist - barrier_r) < proximity_threshold:
+            idx = angle / step
+            i0 = int(idx) % self.num_points
+            i1 = (i0 + 1) % self.num_points
+            t = idx - int(idx)
+            effective_mass = math.sqrt(entity.mass) * factor
+            mass_accum[i0] += effective_mass * (1 - t)
+            mass_accum[i1] += effective_mass * t
+
     def update_deformation(self, state, delta_time):
         mass_accum = [0.0] * self.num_points
         step = 2 * math.pi / self.num_points
@@ -247,16 +261,13 @@ class BARRIER:
         for mc in state.molecular_clouds:
             if mc.mass < PROTOSTAR_THRESHOLD:
                 continue
-            angle, dist, _, _ = self._entity_angle_and_dist(mc)
-            barrier_r = self.get_radius_at_angle(angle)
-            if abs(dist - barrier_r) < proximity_threshold:
-                idx = angle / step
-                i0 = int(idx) % self.num_points
-                i1 = (i0 + 1) % self.num_points
-                t = idx - int(idx)
-                effective_mass = math.sqrt(mc.mass)
-                mass_accum[i0] += effective_mass * (1 - t)
-                mass_accum[i1] += effective_mass * t
+            self._accum_deformation(mc, mass_accum, step, proximity_threshold, MC_BARRIER_DEFORM_FACTOR)
+
+        for bh in state.black_holes:
+            self._accum_deformation(bh, mass_accum, step, proximity_threshold, BH_BARRIER_DEFORM_FACTOR)
+
+        for ns in state.neutron_stars:
+            self._accum_deformation(ns, mass_accum, step, proximity_threshold, NS_BARRIER_DEFORM_FACTOR)
 
         damping = BARRIER_DAMPING ** delta_time
         for i in range(self.num_points):
@@ -265,7 +276,7 @@ class BARRIER:
             self.radii_vel[i] *= damping
             old_radius = self.radii[i]
             self.radii[i] += self.radii_vel[i] * delta_time
-            self.radii[i] = max(self.radii[i], BARRIER_MIN_RADIUS)
+            self.radii[i] = max(self.radii[i], 1.0)
 
             if abs(self.radii[i] - old_radius) > BARRIER_DEFORM_THRESHOLD:
                 self.flash[i] = 1.0
@@ -671,8 +682,7 @@ class NEUTRON_STAR:
                 dist_to_star = math.hypot(bx - self.x, by - self.y)
                 if abs(dist_to_star - new_radius) < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
                     ring.flash[bi] = max(ring.flash[bi], new_fade * 0.6)
-                    if ring.radii[bi] < ring.rest_radii[bi]:
-                        ring.radii_vel[bi] += BARRIER_WAVE_PUSH * new_fade * delta_time
+                    ring.radii_vel[bi] += BARRIER_WAVE_PUSH * new_fade * delta_time
 
             for molecular_cloud in state.molecular_clouds:
                 dx = molecular_cloud.x - self.x
@@ -1049,10 +1059,6 @@ def handle_input(state, selected_entity, sub_window_active, zoom, view_center_x,
                 else:
                     view_center_x = world_x - (mouse_sx - SCREEN_WIDTH / 2) / zoom
                     view_center_y = world_y - (mouse_sy - SCREEN_HEIGHT / 2) / zoom
-                    view_w = SCREEN_WIDTH / zoom
-                    view_h = SCREEN_HEIGHT / zoom
-                    view_center_x = max(view_w / 2, min(SCREEN_WIDTH - view_w / 2, view_center_x))
-                    view_center_y = max(view_h / 2, min(SCREEN_HEIGHT - view_h / 2, view_center_y))
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             screen_click_x, screen_click_y = event.pos
@@ -1250,10 +1256,9 @@ def update_simulation_state(state, ring, delta_time, current_year, sim_data):
             dist_to_pulse = math.hypot(bx - x, by - y)
             if abs(dist_to_pulse - new_radius) < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
                 ring.flash[bi] = max(ring.flash[bi], pulse_fade * 0.8)
-                if ring.radii[bi] < ring.rest_radii[bi]:
-                    ring.radii_vel[bi] += BARRIER_WAVE_PUSH * 1.5 * pulse_fade * delta_time
+                ring.radii_vel[bi] += BARRIER_WAVE_PUSH * 1.5 * pulse_fade * delta_time
 
-        if new_radius > max(ring.rest_radii):
+        if new_radius > max(ring.radii):
             pulses_to_remove.append(i)
 
     for i in sorted(pulses_to_remove, reverse=True):
@@ -1505,11 +1510,9 @@ def run_simulation(screen, font, sim_data, state, ring):
         zoom = 1.0
         view_center_x = SCREEN_WIDTH / 2.0
         view_center_y = SCREEN_HEIGHT / 2.0
-        world_surface_w = int(SCREEN_WIDTH / ZOOM_MIN)
-        world_surface_h = int(SCREEN_HEIGHT / ZOOM_MIN)
-        world_offset_x = (world_surface_w - SCREEN_WIDTH) // 2
-        world_offset_y = (world_surface_h - SCREEN_HEIGHT) // 2
-        world_surface = pygame.Surface((world_surface_w, world_surface_h))
+        world_surface_w = 0
+        world_surface_h = 0
+        world_surface = None
 
         while running:
             current_time = pygame.time.get_ticks()
@@ -1544,11 +1547,23 @@ def run_simulation(screen, font, sim_data, state, ring):
                 view_center_x = SCREEN_WIDTH / 2.0
                 view_center_y = SCREEN_HEIGHT / 2.0
 
+            view_w = int(SCREEN_WIDTH / zoom)
+            view_h = int(SCREEN_HEIGHT / zoom)
+            max_barrier_r = max(ring.radii)
+            barrier_diam = int(max_barrier_r * 2)
+            needed_w = max(view_w + SCREEN_WIDTH, barrier_diam + SCREEN_WIDTH)
+            needed_h = max(view_h + SCREEN_HEIGHT, barrier_diam + SCREEN_HEIGHT)
+            if needed_w > world_surface_w or needed_h > world_surface_h:
+                world_surface_w = int(needed_w * 1.5)
+                world_surface_h = int(needed_h * 1.5)
+                world_surface = pygame.Surface((world_surface_w, world_surface_h))
+
+            world_offset_x = (world_surface_w - SCREEN_WIDTH) // 2
+            world_offset_y = (world_surface_h - SCREEN_HEIGHT) // 2
+
             world_surface.fill(BACKGROUND_COLOR)
             draw_simulation(world_surface, ring, state, world_offset_x, world_offset_y)
 
-            view_w = int(SCREEN_WIDTH / zoom)
-            view_h = int(SCREEN_HEIGHT / zoom)
             ws_cx = world_offset_x + view_center_x
             ws_cy = world_offset_y + view_center_y
             view_left = max(0, min(world_surface_w - view_w, int(ws_cx - view_w / 2)))
@@ -1588,7 +1603,7 @@ def run_simulation(screen, font, sim_data, state, ring):
 
 def initialize_state():
     state = SimulationState()
-    ring = BARRIER((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), (SCREEN_WIDTH, SCREEN_HEIGHT), BARRIER_POINT_COUNT)
+    ring = BARRIER((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), (800, 800), BARRIER_POINT_COUNT)
 
     density_weights = [max(0.0, 1.0 - CMB_DENSITY_CONTRAST * ring.perturbation[i]) for i in range(ring.num_points)]
     total_weight = sum(density_weights)

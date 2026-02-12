@@ -9,7 +9,6 @@ from mpl_toolkits.mplot3d import Axes3D
 sim_data_path = os.getenv("SIMCRAFT_DATA")
 sim_data = os.path.join(sim_data_path, 'sim_data.csv')
 df = pd.read_csv(sim_data)
-unique_types = df['type'].unique()
 color_map = {
     'MolecularCloud': 'purple',
     'ProtoStar': 'orange',
