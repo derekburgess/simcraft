@@ -43,16 +43,16 @@ MOLECULAR_CLOUD_START_COLORS = [
     (50, 40, 5)    # Gold - Deep Warm Yellow
 ]
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
-DEFAULT_STATE_CHANCE = 0.1
+DEFAULT_STATE_CHANCE = 0.01
 PROTOSTAR_THRESHOLD = 18
-PROTOSTAR_EJECTA_COUNT = 100
-PROTOSTAR_EJECTA_SPREAD = 100
+PROTOSTAR_EJECTA_COUNT = 10
+PROTOSTAR_EJECTA_SPREAD = 10
 
 BLACK_HOLE_THRESHOLD = 20
-BLACK_HOLE_CHANCE = 0.005
+BLACK_HOLE_CHANCE = 0.00001
 BLACK_HOLE_RADIUS = 5
 BLACK_HOLE_MAX_MASS = 20
-BLACK_HOLE_GRAVITY_CONSTANT = 14.0 * GRAVITY_SCALE
+BLACK_HOLE_GRAVITY_CONSTANT = 18.0 * GRAVITY_SCALE
 BLACK_HOLE_DECAY_RATE = 0.5
 BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
@@ -62,7 +62,7 @@ DISK_COLOR = (255, 100, 100)
 DISK_SIZE = 1
 DISK_ROTATION = 10.0
 
-NEUTRON_STAR_CHANCE = 0.08
+NEUTRON_STAR_CHANCE = 0.01
 NEUTRON_STAR_RADIUS = 1
 NEUTRON_STAR_GRAVITY_CONSTANT = 1.2 * GRAVITY_SCALE
 NEUTRON_STAR_DECAY_RATE = 0.6
@@ -85,18 +85,19 @@ NS_DECAY_CLOUD_MASS_MIN = 4
 NS_DECAY_CLOUD_MASS_MAX = 8
 NS_DECAY_EJECTA_SPREAD = 40
 
-KILONOVA_EJECTA_COUNT = 60
+KILONOVA_EJECTA_COUNT = 10
 KILONOVA_COLLISION_DISTANCE = 5
-KILONOVA_EJECTA_SPREAD = 120
+KILONOVA_EJECTA_SPREAD = 10
 
 NS_PULSE_MASS_BOOST = 0.1
 
+MC_BARRIER_GRAVITY_FACTOR = 0.3
 BH_BARRIER_GRAVITY_FACTOR = 0.5
 NS_BARRIER_GRAVITY_FACTOR = 0.7
 
 MC_BARRIER_DEFORM_FACTOR = 1.0
-BH_BARRIER_DEFORM_FACTOR = 20.
-NS_BARRIER_DEFORM_FACTOR = 8.0
+BH_BARRIER_DEFORM_FACTOR = 40.0
+NS_BARRIER_DEFORM_FACTOR = 20.0
 NS_TO_BH_GRAVITY_FACTOR = 1.5
 BH_RECOIL_FROM_NS_FACTOR = 0.3
 
@@ -216,7 +217,7 @@ class BARRIER:
             target_dx = cx + barrier_r * math.cos(angle) - mc.x
             target_dy = cy + barrier_r * math.sin(angle) - mc.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = BARRIER_GRAVITY_CONSTANT * math.sqrt(mc.mass) / (target_dist ** 2)
+            force = (BARRIER_GRAVITY_CONSTANT * math.sqrt(mc.mass) / (target_dist ** 2)) * MC_BARRIER_GRAVITY_FACTOR
             if target_dist > mc.size / 2:
                 mc.vx += (target_dx / target_dist) * force * delta_time
                 mc.vy += (target_dy / target_dist) * force * delta_time
@@ -820,17 +821,18 @@ def update_entities(state):
                     state.black_holes.append(BLACK_HOLE(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 list_of_molecular_clouds_to_remove.append(molecular_cloud)
             elif random.random() < DEFAULT_STATE_CHANCE:
-                ejecta_mass = molecular_cloud.mass / (PROTOSTAR_EJECTA_COUNT + 1)
                 for _ in range(PROTOSTAR_EJECTA_COUNT):
                     offset_angle = random.uniform(0, 2 * math.pi)
                     offset_dist = random.uniform(5, PROTOSTAR_EJECTA_SPREAD)
                     ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
                     ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
-                    child = MOLECULAR_CLOUD(ex, ey, MOLECULAR_CLOUD_START_SIZE, ejecta_mass, EJECTA_ELEMENTAL_ABUNDANCE)
+                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD)
+                    size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+                    child = MOLECULAR_CLOUD(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
                     child.vy = math.sin(offset_angle) * offset_dist * 0.5
                     new_clouds.append(child)
-                molecular_cloud.mass = ejecta_mass
+                molecular_cloud.mass = MOLECULAR_CLOUD_START_MASS
                 molecular_cloud.size = MOLECULAR_CLOUD_START_SIZE
     for molecular_cloud in list_of_molecular_clouds_to_remove:
         state.molecular_clouds.remove(molecular_cloud)
@@ -1278,14 +1280,14 @@ def update_simulation_state(state, ring, delta_time, current_year, sim_data):
         black_hole.black_hole_decay(delta_time)
         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
             bh_to_remove.add(black_hole)
-            ejecta_mass = black_hole.mass / BH_DECAY_CLOUD_COUNT
             for _ in range(BH_DECAY_CLOUD_COUNT):
                 offset_angle = random.uniform(0, 2 * math.pi)
                 offset_dist = random.uniform(5, BH_DECAY_EJECTA_SPREAD)
                 ex = black_hole.x + offset_dist * math.cos(offset_angle)
                 ey = black_hole.y + offset_dist * math.sin(offset_angle)
                 mass = random.uniform(BH_DECAY_CLOUD_MASS_MIN, BH_DECAY_CLOUD_MASS_MAX)
-                child = MOLECULAR_CLOUD(ex, ey, MOLECULAR_CLOUD_START_SIZE, mass, BH_DECAY_ELEMENTAL_ABUNDANCE)
+                size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+                child = MOLECULAR_CLOUD(ex, ey, size, mass, BH_DECAY_ELEMENTAL_ABUNDANCE)
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
                 child.vy = math.sin(offset_angle) * offset_dist * 0.5
                 new_clouds.append(child)
@@ -1298,14 +1300,14 @@ def update_simulation_state(state, ring, delta_time, current_year, sim_data):
         neutron_star.decay_neutron_star(delta_time)
         if neutron_star.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
             ns_to_remove.add(neutron_star)
-            ejecta_mass = neutron_star.mass / NS_DECAY_CLOUD_COUNT
             for _ in range(NS_DECAY_CLOUD_COUNT):
                 offset_angle = random.uniform(0, 2 * math.pi)
                 offset_dist = random.uniform(5, NS_DECAY_EJECTA_SPREAD)
                 ex = neutron_star.x + offset_dist * math.cos(offset_angle)
                 ey = neutron_star.y + offset_dist * math.sin(offset_angle)
                 mass = random.uniform(NS_DECAY_CLOUD_MASS_MIN, NS_DECAY_CLOUD_MASS_MAX)
-                child = MOLECULAR_CLOUD(ex, ey, MOLECULAR_CLOUD_START_SIZE, mass, EJECTA_ELEMENTAL_ABUNDANCE)
+                size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+                child = MOLECULAR_CLOUD(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
                 child.vy = math.sin(offset_angle) * offset_dist * 0.5
                 new_clouds.append(child)
@@ -1332,13 +1334,14 @@ def update_simulation_state(state, ring, delta_time, current_year, sim_data):
                 cx = (ns_a.x + ns_b.x) / 2
                 cy = (ns_a.y + ns_b.y) / 2
                 combined_mass = ns_a.mass + ns_b.mass
-                ejecta_mass = combined_mass / KILONOVA_EJECTA_COUNT
                 for _ in range(KILONOVA_EJECTA_COUNT):
                     offset_angle = random.uniform(0, 2 * math.pi)
                     offset_dist = random.uniform(5, KILONOVA_EJECTA_SPREAD)
                     ex = cx + offset_dist * math.cos(offset_angle)
                     ey = cy + offset_dist * math.sin(offset_angle)
-                    child = MOLECULAR_CLOUD(ex, ey, MOLECULAR_CLOUD_START_SIZE, ejecta_mass, KILONOVA_ELEMENTAL_ABUNDANCE)
+                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD)
+                    size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+                    child = MOLECULAR_CLOUD(ex, ey, size, mass, KILONOVA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
                     child.vy = math.sin(offset_angle) * offset_dist * 0.5
                     new_clouds.append(child)
