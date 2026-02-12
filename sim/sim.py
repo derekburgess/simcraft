@@ -7,7 +7,7 @@ import bisect
 
 GRAVITY_SCALE = 0.15
 
-BARRIER_POINT_COUNT = 400
+BARRIER_POINT_COUNT = 600
 BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE
 BARRIER_COLOR = (30, 60, 220)
 BARRIER_BASE_OPACITY = 150
@@ -21,13 +21,14 @@ BARRIER_HEAVY_MASS_THRESHOLD = 60
 BARRIER_SMOOTHING_PASSES = 3
 BARRIER_SMOOTHING_WINDOW = 5
 
-MOLECULAR_CLOUD_COUNT = 20000
-MOLECULAR_CLOUD_START_SIZE = 20
-MOLECULAR_CLOUD_MIN_SIZE = 2
-MOLECULAR_CLOUD_GROWTH_RATE = 1
+MOLECULAR_CLOUD_COUNT = 10000
+MOLECULAR_CLOUD_START_SIZE = 24
+MOLECULAR_CLOUD_MIN_SIZE = 6
+MOLECULAR_CLOUD_GROWTH_RATE = 0.58
 MOLECULAR_CLOUD_START_MASS = 1
-MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01 * GRAVITY_SCALE
-MOLECULAR_CLOUD_MAX_MASS = 22
+MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.001 * GRAVITY_SCALE
+MOLECULAR_CLOUD_MERGE_CHANCE = 0.008
+MOLECULAR_CLOUD_MAX_MASS = 42
 MOLECULAR_CLOUD_START_COLORS = [
     (140, 20, 20),   # Hydrogen - Red (H-alpha)
     (140, 130, 0),   # Helium - Yellow (D3)
@@ -48,16 +49,32 @@ MOLECULAR_CLOUD_START_COLORS = [
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
 MOLECULAR_CLOUD_OPACITY = 180
 MOLECULAR_CLOUD_MIN_OPACITY = 80
-DEFAULT_STATE_CHANCE = 0.005
-PROTOSTAR_THRESHOLD = 18
+DEFAULT_STATE_CHANCE = 0.001
+PROTOSTAR_THRESHOLD = 32
 PROTOSTAR_EJECTA_COUNT = 20
 PROTOSTAR_EJECTA_SPREAD = 60
 
-BLACK_HOLE_THRESHOLD = 20
-BLACK_HOLE_CHANCE = 0.00001
-BLACK_HOLE_RADIUS = 5
-BLACK_HOLE_MAX_MASS = 32
-BLACK_HOLE_GRAVITY_CONSTANT = 18.0 * GRAVITY_SCALE
+# Protostar tiers: (min_mass, max_size, color)
+PROTOSTAR_TIER_MEDIUM = 37
+PROTOSTAR_TIER_HIGH = 41
+
+PROTOSTAR_LOW_COLOR = (225, 255, 255)      # White (current)
+PROTOSTAR_LOW_SIZE = 2
+
+PROTOSTAR_MEDIUM_COLOR = (200, 230, 80)    # Yellow-green
+PROTOSTAR_MEDIUM_SIZE = 2
+
+PROTOSTAR_HIGH_COLOR = (180, 60, 30)       # Red-orange
+PROTOSTAR_HIGH_SIZE = 4
+
+# Higher BH conversion chance for red giants
+RED_GIANT_BLACK_HOLE_CHANCE = 0.00002
+
+BLACK_HOLE_THRESHOLD = 39
+BLACK_HOLE_CHANCE = 0.000005
+BLACK_HOLE_RADIUS = 8
+BLACK_HOLE_MAX_MASS = 48
+BLACK_HOLE_GRAVITY_CONSTANT = 14.0 * GRAVITY_SCALE
 BLACK_HOLE_DECAY_RATE = 0.5
 BLACK_HOLE_DECAY_THRESHOLD = 2
 BLACK_HOLE_COLOR = (0,0,0)
@@ -67,7 +84,7 @@ DISK_COLOR = (255, 100, 100)
 DISK_SIZE = 1
 DISK_ROTATION = 10.0
 
-NEUTRON_STAR_CHANCE = 0.06
+NEUTRON_STAR_CHANCE = 0.08
 NEUTRON_STAR_RADIUS = 1
 NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE
 NEUTRON_STAR_DECAY_RATE = 0.6
@@ -85,6 +102,12 @@ BH_DECAY_CLOUD_MASS_MIN = 12
 BH_DECAY_CLOUD_MASS_MAX = 16
 BH_DECAY_EJECTA_SPREAD = 40
 
+BH_LEAK_CHANCE = 0.03
+BH_LEAK_MASS_MIN = 1
+BH_LEAK_MASS_MAX = 3
+BH_LEAK_EJECTA_SPREAD = 15
+BH_LEAK_VELOCITY = 0.8
+
 NS_DECAY_CLOUD_COUNT = 2
 NS_DECAY_CLOUD_MASS_MIN = 4
 NS_DECAY_CLOUD_MASS_MAX = 8
@@ -94,9 +117,9 @@ KILONOVA_EJECTA_COUNT = 20
 KILONOVA_COLLISION_DISTANCE = 5
 KILONOVA_EJECTA_SPREAD = 100
 
-NS_PULSE_MASS_BOOST = 0.1
+NS_PULSE_MASS_BOOST = 0.02
 
-MC_BARRIER_GRAVITY_FACTOR = 0.05
+MC_BARRIER_GRAVITY_FACTOR = 0.001
 BH_BARRIER_GRAVITY_FACTOR = 0.01
 NS_BARRIER_GRAVITY_FACTOR = 0.03
 
@@ -113,14 +136,14 @@ CMB_DENSITY_CONTRAST = 0.6
 
 VELOCITY_DAMPING = 0.74
 
-BACKGROUND_COLOR = (0, 6, 18)
+BACKGROUND_COLOR = (0, 10, 20)
 LABEL_COLOR = (60, 60, 200)
 SCREEN_WIDTH = 1440
 SCREEN_HEIGHT = 960
 
 ZOOM_MIN = 0.5
 ZOOM_MAX = 1.5
-ZOOM_STEP = 0.5
+ZOOM_STEP = 0.25
 
 YEAR_RATE = 60
 MAX_DELTA_TIME = 0.05
@@ -510,7 +533,17 @@ class MolecularCloud:
         else:
             self.start_color = MOLECULAR_CLOUD_START_COLORS[-1]
 
-        if self.size <= 4:
+        if self.mass >= PROTOSTAR_THRESHOLD:
+            if self.mass >= PROTOSTAR_TIER_HIGH:
+                self.color = PROTOSTAR_HIGH_COLOR
+                self.size = PROTOSTAR_HIGH_SIZE
+            elif self.mass >= PROTOSTAR_TIER_MEDIUM:
+                self.color = PROTOSTAR_MEDIUM_COLOR
+                self.size = PROTOSTAR_MEDIUM_SIZE
+            else:
+                self.color = PROTOSTAR_LOW_COLOR
+                self.size = PROTOSTAR_LOW_SIZE
+        elif self.size <= 4:
             self.color = MOLECULAR_CLOUD_END_COLOR
         else:
             factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
@@ -531,15 +564,24 @@ class MolecularCloud:
         self.mass = min(self.mass, MOLECULAR_CLOUD_MAX_MASS)
         if self.mass >= PROTOSTAR_THRESHOLD:
             self.opacity = 255
+            if self.mass >= PROTOSTAR_TIER_HIGH:
+                self.color = PROTOSTAR_HIGH_COLOR
+                self.size = PROTOSTAR_HIGH_SIZE
+            elif self.mass >= PROTOSTAR_TIER_MEDIUM:
+                self.color = PROTOSTAR_MEDIUM_COLOR
+                self.size = PROTOSTAR_MEDIUM_SIZE
+            else:
+                self.color = PROTOSTAR_LOW_COLOR
+                self.size = PROTOSTAR_LOW_SIZE
         else:
             factor = (self.mass - MOLECULAR_CLOUD_START_MASS) / (PROTOSTAR_THRESHOLD - MOLECULAR_CLOUD_START_MASS)
             factor = max(0.0, min(1.0, factor))
             self.opacity = int(MOLECULAR_CLOUD_MIN_OPACITY + factor * (MOLECULAR_CLOUD_OPACITY - MOLECULAR_CLOUD_MIN_OPACITY))
-        if self.size <= 4:
-            self.color = MOLECULAR_CLOUD_END_COLOR
-        else:
-            factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
-            self.color = interpolate_color(self.start_color, MOLECULAR_CLOUD_END_COLOR, factor)
+            if self.size <= 4:
+                self.color = MOLECULAR_CLOUD_END_COLOR
+            else:
+                factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
+                self.color = interpolate_color(self.start_color, MOLECULAR_CLOUD_END_COLOR, factor)
 
     def collides_with(self, other):
         return (self.x < other.x + other.size and
@@ -717,10 +759,17 @@ class NeutronStar:
                     ring.flash[bi] = max(ring.flash[bi], new_fade * 0.6)
                     ring.radii_vel[bi] += BARRIER_WAVE_PUSH * new_fade * delta_time
 
+            r_inner = max(0, radius - NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
+            r_outer = radius + NEUTRON_STAR_RIPPLE_EFFECT_WIDTH
+            r_inner_sq = r_inner * r_inner
+            r_outer_sq = r_outer * r_outer
             for molecular_cloud in state.molecular_clouds:
                 dx = molecular_cloud.x - self.x
                 dy = molecular_cloud.y - self.y
-                distance = math.hypot(dx, dy)
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < r_inner_sq or dist_sq > r_outer_sq:
+                    continue
+                distance = math.sqrt(dist_sq)
 
                 ripple_dist = abs(distance - radius)
                 if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:
@@ -761,19 +810,21 @@ class NeutronStar:
             self.pulse_color_duration = 0.1  # Reset duration
 
     def apply_gravity(self, state, delta_time):
-        for molecular_cloud in state.molecular_clouds:
-            if molecular_cloud is not self:
-                dx = molecular_cloud.x - self.x
-                dy = molecular_cloud.y - self.y
-                distance = max(math.hypot(dx, dy), 1)
+        for molecular_cloud in state.spatial_hash.query_neighbors(self):
+            dx = molecular_cloud.x - self.x
+            dy = molecular_cloud.y - self.y
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < 1:
+                continue
+            distance = math.sqrt(dist_sq)
 
-                force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * molecular_cloud.mass) / (distance**2)
+            force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * molecular_cloud.mass) / dist_sq
 
-                molecular_cloud.vx -= (dx / distance) * force * delta_time
-                molecular_cloud.vy -= (dy / distance) * force * delta_time
+            molecular_cloud.vx -= (dx / distance) * force * delta_time
+            molecular_cloud.vy -= (dy / distance) * force * delta_time
 
-                self.vx += (dx / distance) * force * delta_time
-                self.vy += (dy / distance) * force * delta_time
+            self.vx += (dx / distance) * force * delta_time
+            self.vy += (dy / distance) * force * delta_time
 
         for black_hole in state.black_holes:
             dx = black_hole.x - self.x
@@ -829,7 +880,7 @@ def handle_collisions(state):
         for other in neighbors:
             if other is mc or other in to_remove:
                 continue
-            if mc.collides_with(other):
+            if mc.collides_with(other) and random.random() < MOLECULAR_CLOUD_MERGE_CHANCE:
                 merged_mass = mc.mass + other.mass
                 to_remove.add(other)
                 mc.mass = min(merged_mass, MOLECULAR_CLOUD_MAX_MASS)
@@ -846,19 +897,29 @@ def update_entities(state):
     for molecular_cloud in state.molecular_clouds:
         molecular_cloud.update()
         if molecular_cloud.mass > BLACK_HOLE_THRESHOLD:
-            if random.random() < BLACK_HOLE_CHANCE:
+            bh_chance = RED_GIANT_BLACK_HOLE_CHANCE if molecular_cloud.mass >= PROTOSTAR_TIER_HIGH else BLACK_HOLE_CHANCE
+            if random.random() < bh_chance:
                 if random.random() < NEUTRON_STAR_CHANCE:
                     state.neutron_stars.append(NeutronStar(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 else:
                     state.black_holes.append(BlackHole(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 to_remove.add(molecular_cloud)
             elif random.random() < DEFAULT_STATE_CHANCE:
-                for _ in range(PROTOSTAR_EJECTA_COUNT):
+                if molecular_cloud.mass >= PROTOSTAR_TIER_HIGH:
+                    ejecta_count = 25
+                    ejecta_spread = 80
+                elif molecular_cloud.mass >= PROTOSTAR_TIER_MEDIUM:
+                    ejecta_count = 20
+                    ejecta_spread = 60
+                else:
+                    ejecta_count = 15
+                    ejecta_spread = 50
+                for _ in range(ejecta_count):
                     offset_angle = random.uniform(0, 2 * math.pi)
-                    offset_dist = random.uniform(5, PROTOSTAR_EJECTA_SPREAD)
+                    offset_dist = random.uniform(5, ejecta_spread)
                     ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
                     ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
-                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD)
+                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * 0.35)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
                     child = MolecularCloud(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
@@ -960,14 +1021,22 @@ def update_simulation_state(state, ring, delta_time):
         new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time * 1.5)
         state.black_hole_pulses[i] = [x, y, new_radius, consumed_mass]
 
+        bh_ew = NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2
+        bh_r_inner = max(0, radius - bh_ew)
+        bh_r_outer = radius + bh_ew
+        bh_r_inner_sq = bh_r_inner * bh_r_inner
+        bh_r_outer_sq = bh_r_outer * bh_r_outer
         for molecular_cloud in state.molecular_clouds:
             dx = molecular_cloud.x - x
             dy = molecular_cloud.y - y
-            distance = math.hypot(dx, dy)
+            dist_sq = dx * dx + dy * dy
+            if dist_sq < bh_r_inner_sq or dist_sq > bh_r_outer_sq:
+                continue
+            distance = math.sqrt(dist_sq)
 
             ripple_dist = abs(distance - radius)
-            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
-                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2))
+            if ripple_dist < bh_ew:
+                effect_factor = 1.0 - (ripple_dist / bh_ew)
                 force = NEUTRON_STAR_PULSE_STRENGTH * 5 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 1.5)
 
                 if distance > 0:
@@ -1030,6 +1099,20 @@ def update_simulation_state(state, ring, delta_time):
         black_hole.attract(state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove)
         black_hole.update_gravity(state, delta_time)
         black_hole.decay(delta_time)
+        if black_hole.mass > BLACK_HOLE_DECAY_THRESHOLD and random.random() < BH_LEAK_CHANCE:
+            leak_mass = random.uniform(BH_LEAK_MASS_MIN, BH_LEAK_MASS_MAX)
+            leak_mass = min(leak_mass, black_hole.mass - BLACK_HOLE_DECAY_THRESHOLD)
+            if leak_mass > 0:
+                black_hole.mass -= leak_mass
+                offset_angle = random.uniform(0, 2 * math.pi)
+                offset_dist = random.uniform(3, BH_LEAK_EJECTA_SPREAD)
+                ex = black_hole.x + offset_dist * math.cos(offset_angle)
+                ey = black_hole.y + offset_dist * math.sin(offset_angle)
+                size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((leak_mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+                child = MolecularCloud(ex, ey, size, leak_mass, BH_DECAY_ELEMENTAL_ABUNDANCE)
+                child.vx = math.cos(offset_angle) * BH_LEAK_VELOCITY
+                child.vy = math.sin(offset_angle) * BH_LEAK_VELOCITY
+                new_clouds.append(child)
         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
             bh_to_remove.add(black_hole)
             for _ in range(BH_DECAY_CLOUD_COUNT):
@@ -1043,6 +1126,9 @@ def update_simulation_state(state, ring, delta_time):
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
                 child.vy = math.sin(offset_angle) * offset_dist * 0.5
                 new_clouds.append(child)
+
+    state.spatial_hash.clear()
+    state.spatial_hash.bulk_insert(state.molecular_clouds)
 
     for neutron_star in state.neutron_stars:
         if neutron_star in ns_to_remove:
@@ -1091,7 +1177,7 @@ def update_simulation_state(state, ring, delta_time):
                     offset_dist = random.uniform(5, KILONOVA_EJECTA_SPREAD)
                     ex = cx + offset_dist * math.cos(offset_angle)
                     ey = cy + offset_dist * math.sin(offset_angle)
-                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD)
+                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * 0.35)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
                     child = MolecularCloud(ex, ey, size, mass, KILONOVA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
@@ -1336,7 +1422,7 @@ def initialize_state():
 
 def main():
     pygame.init()
-    pygame.display.set_caption("simcraft")
+    pygame.display.set_caption("A long time ago in a universe far, far away...")
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     font = pygame.font.SysFont('Monospace', 14)
     print("Populating space with molecular clouds")
