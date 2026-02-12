@@ -29,28 +29,34 @@ MOLECULAR_CLOUD_START_MASS = 1
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01 * GRAVITY_SCALE
 MOLECULAR_CLOUD_MAX_MASS = 22
 MOLECULAR_CLOUD_START_COLORS = [
-    (140, 20, 20),   # Hydrogen - Red (H-alpha) - 75%
-    (140, 130, 0),   # Helium - Yellow (D3) - 23%
-    (20, 140, 20),   # Oxygen - Green (OI) - 1%
-    (20, 20, 140),   # Carbon - Blue (C2) - 0.5%
-    (160, 100, 0),   # Neon - Orange (NeI) - 0.1%
-    (80, 20, 140),   # Nitrogen - Violet (NII) - 0.1%
+    (140, 20, 20),   # Hydrogen - Red (H-alpha)
+    (140, 130, 0),   # Helium - Yellow (D3)
+    (20, 140, 20),   # Oxygen - Green (OI)
+    (20, 20, 140),   # Carbon - Blue (C2)
+    (160, 100, 0),   # Neon - Orange (NeI)
+    (80, 20, 140),   # Nitrogen - Violet (NII)
     (150, 150, 150), # Iron - Metallic Gray
     (140, 90, 40),   # Silicon - Earthy Brown
-    (140, 120, 20)   # Gold - Deep Warm Yellow
+    (140, 120, 20),  # Gold - Deep Warm Yellow
+    (180, 60, 80),   # Sulfur - Crimson-Rose (SII)
+    (100, 170, 200), # Magnesium - Pale Blue (MgII)
+    (40, 140, 150),  # Phosphorus - Teal (PI)
+    (160, 40, 130),  # Lithium - Magenta (LiI)
+    (210, 210, 230), # Platinum - Cool Silver
+    (60, 90, 160),   # Cobalt - Steel Blue (CoII)
 ]
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
 MOLECULAR_CLOUD_OPACITY = 180
 MOLECULAR_CLOUD_MIN_OPACITY = 80
-DEFAULT_STATE_CHANCE = 0.01
+DEFAULT_STATE_CHANCE = 0.005
 PROTOSTAR_THRESHOLD = 18
 PROTOSTAR_EJECTA_COUNT = 20
 PROTOSTAR_EJECTA_SPREAD = 60
 
 BLACK_HOLE_THRESHOLD = 20
-BLACK_HOLE_CHANCE = 0.0001
+BLACK_HOLE_CHANCE = 0.00001
 BLACK_HOLE_RADIUS = 5
-BLACK_HOLE_MAX_MASS = 20
+BLACK_HOLE_MAX_MASS = 32
 BLACK_HOLE_GRAVITY_CONSTANT = 18.0 * GRAVITY_SCALE
 BLACK_HOLE_DECAY_RATE = 0.5
 BLACK_HOLE_DECAY_THRESHOLD = 2
@@ -409,27 +415,39 @@ def interpolate_multi_color(colors, factor):
 
 
 ELEMENTAL_ABUNDANCE = [
-    (0, 0.75),       # Hydrogen range: 0-75%
-    (0.75, 0.98),    # Helium range: 75-98%
-    (0.98, 0.99),    # Oxygen range: 98-99%
-    (0.99, 0.995),   # Carbon range: 99-99.5%
-    (0.995, 0.996),  # Neon range: 99.5-99.6%
-    (0.996, 0.999),  # Nitrogen range: 99.6-99.9%
-    (0.999, 0.9995), # Iron range: 99.9-99.95%
-    (0.9995, 0.9999),# Silicon range: 99.95-99.99%
-    (0.9999, 1.0)    # Gold range: 99.99-100%
+    (0, 0.75),        # Hydrogen range: 0-75%
+    (0.75, 0.98),     # Helium range: 75-98%
+    (0.98, 0.988),    # Oxygen range: 98-98.8%
+    (0.988, 0.992),   # Carbon range: 98.8-99.2%
+    (0.992, 0.9935),  # Neon range: 99.2-99.35%
+    (0.9935, 0.9955), # Nitrogen range: 99.35-99.55%
+    (0.9955, 0.9965), # Iron range: 99.55-99.65%
+    (0.9965, 0.9975), # Silicon range: 99.65-99.75%
+    (0.9975, 0.998),  # Gold range: 99.75-99.8%
+    (0.998, 0.9988),  # Sulfur range: 99.8-99.88%
+    (0.9988, 0.9993), # Magnesium range: 99.88-99.93%
+    (0.9993, 0.9996), # Phosphorus range: 99.93-99.96%
+    (0.9996, 0.9998), # Lithium range: 99.96-99.98%
+    (0.9998, 0.9999), # Platinum range: 99.98-99.99%
+    (0.9999, 1.0),    # Cobalt range: 99.99-100%
 ]
 
 EJECTA_ELEMENTAL_ABUNDANCE = [
     (0, 0.50),     # Hydrogen range: 0-50%
-    (0.50, 0.80),  # Helium range: 50-80%
-    (0.80, 0.88),  # Oxygen range: 80-88%
-    (0.88, 0.92),  # Carbon range: 88-92%
-    (0.92, 0.92),  # Neon - not produced in stellar ejecta
-    (0.92, 0.92),  # Nitrogen - not produced in stellar ejecta
-    (0.92, 0.96),  # Iron range: 92-96%
-    (0.96, 0.99),  # Silicon range: 96-99%
-    (0.99, 1.0)    # Gold range: 99-100%
+    (0.50, 0.78),  # Helium range: 50-78%
+    (0.78, 0.85),  # Oxygen range: 78-85%
+    (0.85, 0.89),  # Carbon range: 85-89%
+    (0.89, 0.89),  # Neon - not produced in stellar ejecta
+    (0.89, 0.89),  # Nitrogen - not produced in stellar ejecta
+    (0.89, 0.93),  # Iron range: 89-93%
+    (0.93, 0.96),  # Silicon range: 93-96%
+    (0.96, 0.97),  # Gold range: 96-97%
+    (0.97, 0.98),  # Sulfur range: 97-98%
+    (0.98, 0.99),  # Magnesium range: 98-99%
+    (0.99, 0.993), # Phosphorus range: 99-99.3%
+    (0.993, 0.993),# Lithium - not produced in supernovae
+    (0.993, 0.997),# Platinum range: 99.3-99.7%
+    (0.997, 1.0),  # Cobalt range: 99.7-100%
 ]
 
 BH_DECAY_ELEMENTAL_ABUNDANCE = [
@@ -438,10 +456,16 @@ BH_DECAY_ELEMENTAL_ABUNDANCE = [
     (0.16, 0.22),  # Oxygen range: 16-22%
     (0.22, 0.28),  # Carbon range: 22-28%
     (0.28, 0.30),  # Neon range: 28-30%
-    (0.30, 0.38),  # Nitrogen range: 30-38%
-    (0.38, 0.62),  # Iron range: 38-62%
-    (0.62, 0.82),  # Silicon range: 62-82%
-    (0.82, 1.0)    # Gold range: 82-100%
+    (0.30, 0.36),  # Nitrogen range: 30-36%
+    (0.36, 0.52),  # Iron range: 36-52%
+    (0.52, 0.66),  # Silicon range: 52-66%
+    (0.66, 0.74),  # Gold range: 66-74%
+    (0.74, 0.80),  # Sulfur range: 74-80%
+    (0.80, 0.86),  # Magnesium range: 80-86%
+    (0.86, 0.90),  # Phosphorus range: 86-90%
+    (0.90, 0.93),  # Lithium range: 90-93%
+    (0.93, 0.97),  # Platinum range: 93-97%
+    (0.97, 1.0),   # Cobalt range: 97-100%
 ]
 
 KILONOVA_ELEMENTAL_ABUNDANCE = [
@@ -450,10 +474,16 @@ KILONOVA_ELEMENTAL_ABUNDANCE = [
     (0.06, 0.09),  # Oxygen range: 6-9%
     (0.09, 0.12),  # Carbon range: 9-12%
     (0.12, 0.13),  # Neon range: 12-13%
-    (0.13, 0.21),  # Nitrogen range: 13-21%
-    (0.21, 0.41),  # Iron range: 21-41%
-    (0.41, 0.61),  # Silicon range: 41-61%
-    (0.61, 1.0)    # Gold range: 61-100%
+    (0.13, 0.18),  # Nitrogen range: 13-18%
+    (0.18, 0.30),  # Iron range: 18-30%
+    (0.30, 0.44),  # Silicon range: 30-44%
+    (0.44, 0.56),  # Gold range: 44-56%
+    (0.56, 0.64),  # Sulfur range: 56-64%
+    (0.64, 0.72),  # Magnesium range: 64-72%
+    (0.72, 0.78),  # Phosphorus range: 72-78%
+    (0.78, 0.82),  # Lithium range: 78-82%
+    (0.82, 0.91),  # Platinum range: 82-91%
+    (0.91, 1.0),   # Cobalt range: 91-100%
 ]
 
 class MolecularCloud:
@@ -663,8 +693,8 @@ class NeutronStar:
                 self.pulse_color_duration = 0.1
 
         dist_to_center = math.hypot(self.x - ring.center[0], self.y - ring.center[1])
-        min_barrier_dist = max(ring.rest_radius - dist_to_center, 1.0)
-        max_barrier_dist = dist_to_center + ring.rest_radius
+        min_barrier_dist = max((ring.rest_radius - dist_to_center) / 2, 1.0)
+        max_barrier_dist = (dist_to_center + ring.rest_radius) / 2
 
         pulses_to_remove = []
         for i, pulse in enumerate(self.active_pulses):
