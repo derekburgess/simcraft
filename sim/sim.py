@@ -42,7 +42,7 @@ MOLECULAR_CLOUD_START_COLORS = [
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
 MOLECULAR_CLOUD_OPACITY = 180
 MOLECULAR_CLOUD_MIN_OPACITY = 80
-DEFAULT_STATE_CHANCE = 0.004
+DEFAULT_STATE_CHANCE = 0.01
 PROTOSTAR_THRESHOLD = 18
 PROTOSTAR_EJECTA_COUNT = 20
 PROTOSTAR_EJECTA_SPREAD = 60
@@ -116,12 +116,23 @@ ZOOM_MIN = 0.5
 ZOOM_MAX = 1.5
 ZOOM_STEP = 0.5
 
+YEAR_RATE = 60
+MAX_DELTA_TIME = 0.05
+
 
 entity_id_counter = 0
 def generate_unique_id():
     global entity_id_counter
     entity_id_counter += 1
     return entity_id_counter
+
+
+_mc_surface_cache = {}
+
+def _get_mc_surface(size):
+    if size not in _mc_surface_cache:
+        _mc_surface_cache[size] = pygame.Surface((size, size), pygame.SRCALPHA)
+    return _mc_surface_cache[size]
 
 
 class SpatialHash:
@@ -165,7 +176,7 @@ class SimulationState:
         self.spatial_hash = SpatialHash(40)
 
 
-class BARRIER:
+class Barrier:
     def __init__(self, center, screen_size, num_points):
         self.center = center
         self.num_points = num_points
@@ -280,7 +291,7 @@ class BARRIER:
         for i in range(self.num_points):
             self.flash[i] *= decay
 
-    def enforce_barrier(self, state, delta_time):
+    def enforce(self, state, delta_time):
         cx, cy = self.center
         step = 2 * math.pi / self.num_points
 
@@ -297,19 +308,21 @@ class BARRIER:
                         mc.vx -= radial_vx
                         mc.vy -= radial_vy
 
+        compact_angles_masses = []
+        for bh in state.black_holes:
+            a, _, _, _ = self._entity_angle_and_dist(bh)
+            compact_angles_masses.append((a, bh.mass))
+        for ns in state.neutron_stars:
+            a, _, _, _ = self._entity_angle_and_dist(ns)
+            compact_angles_masses.append((a, ns.mass))
+
         for ns in state.neutron_stars:
             angle, dist, dx, dy = self._entity_angle_and_dist(ns)
             barrier_r = self.get_radius_at_angle(angle)
             if dist >= barrier_r:
-                idx = angle / step
-                i0 = int(idx) % self.num_points
-                i1 = (i0 + 1) % self.num_points
                 section_mass = sum(
-                    bh.mass for bh in state.black_holes
-                    if abs((self._entity_angle_and_dist(bh)[0] - angle + math.pi) % (2 * math.pi) - math.pi) < step * 3
-                ) + sum(
-                    ns2.mass for ns2 in state.neutron_stars
-                    if abs((self._entity_angle_and_dist(ns2)[0] - angle + math.pi) % (2 * math.pi) - math.pi) < step * 3
+                    m for a, m in compact_angles_masses
+                    if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * 3
                 )
                 weakness = min(section_mass / BARRIER_HEAVY_MASS_THRESHOLD, 1.0)
                 containment = 1.0 - weakness * 0.7
@@ -322,13 +335,9 @@ class BARRIER:
             angle, dist, dx, dy = self._entity_angle_and_dist(bh)
             barrier_r = self.get_radius_at_angle(angle)
             if dist >= barrier_r:
-                idx = angle / step
                 section_mass = sum(
-                    bh2.mass for bh2 in state.black_holes
-                    if abs((self._entity_angle_and_dist(bh2)[0] - angle + math.pi) % (2 * math.pi) - math.pi) < step * 3
-                ) + sum(
-                    ns.mass for ns in state.neutron_stars
-                    if abs((self._entity_angle_and_dist(ns)[0] - angle + math.pi) % (2 * math.pi) - math.pi) < step * 3
+                    m for a, m in compact_angles_masses
+                    if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * 3
                 )
                 weakness = min(section_mass / BARRIER_HEAVY_MASS_THRESHOLD, 1.0)
                 containment = 1.0 - weakness * 0.9
@@ -337,8 +346,9 @@ class BARRIER:
                     bh.vx -= (dx / dist) * push_strength * delta_time
                     bh.vy -= (dy / dist) * push_strength * delta_time
 
-    def draw_barrier(self, screen):
-        cx, cy = self.center
+    def draw(self, screen, offset_x=0, offset_y=0):
+        cx = self.center[0] + offset_x
+        cy = self.center[1] + offset_y
         smoothed = list(self.radii)
         half_w = BARRIER_SMOOTHING_WINDOW // 2
         n = self.num_points
@@ -415,8 +425,8 @@ EJECTA_ELEMENTAL_ABUNDANCE = [
     (0.50, 0.80),  # Helium range: 50-80%
     (0.80, 0.88),  # Oxygen range: 80-88%
     (0.88, 0.92),  # Carbon range: 88-92%
-    (0.92, 0.92),  # Neon range: 92-92%
-    (0.92, 0.92),  # Nitrogen range: 92-92%
+    (0.92, 0.92),  # Neon - not produced in stellar ejecta
+    (0.92, 0.92),  # Nitrogen - not produced in stellar ejecta
     (0.92, 0.96),  # Iron range: 92-96%
     (0.96, 0.99),  # Silicon range: 96-99%
     (0.99, 1.0)    # Gold range: 99-100%
@@ -446,7 +456,7 @@ KILONOVA_ELEMENTAL_ABUNDANCE = [
     (0.61, 1.0)    # Gold range: 61-100%
 ]
 
-class MOLECULAR_CLOUD:
+class MolecularCloud:
     def __init__(self, x, y, size, mass, abundance=None):
         self.id = generate_unique_id()
         self.x = x
@@ -467,21 +477,26 @@ class MOLECULAR_CLOUD:
             if start <= rand < end:
                 self.start_color = MOLECULAR_CLOUD_START_COLORS[i]
                 break
+        else:
+            self.start_color = MOLECULAR_CLOUD_START_COLORS[-1]
 
-    def draw_molecular_cloud(self, screen):
         if self.size <= 4:
             self.color = MOLECULAR_CLOUD_END_COLOR
         else:
             factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
             self.color = interpolate_color(self.start_color, MOLECULAR_CLOUD_END_COLOR, factor)
-        if self.opacity < 255:
-            s = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
-            s.fill(self.color + (self.opacity,))
-            screen.blit(s, (self.x, self.y))
-        else:
-            pygame.draw.rect(screen, self.color, (self.x, self.y, self.size, self.size))
 
-    def update_molecular_cloud(self):
+    def draw(self, screen, offset_x=0, offset_y=0):
+        draw_x = self.x + offset_x
+        draw_y = self.y + offset_y
+        if self.opacity < 255:
+            s = _get_mc_surface(self.size)
+            s.fill(self.color + (self.opacity,))
+            screen.blit(s, (draw_x, draw_y))
+        else:
+            pygame.draw.rect(screen, self.color, (draw_x, draw_y, self.size, self.size))
+
+    def update(self):
         self.size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((self.mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
         self.mass = min(self.mass, MOLECULAR_CLOUD_MAX_MASS)
         if self.mass >= PROTOSTAR_THRESHOLD:
@@ -490,15 +505,20 @@ class MOLECULAR_CLOUD:
             factor = (self.mass - MOLECULAR_CLOUD_START_MASS) / (PROTOSTAR_THRESHOLD - MOLECULAR_CLOUD_START_MASS)
             factor = max(0.0, min(1.0, factor))
             self.opacity = int(MOLECULAR_CLOUD_MIN_OPACITY + factor * (MOLECULAR_CLOUD_OPACITY - MOLECULAR_CLOUD_MIN_OPACITY))
+        if self.size <= 4:
+            self.color = MOLECULAR_CLOUD_END_COLOR
+        else:
+            factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
+            self.color = interpolate_color(self.start_color, MOLECULAR_CLOUD_END_COLOR, factor)
 
-    def check_collisions_with_molecular_clouds(self, other):
+    def collides_with(self, other):
         return (self.x < other.x + other.size and
                 self.x + self.size > other.x and
                 self.y < other.y + other.size and
                 self.y + self.size > other.y)
 
 
-class BLACK_HOLE:
+class BlackHole:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
         self.x = x
@@ -509,17 +529,19 @@ class BLACK_HOLE:
         self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.tracer_angle = random.uniform(0, 2 * math.pi)
 
-    def draw_black_hole(self, screen):
+    def draw(self, screen, offset_x=0, offset_y=0):
+        draw_x = int(self.x + offset_x)
+        draw_y = int(self.y + offset_y)
         radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.border_radius = radius
-        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
-        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
+        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (draw_x, draw_y), radius)
+        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (draw_x, draw_y), radius - 2)
 
-        tracer_x = self.x + self.border_radius * math.cos(self.tracer_angle)
-        tracer_y = self.y + self.border_radius * math.sin(self.tracer_angle)
+        tracer_x = draw_x + self.border_radius * math.cos(self.tracer_angle)
+        tracer_y = draw_y + self.border_radius * math.sin(self.tracer_angle)
         pygame.draw.circle(screen, DISK_COLOR, (int(tracer_x), int(tracer_y)), DISK_SIZE)
 
-    def attract_entities_to_black_holes(self, state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove):
+    def attract(self, state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove):
         for black_hole in state.black_holes:
             if black_hole is not self and black_hole not in bh_to_remove:
                 dx = self.x - black_hole.x
@@ -566,21 +588,27 @@ class BLACK_HOLE:
                 entity.vx += (dx / distance) * force * delta_time
                 entity.vy += (dy / distance) * force * delta_time
 
-    def update_gravity_of_black_holes(self, state, delta_time):
-        for entity in state.molecular_clouds + state.neutron_stars + state.black_holes:
-            if entity is not self:
-                dx = entity.x - self.x
-                dy = entity.y - self.y
-                distance = max(math.hypot(dx, dy), 1)
-                force = MOLECULAR_CLOUD_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
-                self.vx += (dx / distance) * force * delta_time
-                self.vy += (dy / distance) * force * delta_time
+    def update_gravity(self, state, delta_time):
+        for mc in state.molecular_clouds:
+            dx = mc.x - self.x
+            dy = mc.y - self.y
+            distance = max(math.hypot(dx, dy), 1)
+            force = MOLECULAR_CLOUD_GRAVITY_CONSTANT * (self.mass * mc.mass) / (distance ** 2)
+            self.vx += (dx / distance) * force * delta_time
+            self.vy += (dy / distance) * force * delta_time
+        for ns in state.neutron_stars:
+            dx = ns.x - self.x
+            dy = ns.y - self.y
+            distance = max(math.hypot(dx, dy), 1)
+            force = MOLECULAR_CLOUD_GRAVITY_CONSTANT * (self.mass * ns.mass) / (distance ** 2)
+            self.vx += (dx / distance) * force * delta_time
+            self.vy += (dy / distance) * force * delta_time
 
-    def black_hole_decay(self, delta_time):
+    def decay(self, delta_time):
         self.mass -= BLACK_HOLE_DECAY_RATE * delta_time
 
 
-class NEUTRON_STAR:
+class NeutronStar:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
         self.x = x
@@ -596,16 +624,18 @@ class NEUTRON_STAR:
         self.pulse_color_state = 0  # 0: normal color, 1: white during pulse
         self.pulse_color_duration = 0.1  # Duration of white color in seconds
 
-    def draw_neutron_star(self, screen, ring, all_pulses):
+    def draw(self, screen, ring, all_pulses, offset_x=0, offset_y=0):
+        draw_x = int(self.x + offset_x)
+        draw_y = int(self.y + offset_y)
         current_color = (255, 255, 255) if self.pulse_color_state == 1 else NEUTRON_STAR_COLOR
-        pygame.draw.circle(screen, current_color, (int(self.x), int(self.y)), self.radius)
+        pygame.draw.circle(screen, current_color, (draw_x, draw_y), self.radius)
 
         for pulse in self.active_pulses:
             pulse_radius, _, fade = pulse
             if pulse_radius <= 1:
                 continue
 
-            points = _clip_pulse_points(self.x, self.y, pulse_radius, ring, all_pulses)
+            points = _clip_pulse_points(draw_x, draw_y, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
 
             alpha = int(NEUTRON_STAR_PULSE_COLOR[3] * fade)
             alpha = max(0, min(255, alpha))
@@ -623,7 +653,7 @@ class NEUTRON_STAR:
                 pygame.draw.polygon(pulse_surface, color, local_points, NEUTRON_STAR_PULSE_WIDTH)
                 screen.blit(pulse_surface, (min_x, min_y))
 
-    def pulse_gravity_from_neutron_star(self, state, ring, delta_time):
+    def update_pulse(self, state, ring, delta_time):
         self.time_since_last_pulse += delta_time
 
         if self.pulse_color_state == 1:
@@ -700,7 +730,7 @@ class NEUTRON_STAR:
             self.pulse_color_state = 1  # Set to white during pulse
             self.pulse_color_duration = 0.1  # Reset duration
 
-    def update_position_of_entities_from_pulse(self, state, delta_time):
+    def apply_gravity(self, state, delta_time):
         for molecular_cloud in state.molecular_clouds:
             if molecular_cloud is not self:
                 dx = molecular_cloud.x - self.x
@@ -728,7 +758,7 @@ class NEUTRON_STAR:
             black_hole.vx -= (dx / distance) * force * delta_time * BH_RECOIL_FROM_NS_FACTOR
             black_hole.vy -= (dy / distance) * force * delta_time * BH_RECOIL_FROM_NS_FACTOR
 
-    def decay_neutron_star(self, delta_time):
+    def decay(self, delta_time):
         self.mass -= NEUTRON_STAR_DECAY_RATE * delta_time
 
 
@@ -769,11 +799,11 @@ def handle_collisions(state):
         for other in neighbors:
             if other is mc or other in to_remove:
                 continue
-            if mc.check_collisions_with_molecular_clouds(other):
+            if mc.collides_with(other):
                 merged_mass = mc.mass + other.mass
                 to_remove.add(other)
                 mc.mass = min(merged_mass, MOLECULAR_CLOUD_MAX_MASS)
-                mc.update_molecular_cloud()
+                mc.update()
                 break
     if to_remove:
         state.molecular_clouds = [mc for mc in state.molecular_clouds if mc not in to_remove]
@@ -781,17 +811,17 @@ def handle_collisions(state):
 
 def update_entities(state):
     handle_collisions(state)
-    list_of_molecular_clouds_to_remove = []
+    to_remove = set()
     new_clouds = []
     for molecular_cloud in state.molecular_clouds:
-        molecular_cloud.update_molecular_cloud()
+        molecular_cloud.update()
         if molecular_cloud.mass > BLACK_HOLE_THRESHOLD:
             if random.random() < BLACK_HOLE_CHANCE:
                 if random.random() < NEUTRON_STAR_CHANCE:
-                    state.neutron_stars.append(NEUTRON_STAR(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
+                    state.neutron_stars.append(NeutronStar(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 else:
-                    state.black_holes.append(BLACK_HOLE(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
-                list_of_molecular_clouds_to_remove.append(molecular_cloud)
+                    state.black_holes.append(BlackHole(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
+                to_remove.add(molecular_cloud)
             elif random.random() < DEFAULT_STATE_CHANCE:
                 for _ in range(PROTOSTAR_EJECTA_COUNT):
                     offset_angle = random.uniform(0, 2 * math.pi)
@@ -800,14 +830,15 @@ def update_entities(state):
                     ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
                     mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                    child = MOLECULAR_CLOUD(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
+                    child = MolecularCloud(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
                     child.vy = math.sin(offset_angle) * offset_dist * 0.5
                     new_clouds.append(child)
                 molecular_cloud.mass = MOLECULAR_CLOUD_START_MASS
                 molecular_cloud.size = MOLECULAR_CLOUD_START_SIZE
-    for molecular_cloud in list_of_molecular_clouds_to_remove:
-        state.molecular_clouds.remove(molecular_cloud)
+                molecular_cloud.update()
+    if to_remove:
+        state.molecular_clouds = [mc for mc in state.molecular_clouds if mc not in to_remove]
     state.molecular_clouds.extend(new_clouds)
 
 
@@ -888,7 +919,7 @@ def update_simulation_state(state, ring, delta_time):
     update_entities(state)
 
     ring.apply_gravity(state, delta_time)
-    ring.enforce_barrier(state, delta_time)
+    ring.enforce(state, delta_time)
 
     for black_hole in state.black_holes:
         black_hole.tracer_angle += DISK_ROTATION * delta_time
@@ -966,9 +997,9 @@ def update_simulation_state(state, ring, delta_time):
     for black_hole in state.black_holes:
         if black_hole in bh_to_remove:
             continue
-        black_hole.attract_entities_to_black_holes(state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove)
-        black_hole.update_gravity_of_black_holes(state, delta_time)
-        black_hole.black_hole_decay(delta_time)
+        black_hole.attract(state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove)
+        black_hole.update_gravity(state, delta_time)
+        black_hole.decay(delta_time)
         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
             bh_to_remove.add(black_hole)
             for _ in range(BH_DECAY_CLOUD_COUNT):
@@ -978,7 +1009,7 @@ def update_simulation_state(state, ring, delta_time):
                 ey = black_hole.y + offset_dist * math.sin(offset_angle)
                 mass = random.uniform(BH_DECAY_CLOUD_MASS_MIN, BH_DECAY_CLOUD_MASS_MAX)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                child = MOLECULAR_CLOUD(ex, ey, size, mass, BH_DECAY_ELEMENTAL_ABUNDANCE)
+                child = MolecularCloud(ex, ey, size, mass, BH_DECAY_ELEMENTAL_ABUNDANCE)
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
                 child.vy = math.sin(offset_angle) * offset_dist * 0.5
                 new_clouds.append(child)
@@ -986,9 +1017,9 @@ def update_simulation_state(state, ring, delta_time):
     for neutron_star in state.neutron_stars:
         if neutron_star in ns_to_remove:
             continue
-        neutron_star.update_position_of_entities_from_pulse(state, delta_time)
-        neutron_star.pulse_gravity_from_neutron_star(state, ring, delta_time)
-        neutron_star.decay_neutron_star(delta_time)
+        neutron_star.apply_gravity(state, delta_time)
+        neutron_star.update_pulse(state, ring, delta_time)
+        neutron_star.decay(delta_time)
         if neutron_star.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
             ns_to_remove.add(neutron_star)
             for _ in range(NS_DECAY_CLOUD_COUNT):
@@ -998,7 +1029,7 @@ def update_simulation_state(state, ring, delta_time):
                 ey = neutron_star.y + offset_dist * math.sin(offset_angle)
                 mass = random.uniform(NS_DECAY_CLOUD_MASS_MIN, NS_DECAY_CLOUD_MASS_MAX)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                child = MOLECULAR_CLOUD(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
+                child = MolecularCloud(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
                 child.vy = math.sin(offset_angle) * offset_dist * 0.5
                 new_clouds.append(child)
@@ -1032,7 +1063,7 @@ def update_simulation_state(state, ring, delta_time):
                     ey = cy + offset_dist * math.sin(offset_angle)
                     mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                    child = MOLECULAR_CLOUD(ex, ey, size, mass, KILONOVA_ELEMENTAL_ABUNDANCE)
+                    child = MolecularCloud(ex, ey, size, mass, KILONOVA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
                     child.vy = math.sin(offset_angle) * offset_dist * 0.5
                     new_clouds.append(child)
@@ -1059,8 +1090,9 @@ def update_simulation_state(state, ring, delta_time):
 
 
 
-def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_pts=64):
-    cx, cy = ring.center
+def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_pts=64, offset_x=0, offset_y=0):
+    cx = ring.center[0] + offset_x
+    cy = ring.center[1] + offset_y
     points = []
     for k in range(num_pts):
         theta = (2 * math.pi / num_pts) * k
@@ -1092,39 +1124,25 @@ def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_p
 
 
 def draw_simulation(screen, ring, state, offset_x=0, offset_y=0):
-    if offset_x != 0 or offset_y != 0:
-        orig_center = ring.center
-        ring.center = (ring.center[0] + offset_x, ring.center[1] + offset_y)
-        for mc in state.molecular_clouds:
-            mc.x += offset_x
-            mc.y += offset_y
-        for bh in state.black_holes:
-            bh.x += offset_x
-            bh.y += offset_y
-        for ns in state.neutron_stars:
-            ns.x += offset_x
-            ns.y += offset_y
-        for pulse in state.black_hole_pulses:
-            pulse[0] += offset_x
-            pulse[1] += offset_y
-
-    ring.draw_barrier(screen)
+    ring.draw(screen, offset_x, offset_y)
 
     for molecular_cloud in state.molecular_clouds:
-        molecular_cloud.draw_molecular_cloud(screen)
+        molecular_cloud.draw(screen, offset_x, offset_y)
 
     all_pulses = []
     for ns in state.neutron_stars:
         for pulse in ns.active_pulses:
-            all_pulses.append((ns.x, ns.y, pulse[0], pulse[2]))
+            all_pulses.append((ns.x + offset_x, ns.y + offset_y, pulse[0], pulse[2]))
     for pulse in state.black_hole_pulses:
-        all_pulses.append((pulse[0], pulse[1], pulse[2], 1.0))
+        all_pulses.append((pulse[0] + offset_x, pulse[1] + offset_y, pulse[2], 1.0))
 
-    for pulse in state.black_hole_pulses[:]:
+    for pulse in state.black_hole_pulses:
         x, y, pulse_radius, consumed_mass = pulse
         if pulse_radius > 1:
+            draw_x = x + offset_x
+            draw_y = y + offset_y
             pulse_width = max(2, int(consumed_mass / 20))
-            points = _clip_pulse_points(x, y, pulse_radius, ring, all_pulses)
+            points = _clip_pulse_points(draw_x, draw_y, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
             min_x = min(p[0] for p in points) - 2
             min_y = min(p[1] for p in points) - 2
             max_x = max(p[0] for p in points) + 2
@@ -1138,25 +1156,10 @@ def draw_simulation(screen, ring, state, offset_x=0, offset_y=0):
                 screen.blit(pulse_surface, (min_x, min_y))
 
     for black_hole in state.black_holes:
-        black_hole.draw_black_hole(screen)
+        black_hole.draw(screen, offset_x, offset_y)
 
     for neutron_star in state.neutron_stars:
-        neutron_star.draw_neutron_star(screen, ring, all_pulses)
-
-    if offset_x != 0 or offset_y != 0:
-        ring.center = orig_center
-        for mc in state.molecular_clouds:
-            mc.x -= offset_x
-            mc.y -= offset_y
-        for bh in state.black_holes:
-            bh.x -= offset_x
-            bh.y -= offset_y
-        for ns in state.neutron_stars:
-            ns.x -= offset_x
-            ns.y -= offset_y
-        for pulse in state.black_hole_pulses:
-            pulse[0] -= offset_x
-            pulse[1] -= offset_y
+        neutron_star.draw(screen, ring, all_pulses, offset_x, offset_y)
 
 
 def format_year_display(current_year):
@@ -1165,7 +1168,7 @@ def format_year_display(current_year):
     elif current_year >= 1_000:
         return f"TIME(YEARS): {current_year / 1_000:.1f}B"
     else:
-        return f"TIME(YEARS): {current_year}M"
+        return f"TIME(YEARS): {int(current_year)}M"
 
 
 def draw_ui(screen, font, current_year, zoom=1.0):
@@ -1179,7 +1182,7 @@ def run_simulation(screen, font, state, ring):
     try:
         running = True
         clock = pygame.time.Clock()
-        current_year = 0
+        current_year = 0.0
         last_frame_time = pygame.time.get_ticks()
         zoom = 1.0
         view_center_x = SCREEN_WIDTH / 2.0
@@ -1191,6 +1194,7 @@ def run_simulation(screen, font, state, ring):
         while running:
             current_time = pygame.time.get_ticks()
             delta_time = (current_time - last_frame_time) / 1000.0
+            delta_time = min(delta_time, MAX_DELTA_TIME)
             last_frame_time = current_time
 
             running, zoom, view_center_x, view_center_y = handle_input(
@@ -1212,7 +1216,7 @@ def run_simulation(screen, font, state, ring):
             if entity_count == 0 or total_mass <= 0:
                 print(f"Reset at year {current_year}: entities={entity_count}, mass={total_mass}")
                 state, ring = initialize_state()
-                current_year = 0
+                current_year = 0.0
                 zoom = 1.0
                 view_center_x = SCREEN_WIDTH / 2.0
                 view_center_y = SCREEN_HEIGHT / 2.0
@@ -1248,7 +1252,7 @@ def run_simulation(screen, font, state, ring):
 
             draw_ui(screen, font, current_year, zoom)
 
-            current_year += 1
+            current_year += delta_time * YEAR_RATE
 
             pygame.display.flip()
             clock.tick(60)
@@ -1273,7 +1277,7 @@ def run_simulation(screen, font, state, ring):
 
 def initialize_state():
     state = SimulationState()
-    ring = BARRIER((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), (800, 800), BARRIER_POINT_COUNT)
+    ring = Barrier((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), (800, 800), BARRIER_POINT_COUNT)
 
     density_weights = [max(0.0, 1.0 - CMB_DENSITY_CONTRAST * ring.perturbation[i]) for i in range(ring.num_points)]
     total_weight = sum(density_weights)
@@ -1294,7 +1298,7 @@ def initialize_state():
         radius = math.sqrt(random.uniform(0, 1)) * local_radius
         x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
         y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
-        molecular_cloud = MOLECULAR_CLOUD(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS)
+        molecular_cloud = MolecularCloud(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS)
         state.molecular_clouds.append(molecular_cloud)
 
     return state, ring
