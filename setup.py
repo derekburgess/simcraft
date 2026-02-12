@@ -90,8 +90,7 @@ setup(
     entry_points={
        'console_scripts': [
            'simcraft = sim.sim:main',
-           'simanalysis = analysis.analysis:main',
-           'rng = analysis.rng:main'
+           'rng = sim.rng:main'
        ],
     },
 )

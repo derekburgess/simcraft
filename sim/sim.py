@@ -1,11 +1,8 @@
 import os
-import csv
 import pygame
 import math
 import random
 import bisect
-import matplotlib.pyplot as plt
-import matplotlib.backends.backend_agg as agg
 
 
 GRAVITY_SCALE = 0.15
@@ -32,17 +29,19 @@ MOLECULAR_CLOUD_START_MASS = 1
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.01 * GRAVITY_SCALE
 MOLECULAR_CLOUD_MAX_MASS = 22
 MOLECULAR_CLOUD_START_COLORS = [
-    (50, 0, 0),    # Hydrogen - Red (H-alpha) - 75%
-    (50, 50, 0),   # Helium - Yellow (D3) - 23%
-    (0, 50, 0),    # Oxygen - Green (OI) - 1%
-    (0, 0, 50),    # Carbon - Blue (C2) - 0.5%
-    (60, 165, 0),  # Neon - Orange (NeI) - 0.1%
-    (25, 0, 50),   # Nitrogen - Violet (NII) - 0.1%
-    (80, 80, 80),  # Iron - Metallic Gray
-    (60, 40, 20),  # Silicon - Earthy Brown
-    (50, 40, 5)    # Gold - Deep Warm Yellow
+    (140, 20, 20),   # Hydrogen - Red (H-alpha) - 75%
+    (140, 130, 0),   # Helium - Yellow (D3) - 23%
+    (20, 140, 20),   # Oxygen - Green (OI) - 1%
+    (20, 20, 140),   # Carbon - Blue (C2) - 0.5%
+    (160, 100, 0),   # Neon - Orange (NeI) - 0.1%
+    (80, 20, 140),   # Nitrogen - Violet (NII) - 0.1%
+    (150, 150, 150), # Iron - Metallic Gray
+    (140, 90, 40),   # Silicon - Earthy Brown
+    (140, 120, 20)   # Gold - Deep Warm Yellow
 ]
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
+MOLECULAR_CLOUD_OPACITY = 100
+MOLECULAR_CLOUD_MIN_OPACITY = 20
 DEFAULT_STATE_CHANCE = 0.01
 PROTOSTAR_THRESHOLD = 18
 PROTOSTAR_EJECTA_COUNT = 10
@@ -107,15 +106,9 @@ CMB_DENSITY_CONTRAST = 0.6
 
 VELOCITY_DAMPING = 0.74
 
-BACKGROUND_COLOR = (0, 5, 2)
-SNAPSHOT_SPEED = 100
-LABEL_COLOR = (255, 255, 255)
-BORDER_COLOR = (150, 150, 150)
-BOX_BG_COLOR = (0, 0, 10)
-SUB_WINDOW_RECT = pygame.Rect(20, 20, 180, 450)
-CLOSE_BUTTON_RECT = pygame.Rect(180, 20, 20, 20)
-
-SCREEN_WIDTH = 1280
+BACKGROUND_COLOR = (0, 6, 16)
+LABEL_COLOR = (60, 60, 200)
+SCREEN_WIDTH = 1440
 SCREEN_HEIGHT = 960
 
 ZOOM_MIN = 0.5
@@ -454,7 +447,6 @@ KILONOVA_ELEMENTAL_ABUNDANCE = [
 
 class MOLECULAR_CLOUD:
     def __init__(self, x, y, size, mass, abundance=None):
-        self.selected = False
         self.id = generate_unique_id()
         self.x = x
         self.y = y
@@ -471,21 +463,17 @@ class MOLECULAR_CLOUD:
                 break
 
     def draw_molecular_cloud(self, screen):
-        if self.selected:
-            highlight_color = (255, 165, 0)
-            pygame.draw.rect(screen, highlight_color, (self.x, self.y, self.size, self.size))
+        if self.size <= 4:
+            self.color = MOLECULAR_CLOUD_END_COLOR
         else:
-            if self.size <= 4:
-                self.color = MOLECULAR_CLOUD_END_COLOR
-            else:
-                factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
-                self.color = interpolate_color(self.start_color, MOLECULAR_CLOUD_END_COLOR, factor)
-            if self.opacity < 255:
-                s = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
-                s.fill(self.color + (self.opacity,))
-                screen.blit(s, (self.x, self.y))
-            else:
-                pygame.draw.rect(screen, self.color, (self.x, self.y, self.size, self.size))
+            factor = 1.0 - (self.size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4)
+            self.color = interpolate_color(self.start_color, MOLECULAR_CLOUD_END_COLOR, factor)
+        if self.opacity < 255:
+            s = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+            s.fill(self.color + (self.opacity,))
+            screen.blit(s, (self.x, self.y))
+        else:
+            pygame.draw.rect(screen, self.color, (self.x, self.y, self.size, self.size))
 
     def update_molecular_cloud(self):
         self.size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((self.mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
@@ -493,9 +481,9 @@ class MOLECULAR_CLOUD:
         if self.mass >= PROTOSTAR_THRESHOLD:
             self.opacity = 255
         elif self.size < 4:
-            self.opacity = random.randint(0, 255)
+            self.opacity = random.randint(MOLECULAR_CLOUD_MIN_OPACITY, 255)
         else:
-            self.opacity = 150
+            self.opacity = MOLECULAR_CLOUD_OPACITY
 
     def check_collisions_with_molecular_clouds(self, other):
         return (self.x < other.x + other.size and
@@ -503,15 +491,10 @@ class MOLECULAR_CLOUD:
                 self.y < other.y + other.size and
                 self.y + self.size > other.y)
 
-    def molecular_cloud_clicked(self, click_x, click_y):
-        return (self.x <= click_x <= self.x + self.size and
-                self.y <= click_y <= self.y + self.size)
-
 
 class BLACK_HOLE:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
-        self.selected = False
         self.x = x
         self.y = y
         self.vx = 0.0
@@ -523,20 +506,12 @@ class BLACK_HOLE:
     def draw_black_hole(self, screen):
         radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.border_radius = radius
-        if self.selected:
-            highlight_color = (255, 165, 0)
-            pygame.draw.circle(screen, highlight_color, (int(self.x), int(self.y)), radius)
-        else:
-            pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
-            pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
+        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (int(self.x), int(self.y)), radius)
+        pygame.draw.circle(screen, BLACK_HOLE_COLOR, (int(self.x), int(self.y)), radius - 2)
 
         tracer_x = self.x + self.border_radius * math.cos(self.tracer_angle)
         tracer_y = self.y + self.border_radius * math.sin(self.tracer_angle)
         pygame.draw.circle(screen, DISK_COLOR, (int(tracer_x), int(tracer_y)), DISK_SIZE)
-
-    def black_hole_clicked(self, click_x, click_y):
-        distance = math.hypot(click_x - self.x, click_y - self.y)
-        return distance <= self.border_radius
 
     def attract_entities_to_black_holes(self, state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove):
         for black_hole in state.black_holes:
@@ -602,7 +577,6 @@ class BLACK_HOLE:
 class NEUTRON_STAR:
     def __init__(self, x, y, mass):
         self.id = generate_unique_id()
-        self.selected = False
         self.x = x
         self.y = y
         self.vx = 0.0
@@ -617,12 +591,8 @@ class NEUTRON_STAR:
         self.pulse_color_duration = 0.1  # Duration of white color in seconds
 
     def draw_neutron_star(self, screen, ring, all_pulses):
-        if self.selected:
-            highlight_color = (255, 165, 0)
-            pygame.draw.circle(screen, highlight_color, (int(self.x), int(self.y)), self.radius)
-        else:
-            current_color = (255, 255, 255) if self.pulse_color_state == 1 else NEUTRON_STAR_COLOR
-            pygame.draw.circle(screen, current_color, (int(self.x), int(self.y)), self.radius)
+        current_color = (255, 255, 255) if self.pulse_color_state == 1 else NEUTRON_STAR_COLOR
+        pygame.draw.circle(screen, current_color, (int(self.x), int(self.y)), self.radius)
 
         for pulse in self.active_pulses:
             pulse_radius, _, fade = pulse
@@ -646,10 +616,6 @@ class NEUTRON_STAR:
                 local_points = [(p[0] - min_x, p[1] - min_y) for p in points]
                 pygame.draw.polygon(pulse_surface, color, local_points, NEUTRON_STAR_PULSE_WIDTH)
                 screen.blit(pulse_surface, (min_x, min_y))
-
-    def neutron_star_clicked(self, click_x, click_y):
-        distance = math.hypot(click_x - self.x, click_y - self.y)
-        return distance <= self.radius
 
     def pulse_gravity_from_neutron_star(self, state, ring, delta_time):
         self.time_since_last_pulse += delta_time
@@ -839,32 +805,6 @@ def update_entities(state):
     state.molecular_clouds.extend(new_clouds)
 
 
-global_index_counter = 1
-def dump_to_csv(state, current_year, filename):
-    global global_index_counter
-    file_exists = os.path.isfile(filename)
-    with open(filename, mode='a' if file_exists else 'w', newline='') as file:
-        writer = csv.writer(file)
-        if not file_exists:
-            writer.writerow(['rowid', 'entityid', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation'])
-        row_id = global_index_counter
-        for molecular_cloud in state.molecular_clouds:
-            flux = molecular_cloud.opacity if hasattr(molecular_cloud, 'opacity') else 'N/A'
-            if PROTOSTAR_THRESHOLD <= molecular_cloud.mass <= BLACK_HOLE_THRESHOLD:
-                entity_type = 'ProtoStar'
-            else:
-                entity_type = 'MolecularCloud'
-            writer.writerow([row_id, molecular_cloud.id, entity_type, molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass, molecular_cloud.size, flux, current_year])
-            row_id += 1
-        for black_hole in state.black_holes:
-            writer.writerow([row_id, black_hole.id, 'BlackHole', black_hole.x, black_hole.y, black_hole.mass, black_hole.border_radius, 0, current_year])
-            row_id += 1
-        for neutron_star in state.neutron_stars:
-            writer.writerow([row_id, neutron_star.id, 'NeutronStar', neutron_star.x, neutron_star.y, neutron_star.mass, neutron_star.radius, 0, current_year])
-            row_id += 1
-        global_index_counter = row_id
-
-
 def draw_static_key(screen, font, zoom):
     snapshot_pos = (30, SCREEN_HEIGHT - 140)
     if zoom != 1.0:
@@ -873,158 +813,7 @@ def draw_static_key(screen, font, zoom):
         zoom_text = '[SCROLL] ZOOM'
     screen.blit(font.render(zoom_text, True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
     snapshot_pos = (30, SCREEN_HEIGHT - 110)
-    screen.blit(font.render('[SPACEBAR] DATA SNAPSHOT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-    snapshot_pos = (30, SCREEN_HEIGHT - 80)
     screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-
-
-def load_csv_data(file_path):
-    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-        return {}
-    with open(file_path, 'r') as file:
-        try:
-            reader = csv.DictReader(file)
-            data = {}
-            for row in reader:
-                entityid = row['entityid']
-                if entityid not in data:
-                    data[entityid] = []
-                row_data = {
-                    'observation': row.get('observation', '0'),
-                    'mass': row.get('mass', '0'),
-                    'size': row.get('size', '0'),
-                    'flux': row.get('flux', 'N/A'),
-                    'posx': row.get('posx', '0'),
-                    'posy': row.get('posy', '0'),
-                    'rowid': row.get('rowid', 'N/A'),
-                    'entityid': entityid,
-                    'type': row.get('type', 'N/A')
-                }
-                data[entityid].append(row_data)
-            return data
-        except (IOError, csv.Error) as e:
-            print(f"Error reading or parsing CSV: {e}")
-            return {}
-
-
-def plot_graph(x_values, data):
-    fig, ax = plt.subplots(figsize=(2, 1), dpi=80)
-    fig.patch.set_alpha(0.0)
-    ax.patch.set_alpha(0.0)
-    colors = ['white', 'gray', 'purple']
-    linestyles = [':', ':', '-']
-    plot_successful = False
-    for i, (key, y_values) in enumerate(data.items()):
-        if len(x_values) == len(y_values) and len(x_values) > 0:
-            try:
-                numeric_x = [float(x) for x in x_values]
-                numeric_y = [float(y) if y != 'N/A' else 0 for y in y_values]
-                ax.plot(numeric_x, numeric_y, label=key.upper(), color=colors[i % len(colors)], linestyle=linestyles[i % len(linestyles)])
-                plot_successful = True
-            except ValueError as e:
-                print(f"Warning: Could not plot {key}, invalid data: {e}")
-        else:
-             print(f"Warning: Skipping plot for {key} due to mismatched lengths or empty data (x: {len(x_values)}, y: {len(y_values)}).")
-
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
-    plt.tight_layout()
-    canvas = agg.FigureCanvasAgg(fig)
-    canvas.draw()
-    plt.close(fig)
-    return canvas, plot_successful
-
-
-def display_molecular_cloud_data(screen, selected_entity, rect, font, csv_data):
-    if selected_entity is None:
-        return
-
-    live_data_texts = [
-        "LIVE DATA:",
-        f"ID: {selected_entity.id}",
-        f"POSX: {round(selected_entity.x, 5)}",
-        f"POSY: {round(selected_entity.y, 5)}",
-        f"MASS: {round(selected_entity.mass, 5)}"
-    ]
-
-    if isinstance(selected_entity, MOLECULAR_CLOUD):
-        live_data_texts.append(f"SIZE: {round(selected_entity.size, 5)}")
-        live_data_texts.append(f"FLUX: {selected_entity.opacity if hasattr(selected_entity, 'opacity') else 'N/A'}")
-    elif isinstance(selected_entity, BLACK_HOLE):
-        live_data_texts.append(f"RADIUS: {round(selected_entity.border_radius, 5)}")
-        live_data_texts.append("FLUX: N/A")
-    elif isinstance(selected_entity, NEUTRON_STAR):
-        live_data_texts.append(f"RADIUS: {round(selected_entity.radius, 5)}")
-        live_data_texts.append("FLUX: N/A")
-
-    y_offset = 5
-    for text in live_data_texts:
-        text_surface = font.render(text, True, LABEL_COLOR)
-        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-        y_offset += 20
-
-    y_offset = 160
-    header_surface = font.render("OBSERVATIONAL DATA:", True, LABEL_COLOR)
-    screen.blit(header_surface, (rect.x + 10, rect.y + y_offset))
-    y_offset += 20
-
-    entity_csv_data = csv_data.get(str(selected_entity.id))
-    graph_plotted = False
-    if entity_csv_data:
-        most_recent_observation = entity_csv_data[-1]
-        display_keys = ['rowid', 'entityid', 'type', 'posx', 'posy', 'mass', 'size', 'flux', 'observation']
-        for key in display_keys:
-            value = most_recent_observation.get(key, 'N/A')
-            try:
-                if key in ['posx', 'posy', 'mass']:
-                    value = round(float(value), 5)
-                elif key == 'size':
-                    if isinstance(selected_entity, MOLECULAR_CLOUD):
-                        value = round(float(value), 5)
-                    elif isinstance(selected_entity, BLACK_HOLE):
-                        value = round(float(value), 5)
-                    elif isinstance(selected_entity, NEUTRON_STAR):
-                        value = round(float(value), 5)
-                elif key == 'observation':
-                    value = int(float(value))
-            except (ValueError, TypeError):
-                value = 'N/A'
-
-            csv_text = f"{key.upper()}: {value}"
-            text_surface = font.render(csv_text, True, LABEL_COLOR)
-            screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-            y_offset += 20
-
-        observations = [row['observation'] for row in entity_csv_data if 'observation' in row]
-        plot_data = {}
-        for key in ['mass', 'size', 'flux']:
-            plot_data[key] = [row[key] for row in entity_csv_data if key in row]
-
-        min_len = len(observations)
-        for key in plot_data:
-            min_len = min(min_len, len(plot_data[key]))
-
-        valid_observations = observations[:min_len]
-        valid_plot_data = {k: v[:min_len] for k, v in plot_data.items()}
-
-        if valid_observations and all(valid_plot_data.values()):
-            canvas, plot_successful = plot_graph(valid_observations, valid_plot_data)
-            if plot_successful:
-                width, height = canvas.get_width_height()
-                pygame_surface = pygame.image.fromstring(canvas.tostring_argb(), (width, height), 'ARGB')
-                plot_y_pos = rect.y + y_offset
-                screen.blit(pygame_surface, (rect.x + 10, plot_y_pos))
-                graph_plotted = True
-
-    if not entity_csv_data:
-        no_data_text = "No observational data found."
-        text_surface = font.render(no_data_text, True, LABEL_COLOR)
-        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset))
-        y_offset += 20
-    elif not graph_plotted:
-        plot_fail_text = "Could not generate plot."
-        text_surface = font.render(plot_fail_text, True, LABEL_COLOR)
-        screen.blit(text_surface, (rect.x + 10, rect.y + y_offset + 10))
 
 
 def screen_to_world(screen_x, screen_y, zoom, view_center_x, view_center_y):
@@ -1037,17 +826,12 @@ def screen_to_world(screen_x, screen_y, zoom, view_center_x, view_center_y):
     return world_x, world_y
 
 
-def handle_input(state, selected_entity, sub_window_active, zoom, view_center_x, view_center_y):
+def handle_input(zoom, view_center_x, view_center_y):
     running = True
-    new_selected_entity = selected_entity
-    new_sub_window_active = sub_window_active
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
             running = False
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            pass
-
         if event.type == pygame.MOUSEWHEEL:
             mouse_sx, mouse_sy = pygame.mouse.get_pos()
             world_x, world_y = screen_to_world(mouse_sx, mouse_sy, zoom, view_center_x, view_center_y)
@@ -1062,106 +846,7 @@ def handle_input(state, selected_entity, sub_window_active, zoom, view_center_x,
                     view_center_x = world_x - (mouse_sx - SCREEN_WIDTH / 2) / zoom
                     view_center_y = world_y - (mouse_sy - SCREEN_HEIGHT / 2) / zoom
 
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            screen_click_x, screen_click_y = event.pos
-            click_x, click_y = screen_to_world(screen_click_x, screen_click_y, zoom, view_center_x, view_center_y)
-            clicked_on_entity = False
-            if new_sub_window_active:
-                if CLOSE_BUTTON_RECT.collidepoint(screen_click_x, screen_click_y):
-                    if new_selected_entity:
-                        new_selected_entity.selected = False
-                    new_selected_entity = None
-                    new_sub_window_active = False
-                elif SUB_WINDOW_RECT.collidepoint(screen_click_x, screen_click_y):
-                    pass
-                else:
-                    for molecular_cloud in state.molecular_clouds:
-                        if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
-                            if new_selected_entity:
-                                new_selected_entity.selected = False
-                            new_selected_entity = molecular_cloud
-                            new_selected_entity.selected = True
-                            new_sub_window_active = True
-                            clicked_on_entity = True
-                            break
-
-                    if not clicked_on_entity:
-                        for black_hole in state.black_holes:
-                            if black_hole.black_hole_clicked(click_x, click_y):
-                                if new_selected_entity:
-                                    new_selected_entity.selected = False
-                                new_selected_entity = black_hole
-                                new_selected_entity.selected = True
-                                new_sub_window_active = True
-                                clicked_on_entity = True
-                                break
-
-                    if not clicked_on_entity:
-                        for neutron_star in state.neutron_stars:
-                            if neutron_star.neutron_star_clicked(click_x, click_y):
-                                if new_selected_entity:
-                                    new_selected_entity.selected = False
-                                new_selected_entity = neutron_star
-                                new_selected_entity.selected = True
-                                new_sub_window_active = True
-                                clicked_on_entity = True
-                                break
-
-                    if not clicked_on_entity:
-                        if new_selected_entity:
-                            new_selected_entity.selected = False
-                        new_selected_entity = None
-                        new_sub_window_active = False
-            else:
-                for molecular_cloud in state.molecular_clouds:
-                    if molecular_cloud.molecular_cloud_clicked(click_x, click_y):
-                        if new_selected_entity:
-                            new_selected_entity.selected = False
-                        new_selected_entity = molecular_cloud
-                        new_selected_entity.selected = True
-                        new_sub_window_active = True
-                        clicked_on_entity = True
-                        break
-
-                if not clicked_on_entity:
-                    for black_hole in state.black_holes:
-                        if black_hole.black_hole_clicked(click_x, click_y):
-                            if new_selected_entity:
-                                new_selected_entity.selected = False
-                            new_selected_entity = black_hole
-                            new_selected_entity.selected = True
-                            new_sub_window_active = True
-                            clicked_on_entity = True
-                            break
-
-                if not clicked_on_entity:
-                    for neutron_star in state.neutron_stars:
-                        if neutron_star.neutron_star_clicked(click_x, click_y):
-                            if new_selected_entity:
-                                new_selected_entity.selected = False
-                            new_selected_entity = neutron_star
-                            new_selected_entity.selected = True
-                            new_sub_window_active = True
-                            clicked_on_entity = True
-                            break
-
-                if not clicked_on_entity and new_selected_entity:
-                    new_selected_entity.selected = False
-                    new_selected_entity = None
-                    new_sub_window_active = False
-
-    if new_selected_entity:
-        for mc in state.molecular_clouds:
-            if mc is not new_selected_entity:
-                mc.selected = False
-        for bh in state.black_holes:
-            if bh is not new_selected_entity:
-                bh.selected = False
-        for ns in state.neutron_stars:
-            if ns is not new_selected_entity:
-                ns.selected = False
-
-    return running, new_selected_entity, new_sub_window_active, zoom, view_center_x, view_center_y
+    return running, zoom, view_center_x, view_center_y
 
 
 def resolve_pulse_collisions(state, delta_time):
@@ -1189,7 +874,7 @@ def resolve_pulse_collisions(state, delta_time):
                 pulse_b[2] -= fade_rate * delta_time
 
 
-def update_simulation_state(state, ring, delta_time, current_year, sim_data):
+def update_simulation_state(state, ring, delta_time):
     state.spatial_hash.clear()
     state.spatial_hash.bulk_insert(state.molecular_clouds)
 
@@ -1366,10 +1051,6 @@ def update_simulation_state(state, ring, delta_time, current_year, sim_data):
     for ns in state.neutron_stars:
         integrate_entity(ns, delta_time)
 
-    if current_year == 20:
-        dump_to_csv(state, current_year, sim_data)
-    if current_year % SNAPSHOT_SPEED == 0:
-        dump_to_csv(state, current_year, sim_data)
 
 
 def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_pts=64):
@@ -1481,35 +1162,19 @@ def format_year_display(current_year):
         return f"TIME(YEARS): {current_year}M"
 
 
-def draw_ui(screen, font, current_year, selected_entity, sub_window_active, sim_data, zoom=1.0):
+def draw_ui(screen, font, current_year, zoom=1.0):
     draw_static_key(screen, font, zoom)
 
     year_text = font.render(format_year_display(current_year), True, LABEL_COLOR)
     screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
 
-    if sub_window_active:
-        csv_data = load_csv_data(sim_data)
 
-        pygame.draw.rect(screen, BORDER_COLOR, SUB_WINDOW_RECT, 1)
-        inner_rect = SUB_WINDOW_RECT.inflate(-2 * 1, -2 * 1)
-        pygame.draw.rect(screen, BOX_BG_COLOR, inner_rect)
-        pygame.draw.rect(screen, BORDER_COLOR, CLOSE_BUTTON_RECT)
-
-        if selected_entity:
-            display_molecular_cloud_data(screen, selected_entity, SUB_WINDOW_RECT, font, csv_data)
-        else:
-             no_selection_text = font.render("No entity selected", True, LABEL_COLOR)
-             screen.blit(no_selection_text, (SUB_WINDOW_RECT.x + 10, SUB_WINDOW_RECT.y + 10))
-
-
-def run_simulation(screen, font, sim_data, state, ring):
+def run_simulation(screen, font, state, ring):
     try:
         running = True
         clock = pygame.time.Clock()
         current_year = 0
         last_frame_time = pygame.time.get_ticks()
-        selected_entity = None
-        sub_window_active = False
         zoom = 1.0
         view_center_x = SCREEN_WIDTH / 2.0
         view_center_y = SCREEN_HEIGHT / 2.0
@@ -1522,17 +1187,15 @@ def run_simulation(screen, font, sim_data, state, ring):
             delta_time = (current_time - last_frame_time) / 1000.0
             last_frame_time = current_time
 
-            running, selected_entity, sub_window_active, zoom, view_center_x, view_center_y = handle_input(
-                state, selected_entity, sub_window_active, zoom, view_center_x, view_center_y
+            running, zoom, view_center_x, view_center_y = handle_input(
+                zoom, view_center_x, view_center_y
             )
             if not running:
                 break
 
             ring.update_deformation(state, delta_time)
 
-            update_simulation_state(
-                state, ring, delta_time, current_year, sim_data
-            )
+            update_simulation_state(state, ring, delta_time)
 
             entity_count = len(state.molecular_clouds) + len(state.black_holes) + len(state.neutron_stars)
             total_mass = (
@@ -1544,8 +1207,6 @@ def run_simulation(screen, font, sim_data, state, ring):
                 print(f"Reset at year {current_year}: entities={entity_count}, mass={total_mass}")
                 state, ring = initialize_state()
                 current_year = 0
-                selected_entity = None
-                sub_window_active = False
                 zoom = 1.0
                 view_center_x = SCREEN_WIDTH / 2.0
                 view_center_y = SCREEN_HEIGHT / 2.0
@@ -1579,7 +1240,7 @@ def run_simulation(screen, font, sim_data, state, ring):
                 scaled = pygame.transform.scale(visible_area, (SCREEN_WIDTH, SCREEN_HEIGHT))
                 screen.blit(scaled, (0, 0))
 
-            draw_ui(screen, font, current_year, selected_entity, sub_window_active, sim_data, zoom)
+            draw_ui(screen, font, current_year, zoom)
 
             current_year += 1
 
@@ -1589,12 +1250,12 @@ def run_simulation(screen, font, sim_data, state, ring):
         print("Exited simulation")
 
         try:
-            from analysis.rng import serialize_state, generate
+            from sim.rng import serialize_state, generate
             state_bytes, entity_count = serialize_state(state)
             result = generate(state_bytes, 10000000000000000000, 99999999999999999999)
-            print(f"{result['random_number']}")
+            print(f"RANDOM: {result['random_number']}")
         except Exception as rng_err:
-            print(f"RNG generation failed: {rng_err}")
+            print(f"RNG FAILED: {rng_err}")
 
     except Exception as e:
         import traceback
@@ -1638,18 +1299,11 @@ def main():
     pygame.display.set_caption("simcraft")
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     font = pygame.font.SysFont('Monospace', 14)
-    sim_data_path = os.getenv("SIMCRAFT_DATA")
-    sim_data = os.path.join(sim_data_path, 'sim_data.csv')
-
-    if os.path.isfile(sim_data):
-        os.remove(sim_data)
-        print(f"Checking and clearing sim_data")
-
     print("Populating space with molecular clouds")
     state, ring = initialize_state()
 
     print("Starting simulation")
-    run_simulation(screen, font, sim_data, state, ring)
+    run_simulation(screen, font, state, ring)
 
 if __name__ == "__main__":
     main()
