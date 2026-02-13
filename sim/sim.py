@@ -5,31 +5,73 @@ import random
 import bisect
 
 
-GRAVITY_SCALE = 0.15
+# ── Display ──
+BACKGROUND_COLOR = (0, 10, 20) # RGB background color (dark blue-black, like space).
+LABEL_COLOR = (60, 60, 200)    # RGB color for UI text labels.
+SCREEN_WIDTH = 1440             # Display width in pixels. Change to match your monitor.
+SCREEN_HEIGHT = 960             # Display height in pixels. Change to match your monitor.
 
-BARRIER_POINT_COUNT = 600
-BARRIER_INITIAL_SIZE = 320
-BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE
-BARRIER_COLOR = (30, 60, 220)
-BARRIER_BASE_OPACITY = 150
-BARRIER_FLASH_COLOR = (0, 184, 106)
-BARRIER_FLASH_OPACITY = 255
-BARRIER_FLASH_DECAY = 3.0
-BARRIER_WAVE_PUSH = 400.0
-BARRIER_DAMPING = 0.05
-BARRIER_DEFORM_THRESHOLD = 0.1
-BARRIER_HEAVY_MASS_THRESHOLD = 60
-BARRIER_SMOOTHING_PASSES = 3
-BARRIER_SMOOTHING_WINDOW = 5
+# ── Zoom ──
+ZOOM_MIN = 0.5                 # Minimum zoom level (zoomed out). Lower = can see more.
+ZOOM_MAX = 1.5                 # Maximum zoom level (zoomed in). Higher = can zoom in more.
+ZOOM_STEP = 0.25               # Zoom change per scroll wheel tick.
 
-MOLECULAR_CLOUD_COUNT = 6400
-MOLECULAR_CLOUD_START_SIZE = 20
-MOLECULAR_CLOUD_MIN_SIZE = 6
-MOLECULAR_CLOUD_GROWTH_RATE = 0.58
-MOLECULAR_CLOUD_START_MASS = 1
-MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.001 * GRAVITY_SCALE
-MOLECULAR_CLOUD_MERGE_CHANCE = 0.008
-MOLECULAR_CLOUD_MAX_MASS = 42
+# ── Timing ──
+YEAR_RATE = 60                 # Simulated years per real second. Higher = faster time progression in the UI counter.
+MAX_DELTA_TIME = 0.05          # Maximum physics time step per frame (seconds). Caps dt to prevent instability on lag spikes.
+
+# ── Physics ──
+GRAVITY_SCALE = 0.15  # Master gravity multiplier applied to all gravitational constants. Increase for stronger gravity everywhere.
+VELOCITY_DAMPING = 0.97        # Per-frame velocity multiplier for all entities. Below 1.0 = energy dissipation. 1.0 = no damping.
+
+# ── CMB Perturbations (initial conditions, inspired by real cosmic microwave background) ──
+# These control how the universe looks at the very start of the simulation.
+# The barrier ring isn't a perfect circle — it's warped by Fourier perturbations,
+# and clouds spawn denser in the "dented" regions, seeding the clumps that
+# eventually collapse into stars and black holes. Set all to 0 for a perfectly
+# uniform start (boring). Crank them up for wild, lumpy initial conditions.
+CMB_PERTURBATION_MODES = 10     # Number of sine-wave modes layered onto the barrier shape. 1 = simple oval,
+                                # 6 = complex bumpy ring, 20+ = very jagged. Each higher mode adds finer detail.
+CMB_PERTURBATION_SCALE = 0.08  # Amplitude of each mode (as a fraction of barrier radius). 0 = perfect circle,
+                                # 0.08 = subtle bumps (~8%), 0.3+ = dramatic deformations.
+CMB_DENSITY_CONTRAST = 0.4     # How strongly barrier shape biases initial cloud placement. 0 = clouds spread
+                                # evenly regardless of barrier shape, 0.6 = noticeably clumpy, 1.0 = extreme
+                                # clustering in dented regions (can leave large voids elsewhere).
+
+# ── Barrier (cosmic boundary ring) ──
+BARRIER_POINT_COUNT = 640       # Number of vertices defining the barrier ring. More = smoother circle, but slower.
+BARRIER_INITIAL_SIZE = 240      # Starting diameter of the barrier ring in pixels.
+BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Higher = stronger inward pull.
+BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
+BARRIER_BASE_OPACITY = 150      # Transparency of the barrier at rest (0=invisible, 255=opaque).
+BARRIER_FLASH_COLOR = (0, 184, 106)  # RGB color the barrier flashes when deformed (green).
+BARRIER_FLASH_OPACITY = 255     # Peak opacity during a barrier flash (0-255).
+BARRIER_FLASH_DECAY = 4.0       # How fast barrier flashes fade per second. Higher = faster fade.
+BARRIER_WAVE_PUSH = 400.0       # Force magnitude when pulses hit the barrier. Higher = more barrier wobble.
+BARRIER_DAMPING = 0.04          # Damping factor for barrier deformation velocity. Lower = more oscillation.
+BARRIER_DEFORM_THRESHOLD = 0.1  # Minimum radius change (pixels) to trigger a flash effect.
+BARRIER_HEAVY_MASS_THRESHOLD = 100  # Combined mass near a barrier section that weakens containment. Higher = harder to break out.
+BARRIER_SMOOTHING_PASSES = 3    # Number of smoothing iterations when drawing the barrier. More = smoother shape.
+BARRIER_SMOOTHING_WINDOW = 5    # Window size for the smoothing algorithm (must be odd). Larger = smoother but less detail.
+
+# ── Barrier Interaction (how different entities interact with the barrier) ──
+MC_BARRIER_GRAVITY_FACTOR = 0.001  # Gravity multiplier for clouds vs barrier. Very weak — clouds drift inward gently.
+BH_BARRIER_GRAVITY_FACTOR = 0.01   # Gravity multiplier for black holes vs barrier. 10x stronger than clouds.
+NS_BARRIER_GRAVITY_FACTOR = 0.008   # Gravity multiplier for neutron stars vs barrier. Strongest pull.
+
+MC_BARRIER_DEFORM_FACTOR = 2.0     # How strongly massive clouds dent the barrier on approach.
+BH_BARRIER_DEFORM_FACTOR = 12.0    # How strongly black holes dent the barrier. Very high.
+NS_BARRIER_DEFORM_FACTOR = 6.0     # How strongly neutron stars dent the barrier.
+
+# ── Molecular Clouds ──
+MOLECULAR_CLOUD_COUNT = 4800    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
+MOLECULAR_CLOUD_START_SIZE = 20 # Initial visual size of clouds in pixels.
+MOLECULAR_CLOUD_MIN_SIZE = 6    # Smallest a cloud can shrink to as it gains mass.
+MOLECULAR_CLOUD_GROWTH_RATE = 0.24  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
+MOLECULAR_CLOUD_START_MASS = 1  # Initial mass of each cloud.
+MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0008 * GRAVITY_SCALE  # Gravitational attraction between clouds. Very low to prevent instant clumping.
+MOLECULAR_CLOUD_MERGE_CHANCE = 0.004  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
+MOLECULAR_CLOUD_MAX_MASS = 48   # Maximum mass a cloud/star can reach. Caps growth.
 MOLECULAR_CLOUD_START_COLORS = [
     (140, 20, 20),   # Hydrogen - Red (H-alpha)
     (140, 130, 0),   # Helium - Yellow (D3)
@@ -52,124 +94,111 @@ MOLECULAR_CLOUD_START_COLORS = [
     (50, 130, 70),   # Chromium - Deep Green (CrI)
     (110, 70, 160),  # Titanium - Violet-Blue (TiI)
 ]
-MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
-MOLECULAR_CLOUD_OPACITY = 180
-MOLECULAR_CLOUD_MIN_OPACITY = 80
-DEFAULT_STATE_CHANCE = 0.001
-EJECTA_HEAVIER_ELEMENT_CHANCE = 0.05
+MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)  # Color clouds fade toward as they gain mass (white-blue).
+MOLECULAR_CLOUD_OPACITY = 128   # Maximum opacity for clouds below protostar mass (0-255).
+MOLECULAR_CLOUD_MIN_OPACITY = 64  # Minimum opacity for the lightest clouds (0-255).
+DEFAULT_STATE_CHANCE = 0.002    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
+EJECTA_HEAVIER_ELEMENT_CHANCE = 0.4  # Probability that ejecta from supernovae produce heavier elements than the parent.
 
-MC_EMISSION_CHANCE = 0.1          # Per-frame chance for eligible clouds to emit
-MC_EMISSION_MIN_PARENT_MASS = 3     # Minimum parent mass to emit
+# ── Molecular Cloud Emission (clouds shed daughter clouds) ──
+MC_EMISSION_CHANCE = 0.2          # Per-frame chance for eligible clouds to emit
+MC_EMISSION_MIN_PARENT_MASS = 6     # Minimum parent mass to emit
 MC_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
-MC_EMISSION_MASS_MAX = 3            # Max mass of emitted cloud
+MC_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
 MC_EMISSION_VELOCITY = 0.8         # Emission kick speed
-MC_EMISSION_SPREAD = 16              # Max spawn distance from parent
-MC_EMISSION_COUNT = 10               # Max number of emissions per cloud
+MC_EMISSION_SPREAD = 12              # Max spawn distance from parent
+MC_EMISSION_COUNT = 4               # Max number of emissions per cloud
 
-PROTOSTAR_THRESHOLD = 32
-PROTOSTAR_EJECTA_COUNT = 20
-PROTOSTAR_EJECTA_SPREAD = 40
+# ── Protostars (clouds that reach enough mass to ignite) ──
+PROTOSTAR_THRESHOLD = 32        # Mass at which a cloud becomes a protostar (changes appearance and behavior).
+PROTOSTAR_EJECTA_COUNT = 12     # Number of ejecta pieces produced during protostar formation events.
+PROTOSTAR_EJECTA_SPREAD = 32    # Max spawn distance (pixels) of ejecta from the parent star.
 
-# Element weight boundaries for star tiers
-ELEMENT_WEIGHT_MEDIUM = 5   # Index threshold for medium tier
-ELEMENT_WEIGHT_HEAVY = 10   # Index threshold for heavy/red giant tier
+# Element weight boundaries for star tiers.
+# When a cloud reaches PROTOSTAR_THRESHOLD mass, its element_index (position in
+# MOLECULAR_CLOUD_START_COLORS above) determines which tier of star it becomes:
+#   Index 0-4  (H, He, O, C, Ne)           → LOW tier  — small white star
+#   Index 5-9  (N, Fe, Si, Au, S)           → MEDIUM tier — mid-size yellow-green star
+#   Index 10-19 (Mg, P, Li, Pt, Co, Ca...) → HIGH tier — large red giant
+# Lowering these values makes heavier stars more common; raising them makes them rarer.
+ELEMENT_WEIGHT_MEDIUM = 5   # Element index at or above which a star becomes medium tier.
+ELEMENT_WEIGHT_HEAVY = 10   # Element index at or above which a star becomes a red giant (high tier).
 
 PROTOSTAR_LOW_COLOR = (225, 255, 255)      # White (current)
 PROTOSTAR_LOW_SIZE = 2
-PROTOSTAR_LOW_MASS_BOOST = 0              # No extra mass for light stars
+PROTOSTAR_LOW_MASS_BOOST = 4              # No extra mass for light stars
 
 PROTOSTAR_MEDIUM_COLOR = (200, 230, 80)    # Yellow-green
 PROTOSTAR_MEDIUM_SIZE = 4
-PROTOSTAR_MEDIUM_MASS_BOOST = 3           # Medium stars get +3 mass on formation
+PROTOSTAR_MEDIUM_MASS_BOOST = 8           # Medium stars get +3 mass on formation
 
 PROTOSTAR_HIGH_COLOR = (180, 60, 30)       # Red-orange
 PROTOSTAR_HIGH_SIZE = 6
-PROTOSTAR_HIGH_MASS_BOOST = 6             # Red giants get +6 mass on formation
+PROTOSTAR_HIGH_MASS_BOOST = 12             # Red giants get +6 mass on formation
 
 # Higher BH conversion chance for red giants
 RED_GIANT_BLACK_HOLE_CHANCE = 0.00002
 
-BLACK_HOLE_THRESHOLD = 39
-BLACK_HOLE_CHANCE = 0.0001
-BLACK_HOLE_RADIUS = 8
-BLACK_HOLE_MAX_MASS = 48
-BLACK_HOLE_GRAVITY_CONSTANT = 14.0 * GRAVITY_SCALE
-BLACK_HOLE_DECAY_RATE = 0.5
-BLACK_HOLE_DECAY_THRESHOLD = 2
-BLACK_HOLE_COLOR = (0,0,0)
-BLACK_HOLE_BORDER_COLOR = (100, 0, 0)
-BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)
-DISK_COLOR = (255, 100, 100)
-DISK_SIZE = 1
-DISK_ROTATION = 10.0
+# ── Black Holes ──
+BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
+BLACK_HOLE_CHANCE = 0.0004      # Per-frame probability a qualifying star becomes a black hole. Very rare.
+BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
+BLACK_HOLE_MAX_MASS = 64        # Maximum mass a black hole can accumulate.
+BLACK_HOLE_GRAVITY_CONSTANT = 14.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
+BLACK_HOLE_DECAY_RATE = 0.8     # Mass lost per second (Hawking radiation analog). Higher = shorter lifespan.
+BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
+BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
+BLACK_HOLE_BORDER_COLOR = (100, 0, 0)  # RGB color of the event horizon ring (dark red).
+BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)  # RGBA color of the gravitational wave pulse from BH mergers.
+DISK_COLOR = (255, 100, 100)    # RGB color of the accretion disk tracer dot (light red).
+DISK_SIZE = 1                   # Visual size in pixels of the accretion disk tracer.
+DISK_ROTATION = 10.0            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
 
-NEUTRON_STAR_CHANCE = 0.08
-NEUTRON_STAR_RADIUS = 1
-NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE
-NEUTRON_STAR_DECAY_RATE = 0.6
-NEUTRON_STAR_DECAY_THRESHOLD = 0.8
-NEUTRON_STAR_COLOR = (0, 120, 255)
-NEUTRON_STAR_PULSE_RATE = 0.03
-NEUTRON_STAR_PULSE_STRENGTH = 8
-NEUTRON_STAR_PULSE_COLOR = (0, 60, 180, 80)
-NEUTRON_STAR_PULSE_WIDTH = 2
-NEUTRON_STAR_RIPPLE_SPEED = 60
-NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 20
+# ── Black Hole Decay (when BH evaporates) ──
+BH_DECAY_CLOUD_COUNT = 6       # Number of heavy clouds spawned when a BH evaporates.
+BH_DECAY_CLOUD_MASS_MIN = 24   # Minimum mass of each decay cloud. These are heavy!
+BH_DECAY_CLOUD_MASS_MAX = 28   # Maximum mass of each decay cloud.
+BH_DECAY_EJECTA_SPREAD = 20    # Max spawn distance (pixels) of decay ejecta from the BH.
 
-BH_DECAY_CLOUD_COUNT = 6
-BH_DECAY_CLOUD_MASS_MIN = 12
-BH_DECAY_CLOUD_MASS_MAX = 16
-BH_DECAY_EJECTA_SPREAD = 40
+# ── Black Hole Jets (relativistic jets from accretion events) ──
+BH_JET_CHANCE = 0.4             # Probability of jet formation when a BH absorbs something.
+BH_JET_STAR_COUNT = 8           # Number of clouds emitted per jet burst.
+BH_JET_DURATION = 4             # Duration of jet emission in seconds.
+BH_JET_SPREAD = 60              # Max spawn distance (pixels) of jet particles from the BH.
+BH_JET_VELOCITY = 12.0           # Speed of ejected jet particles. Higher = faster jets.
 
-BH_JET_CHANCE = 0.1
-BH_JET_STAR_COUNT = 6
-BH_JET_DURATION = 1
-BH_JET_SPREAD = 60
-BH_JET_VELOCITY = 4.0
+# ── Black Hole Emission (random mass leakage) ──
+BH_EMISSION_CHANCE = 0.008       # Per-frame chance a BH randomly emits a small cloud.
+BH_EMISSION_MASS_MIN = 1        # Minimum mass of emitted particles.
+BH_EMISSION_MASS_MAX = 3        # Maximum mass of emitted particles.
+BH_EMISSION_EJECTA_SPREAD = 20  # Max spawn distance (pixels) of emitted particles.
+BH_EMISSION_VELOCITY = 0.8      # Speed of emitted particles.
 
-BH_EMISSION_CHANCE = 0.01
-BH_EMISSION_MASS_MIN = 1
-BH_EMISSION_MASS_MAX = 3
-BH_EMISSION_EJECTA_SPREAD = 30
-BH_EMISSION_VELOCITY = 0.8
+# ── Neutron Stars ──
+NEUTRON_STAR_CHANCE = 0.08      # Probability of becoming a neutron star instead of a black hole on collapse.
+NEUTRON_STAR_RADIUS = 1         # Visual radius in pixels (tiny, as expected).
+NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE  # Gravitational pull strength. Moderate — between clouds and BHs.
+NEUTRON_STAR_DECAY_RATE = 0.8   # Mass lost per second. Higher = shorter lifespan.
+NEUTRON_STAR_DECAY_THRESHOLD = 0.8  # Mass at which a neutron star dissipates into ejecta.
+NEUTRON_STAR_COLOR = (0, 120, 255)  # RGB color of the neutron star (cyan-blue).
+NEUTRON_STAR_PULSE_RATE = 0.03  # Seconds between pulsar pulses. Lower = faster pulsing.
+NEUTRON_STAR_PULSE_STRENGTH = 8 # Force magnitude of each pulse ripple. Higher = stronger push on nearby entities.
+NEUTRON_STAR_PULSE_COLOR = (0, 60, 180, 80)  # RGBA color of the expanding pulse ring.
+NEUTRON_STAR_PULSE_WIDTH = 2    # Line width (pixels) for drawing pulse rings.
+NEUTRON_STAR_RIPPLE_SPEED = 64  # How fast (pixels/sec) pulse ripples expand outward.
+NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripples exert force on entities.
+NS_PULSE_MASS_BOOST = 0.02      # Mass cost per unit of pulse force. Pulsing drains the neutron star.
 
-NS_DECAY_CLOUD_COUNT = 2
-NS_DECAY_CLOUD_MASS_MIN = 4
-NS_DECAY_CLOUD_MASS_MAX = 8
-NS_DECAY_EJECTA_SPREAD = 40
+# ── Neutron Star Decay (when NS loses enough mass) ──
+NS_DECAY_CLOUD_COUNT = 2        # Number of clouds spawned when a neutron star dissipates.
+NS_DECAY_CLOUD_MASS_MIN = 1     # Minimum mass of each decay cloud.
+NS_DECAY_CLOUD_MASS_MAX = 4     # Maximum mass of each decay cloud.
+NS_DECAY_EJECTA_SPREAD = 20     # Max spawn distance (pixels) of decay ejecta.
 
-KILONOVA_EJECTA_COUNT = 20
-KILONOVA_COLLISION_DISTANCE = 5
-KILONOVA_EJECTA_SPREAD = 100
-
-NS_PULSE_MASS_BOOST = 0.02
-
-MC_BARRIER_GRAVITY_FACTOR = 0.001
-BH_BARRIER_GRAVITY_FACTOR = 0.01
-NS_BARRIER_GRAVITY_FACTOR = 0.03
-
-MC_BARRIER_DEFORM_FACTOR = 2.0
-BH_BARRIER_DEFORM_FACTOR = 10.0
-NS_BARRIER_DEFORM_FACTOR = 6.0
-
-
-CMB_PERTURBATION_MODES = 6
-CMB_PERTURBATION_SCALE = 0.08
-CMB_DENSITY_CONTRAST = 0.6
-
-VELOCITY_DAMPING = 0.97
-
-BACKGROUND_COLOR = (0, 10, 20)
-LABEL_COLOR = (60, 60, 200)
-SCREEN_WIDTH = 1440
-SCREEN_HEIGHT = 960
-
-ZOOM_MIN = 0.5
-ZOOM_MAX = 1.5
-ZOOM_STEP = 0.25
-
-YEAR_RATE = 60
-MAX_DELTA_TIME = 0.05
+# ── Kilonova (neutron star merger) ──
+KILONOVA_EJECTA_COUNT = 20      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements.
+KILONOVA_COLLISION_DISTANCE = 6 # Distance (pixels) at which two neutron stars merge.
+KILONOVA_EJECTA_SPREAD = 80    # Max spawn distance (pixels) of kilonova ejecta. Large explosion!
 
 
 entity_id_counter = 0

@@ -24,8 +24,8 @@ import struct
 import sys
 from datetime import datetime
 
-MIN = 10000000000000000000
-MAX = 99999999999999999999
+MIN = 10000000000000000000  # Lower bound of RNG output range (20-digit minimum)
+MAX = 99999999999999999999  # Upper bound of RNG output range (20-digit maximum)
 
 
 def serialize_state(state_obj):
