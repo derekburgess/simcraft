@@ -22,8 +22,8 @@ BARRIER_HEAVY_MASS_THRESHOLD = 60
 BARRIER_SMOOTHING_PASSES = 3
 BARRIER_SMOOTHING_WINDOW = 5
 
-MOLECULAR_CLOUD_COUNT = 3200
-MOLECULAR_CLOUD_START_SIZE = 24
+MOLECULAR_CLOUD_COUNT = 6400
+MOLECULAR_CLOUD_START_SIZE = 20
 MOLECULAR_CLOUD_MIN_SIZE = 6
 MOLECULAR_CLOUD_GROWTH_RATE = 0.58
 MOLECULAR_CLOUD_START_MASS = 1
@@ -46,27 +46,36 @@ MOLECULAR_CLOUD_START_COLORS = [
     (160, 40, 130),  # Lithium - Magenta (LiI)
     (210, 210, 230), # Platinum - Cool Silver
     (60, 90, 160),   # Cobalt - Steel Blue (CoII)
+    (200, 120, 50),  # Calcium - Warm Orange (CaII)
+    (220, 170, 40),  # Sodium - Amber (NaI D-line)
+    (120, 120, 100), # Nickel - Dark Gray (NiI)
+    (50, 130, 70),   # Chromium - Deep Green (CrI)
+    (110, 70, 160),  # Titanium - Violet-Blue (TiI)
 ]
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)
 MOLECULAR_CLOUD_OPACITY = 180
 MOLECULAR_CLOUD_MIN_OPACITY = 80
 DEFAULT_STATE_CHANCE = 0.001
+EJECTA_HEAVIER_ELEMENT_CHANCE = 0.05
 PROTOSTAR_THRESHOLD = 32
 PROTOSTAR_EJECTA_COUNT = 20
 PROTOSTAR_EJECTA_SPREAD = 60
 
-# Protostar tiers: (min_mass, max_size, color)
-PROTOSTAR_TIER_MEDIUM = 37
-PROTOSTAR_TIER_HIGH = 41
+# Element weight boundaries for star tiers
+ELEMENT_WEIGHT_MEDIUM = 5   # Index threshold for medium tier
+ELEMENT_WEIGHT_HEAVY = 10   # Index threshold for heavy/red giant tier
 
 PROTOSTAR_LOW_COLOR = (225, 255, 255)      # White (current)
 PROTOSTAR_LOW_SIZE = 2
+PROTOSTAR_LOW_MASS_BOOST = 0              # No extra mass for light stars
 
 PROTOSTAR_MEDIUM_COLOR = (200, 230, 80)    # Yellow-green
-PROTOSTAR_MEDIUM_SIZE = 2
+PROTOSTAR_MEDIUM_SIZE = 4
+PROTOSTAR_MEDIUM_MASS_BOOST = 3           # Medium stars get +3 mass on formation
 
 PROTOSTAR_HIGH_COLOR = (180, 60, 30)       # Red-orange
-PROTOSTAR_HIGH_SIZE = 4
+PROTOSTAR_HIGH_SIZE = 6
+PROTOSTAR_HIGH_MASS_BOOST = 6             # Red giants get +6 mass on formation
 
 # Higher BH conversion chance for red giants
 RED_GIANT_BLACK_HOLE_CHANCE = 0.00002
@@ -103,11 +112,17 @@ BH_DECAY_CLOUD_MASS_MIN = 12
 BH_DECAY_CLOUD_MASS_MAX = 16
 BH_DECAY_EJECTA_SPREAD = 40
 
-BH_LEAK_CHANCE = 0.01
-BH_LEAK_MASS_MIN = 1
-BH_LEAK_MASS_MAX = 3
-BH_LEAK_EJECTA_SPREAD = 30
-BH_LEAK_VELOCITY = 0.8
+BH_JET_CHANCE = 0.1
+BH_JET_STAR_COUNT = 6
+BH_JET_DURATION = 1
+BH_JET_SPREAD = 60
+BH_JET_VELOCITY = 4.0
+
+BH_EMISSION_CHANCE = 0.01
+BH_EMISSION_MASS_MIN = 1
+BH_EMISSION_MASS_MAX = 3
+BH_EMISSION_EJECTA_SPREAD = 30
+BH_EMISSION_VELOCITY = 0.8
 
 NS_DECAY_CLOUD_COUNT = 2
 NS_DECAY_CLOUD_MASS_MIN = 4
@@ -124,7 +139,7 @@ MC_BARRIER_GRAVITY_FACTOR = 0.001
 BH_BARRIER_GRAVITY_FACTOR = 0.01
 NS_BARRIER_GRAVITY_FACTOR = 0.03
 
-MC_BARRIER_DEFORM_FACTOR = 1.0
+MC_BARRIER_DEFORM_FACTOR = 2.0
 BH_BARRIER_DEFORM_FACTOR = 20.0
 NS_BARRIER_DEFORM_FACTOR = 8.0
 
@@ -438,6 +453,12 @@ def interpolate_multi_color(colors, factor):
     return interpolate_color(start_color, end_color, segment_factor)
 
 
+SEED_ELEMENTAL_ABUNDANCE = [
+    (0, 0.75),        # Hydrogen range: 0-75%
+    (0.75, 0.98),     # Helium range: 75-98%
+    (0.98, 1.0),      # Oxygen range: 98-100%
+]
+
 ELEMENTAL_ABUNDANCE = [
     (0, 0.75),        # Hydrogen range: 0-75%
     (0.75, 0.98),     # Helium range: 75-98%
@@ -452,8 +473,13 @@ ELEMENTAL_ABUNDANCE = [
     (0.9988, 0.9993), # Magnesium range: 99.88-99.93%
     (0.9993, 0.9996), # Phosphorus range: 99.93-99.96%
     (0.9996, 0.9998), # Lithium range: 99.96-99.98%
-    (0.9998, 0.9999), # Platinum range: 99.98-99.99%
-    (0.9999, 1.0),    # Cobalt range: 99.99-100%
+    (0.9998, 0.99985),  # Platinum range: 99.98-99.985%
+    (0.99985, 0.9999),  # Cobalt range: 99.985-99.99%
+    (0.9999, 0.99994),  # Calcium range: 99.99-99.994%
+    (0.99994, 0.99997), # Sodium range: 99.994-99.997%
+    (0.99997, 0.99998), # Nickel range: 99.997-99.998%
+    (0.99998, 0.99999), # Chromium range: 99.998-99.999%
+    (0.99999, 1.0),     # Titanium range: 99.999-100%
 ]
 
 EJECTA_ELEMENTAL_ABUNDANCE = [
@@ -470,8 +496,13 @@ EJECTA_ELEMENTAL_ABUNDANCE = [
     (0.98, 0.99),  # Magnesium range: 98-99%
     (0.99, 0.993), # Phosphorus range: 99-99.3%
     (0.993, 0.993),# Lithium - not produced in supernovae
-    (0.993, 0.997),# Platinum range: 99.3-99.7%
-    (0.997, 1.0),  # Cobalt range: 99.7-100%
+    (0.993, 0.995),# Platinum range: 99.3-99.5%
+    (0.995, 0.997),# Cobalt range: 99.5-99.7%
+    (0.997, 0.998),# Calcium range: 99.7-99.8%
+    (0.998, 0.999),# Sodium range: 99.8-99.9%
+    (0.999, 0.9995),# Nickel range: 99.9-99.95%
+    (0.9995, 0.9998),# Chromium range: 99.95-99.98%
+    (0.9998, 1.0), # Titanium range: 99.98-100%
 ]
 
 BH_DECAY_ELEMENTAL_ABUNDANCE = [
@@ -488,8 +519,13 @@ BH_DECAY_ELEMENTAL_ABUNDANCE = [
     (0.80, 0.86),  # Magnesium range: 80-86%
     (0.86, 0.90),  # Phosphorus range: 86-90%
     (0.90, 0.93),  # Lithium range: 90-93%
-    (0.93, 0.97),  # Platinum range: 93-97%
-    (0.97, 1.0),   # Cobalt range: 97-100%
+    (0.93, 0.95),  # Platinum range: 93-95%
+    (0.95, 0.97),  # Cobalt range: 95-97%
+    (0.97, 0.98),  # Calcium range: 97-98%
+    (0.98, 0.99),  # Sodium range: 98-99%
+    (0.99, 0.995), # Nickel range: 99-99.5%
+    (0.995, 0.998),# Chromium range: 99.5-99.8%
+    (0.998, 1.0),  # Titanium range: 99.8-100%
 ]
 
 KILONOVA_ELEMENTAL_ABUNDANCE = [
@@ -506,8 +542,13 @@ KILONOVA_ELEMENTAL_ABUNDANCE = [
     (0.64, 0.72),  # Magnesium range: 64-72%
     (0.72, 0.78),  # Phosphorus range: 72-78%
     (0.78, 0.82),  # Lithium range: 78-82%
-    (0.82, 0.91),  # Platinum range: 82-91%
-    (0.91, 1.0),   # Cobalt range: 91-100%
+    (0.82, 0.87),  # Platinum range: 82-87%
+    (0.87, 0.91),  # Cobalt range: 87-91%
+    (0.91, 0.94),  # Calcium range: 91-94%
+    (0.94, 0.96),  # Sodium range: 94-96%
+    (0.96, 0.98),  # Nickel range: 96-98%
+    (0.98, 0.99),  # Chromium range: 98-99%
+    (0.99, 1.0),   # Titanium range: 99-100%
 ]
 
 class MolecularCloud:
@@ -519,6 +560,7 @@ class MolecularCloud:
         self.vy = 0.0
         self.size = size
         self.mass = mass
+        self.is_star = mass >= PROTOSTAR_THRESHOLD
         if self.mass >= PROTOSTAR_THRESHOLD:
             self.opacity = 255
         else:
@@ -527,18 +569,20 @@ class MolecularCloud:
             self.opacity = int(MOLECULAR_CLOUD_MIN_OPACITY + factor * (MOLECULAR_CLOUD_OPACITY - MOLECULAR_CLOUD_MIN_OPACITY))
 
         rand = random.random()
+        self.element_index = len(MOLECULAR_CLOUD_START_COLORS) - 1
         for i, (start, end) in enumerate(abundance or ELEMENTAL_ABUNDANCE):
             if start <= rand < end:
                 self.start_color = MOLECULAR_CLOUD_START_COLORS[i]
+                self.element_index = i
                 break
         else:
             self.start_color = MOLECULAR_CLOUD_START_COLORS[-1]
 
         if self.mass >= PROTOSTAR_THRESHOLD:
-            if self.mass >= PROTOSTAR_TIER_HIGH:
+            if self.element_index >= ELEMENT_WEIGHT_HEAVY:
                 self.color = PROTOSTAR_HIGH_COLOR
                 self.size = PROTOSTAR_HIGH_SIZE
-            elif self.mass >= PROTOSTAR_TIER_MEDIUM:
+            elif self.element_index >= ELEMENT_WEIGHT_MEDIUM:
                 self.color = PROTOSTAR_MEDIUM_COLOR
                 self.size = PROTOSTAR_MEDIUM_SIZE
             else:
@@ -564,11 +608,19 @@ class MolecularCloud:
         self.size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((self.mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
         self.mass = min(self.mass, MOLECULAR_CLOUD_MAX_MASS)
         if self.mass >= PROTOSTAR_THRESHOLD:
+            if not self.is_star:
+                self.is_star = True
+                if self.element_index >= ELEMENT_WEIGHT_HEAVY:
+                    self.mass = min(self.mass + PROTOSTAR_HIGH_MASS_BOOST, MOLECULAR_CLOUD_MAX_MASS)
+                elif self.element_index >= ELEMENT_WEIGHT_MEDIUM:
+                    self.mass = min(self.mass + PROTOSTAR_MEDIUM_MASS_BOOST, MOLECULAR_CLOUD_MAX_MASS)
+                else:
+                    self.mass = min(self.mass + PROTOSTAR_LOW_MASS_BOOST, MOLECULAR_CLOUD_MAX_MASS)
             self.opacity = 255
-            if self.mass >= PROTOSTAR_TIER_HIGH:
+            if self.element_index >= ELEMENT_WEIGHT_HEAVY:
                 self.color = PROTOSTAR_HIGH_COLOR
                 self.size = PROTOSTAR_HIGH_SIZE
-            elif self.mass >= PROTOSTAR_TIER_MEDIUM:
+            elif self.element_index >= ELEMENT_WEIGHT_MEDIUM:
                 self.color = PROTOSTAR_MEDIUM_COLOR
                 self.size = PROTOSTAR_MEDIUM_SIZE
             else:
@@ -601,6 +653,7 @@ class BlackHole:
         self.mass = min(mass, BLACK_HOLE_MAX_MASS)
         self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.tracer_angle = random.uniform(0, 2 * math.pi)
+        self.jet_streams = []  # list of [time_remaining, stars_left, angle]
 
     def draw(self, screen, offset_x=0, offset_y=0):
         draw_x = int(self.x + offset_x)
@@ -626,6 +679,8 @@ class BlackHole:
                     self.mass += black_hole.mass
                     self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
                     state.black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
+                    if random.random() < BH_JET_CHANCE:
+                        self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 elif distance > 0:
                     force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
                     black_hole.vx += (dx / distance) * force * delta_time
@@ -641,6 +696,8 @@ class BlackHole:
                 mc_to_remove.add(entity)
                 self.mass += entity.mass
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
+                if random.random() < BH_JET_CHANCE:
+                    self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
             else:
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
                 entity.vx += (dx / distance) * force * delta_time
@@ -655,6 +712,8 @@ class BlackHole:
             if distance < self.border_radius:
                 ns_to_remove.add(entity)
                 self.mass += entity.mass
+                if random.random() < BH_JET_CHANCE:
+                    self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
             else:
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
@@ -881,12 +940,20 @@ def handle_collisions(state):
         for other in neighbors:
             if other is mc or other in to_remove:
                 continue
-            if mc.collides_with(other) and random.random() < MOLECULAR_CLOUD_MERGE_CHANCE:
+            is_protostar = mc.mass >= PROTOSTAR_THRESHOLD or other.mass >= PROTOSTAR_THRESHOLD
+            elements_compatible = is_protostar or abs(mc.element_index - other.element_index) <= 1
+            if mc.collides_with(other) and elements_compatible and random.random() < MOLECULAR_CLOUD_MERGE_CHANCE:
                 merged_mass = mc.mass + other.mass
-                to_remove.add(other)
-                mc.mass = min(merged_mass, MOLECULAR_CLOUD_MAX_MASS)
-                mc.update()
-                break
+                if other.element_index > mc.element_index:
+                    survivor, consumed = other, mc
+                else:
+                    survivor, consumed = mc, other
+                to_remove.add(consumed)
+                survivor.mass = min(merged_mass, MOLECULAR_CLOUD_MAX_MASS)
+                survivor.update()
+                if consumed is mc:
+                    break
+                continue
     if to_remove:
         state.molecular_clouds = [mc for mc in state.molecular_clouds if mc not in to_remove]
 
@@ -898,7 +965,7 @@ def update_entities(state):
     for molecular_cloud in state.molecular_clouds:
         molecular_cloud.update()
         if molecular_cloud.mass > BLACK_HOLE_THRESHOLD:
-            bh_chance = RED_GIANT_BLACK_HOLE_CHANCE if molecular_cloud.mass >= PROTOSTAR_TIER_HIGH else BLACK_HOLE_CHANCE
+            bh_chance = RED_GIANT_BLACK_HOLE_CHANCE if molecular_cloud.element_index >= ELEMENT_WEIGHT_HEAVY else BLACK_HOLE_CHANCE
             if random.random() < bh_chance:
                 if random.random() < NEUTRON_STAR_CHANCE:
                     state.neutron_stars.append(NeutronStar(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
@@ -906,15 +973,17 @@ def update_entities(state):
                     state.black_holes.append(BlackHole(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 to_remove.add(molecular_cloud)
             elif random.random() < DEFAULT_STATE_CHANCE:
-                if molecular_cloud.mass >= PROTOSTAR_TIER_HIGH:
+                if molecular_cloud.element_index >= ELEMENT_WEIGHT_HEAVY:
                     ejecta_count = 25
                     ejecta_spread = 80
-                elif molecular_cloud.mass >= PROTOSTAR_TIER_MEDIUM:
+                elif molecular_cloud.element_index >= ELEMENT_WEIGHT_MEDIUM:
                     ejecta_count = 20
                     ejecta_spread = 60
                 else:
                     ejecta_count = 15
                     ejecta_spread = 50
+                parent_idx = molecular_cloud.element_index
+                max_idx = len(MOLECULAR_CLOUD_START_COLORS) - 1
                 for _ in range(ejecta_count):
                     offset_angle = random.uniform(0, 2 * math.pi)
                     offset_dist = random.uniform(5, ejecta_spread)
@@ -922,7 +991,12 @@ def update_entities(state):
                     ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
                     mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * 0.35)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                    child = MolecularCloud(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
+                    child = MolecularCloud(ex, ey, size, mass)
+                    if random.random() < EJECTA_HEAVIER_ELEMENT_CHANCE and parent_idx < max_idx:
+                        child.element_index = min(parent_idx + random.randint(1, 3), max_idx)
+                    else:
+                        child.element_index = parent_idx
+                    child.start_color = MOLECULAR_CLOUD_START_COLORS[child.element_index]
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
                     child.vy = math.sin(offset_angle) * offset_dist * 0.5
                     new_clouds.append(child)
@@ -1100,19 +1174,41 @@ def update_simulation_state(state, ring, delta_time):
         black_hole.attract(state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove)
         black_hole.update_gravity(state, delta_time)
         black_hole.decay(delta_time)
-        if black_hole.mass > BLACK_HOLE_DECAY_THRESHOLD and random.random() < BH_LEAK_CHANCE:
-            leak_mass = random.uniform(BH_LEAK_MASS_MIN, BH_LEAK_MASS_MAX)
+        # Jet streams: emit H/He/O clouds over time
+        jets_done = []
+        for ji, jet in enumerate(black_hole.jet_streams):
+            jet[0] -= delta_time
+            if jet[0] <= 0 or jet[1] <= 0:
+                jets_done.append(ji)
+                continue
+            emit_interval = BH_JET_DURATION / BH_JET_STAR_COUNT
+            if jet[0] % emit_interval < delta_time:
+                jet[1] -= 1
+                angle = jet[2]
+                offset_dist = random.uniform(5, BH_JET_SPREAD)
+                ex = black_hole.x + offset_dist * math.cos(angle)
+                ey = black_hole.y + offset_dist * math.sin(angle)
+                mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * 0.35)
+                size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+                child = MolecularCloud(ex, ey, size, mass, SEED_ELEMENTAL_ABUNDANCE)
+                child.vx = math.cos(angle) * BH_JET_VELOCITY
+                child.vy = math.sin(angle) * BH_JET_VELOCITY
+                new_clouds.append(child)
+        for ji in sorted(jets_done, reverse=True):
+            black_hole.jet_streams.pop(ji)
+        if black_hole.mass > BLACK_HOLE_DECAY_THRESHOLD and random.random() < BH_EMISSION_CHANCE:
+            leak_mass = random.uniform(BH_EMISSION_MASS_MIN, BH_EMISSION_MASS_MAX)
             leak_mass = min(leak_mass, black_hole.mass - BLACK_HOLE_DECAY_THRESHOLD)
             if leak_mass > 0:
                 black_hole.mass -= leak_mass
                 offset_angle = random.uniform(0, 2 * math.pi)
-                offset_dist = random.uniform(3, BH_LEAK_EJECTA_SPREAD)
+                offset_dist = random.uniform(3, BH_EMISSION_EJECTA_SPREAD)
                 ex = black_hole.x + offset_dist * math.cos(offset_angle)
                 ey = black_hole.y + offset_dist * math.sin(offset_angle)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((leak_mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                child = MolecularCloud(ex, ey, size, leak_mass, BH_DECAY_ELEMENTAL_ABUNDANCE)
-                child.vx = math.cos(offset_angle) * BH_LEAK_VELOCITY
-                child.vy = math.sin(offset_angle) * BH_LEAK_VELOCITY
+                child = MolecularCloud(ex, ey, size, leak_mass, SEED_ELEMENTAL_ABUNDANCE)
+                child.vx = math.cos(offset_angle) * BH_EMISSION_VELOCITY
+                child.vy = math.sin(offset_angle) * BH_EMISSION_VELOCITY
                 new_clouds.append(child)
         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
             bh_to_remove.add(black_hole)
@@ -1415,7 +1511,7 @@ def initialize_state():
         radius = math.sqrt(random.uniform(0, 1)) * local_radius
         x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
         y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
-        molecular_cloud = MolecularCloud(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS)
+        molecular_cloud = MolecularCloud(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS, SEED_ELEMENTAL_ABUNDANCE)
         state.molecular_clouds.append(molecular_cloud)
 
     return state, ring
