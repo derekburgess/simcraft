@@ -70,7 +70,7 @@ MOLECULAR_CLOUD_MIN_SIZE = 6    # Smallest a cloud can shrink to as it gains mas
 MOLECULAR_CLOUD_GROWTH_RATE = 0.24  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
 MOLECULAR_CLOUD_START_MASS = 1  # Initial mass of each cloud.
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0008 * GRAVITY_SCALE  # Gravitational attraction between clouds. Very low to prevent instant clumping.
-MOLECULAR_CLOUD_MERGE_CHANCE = 0.004  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
+MOLECULAR_CLOUD_MERGE_CHANCE = 0.008  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
 MOLECULAR_CLOUD_MAX_MASS = 48   # Maximum mass a cloud/star can reach. Caps growth.
 MOLECULAR_CLOUD_START_COLORS = [
     (140, 20, 20),   # Hydrogen - Red (H-alpha)
