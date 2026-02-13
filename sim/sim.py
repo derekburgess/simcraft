@@ -57,9 +57,18 @@ MOLECULAR_CLOUD_OPACITY = 180
 MOLECULAR_CLOUD_MIN_OPACITY = 80
 DEFAULT_STATE_CHANCE = 0.001
 EJECTA_HEAVIER_ELEMENT_CHANCE = 0.05
+
+MC_EMISSION_CHANCE = 0.1          # Per-frame chance for eligible clouds to emit
+MC_EMISSION_MIN_PARENT_MASS = 3     # Minimum parent mass to emit
+MC_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
+MC_EMISSION_MASS_MAX = 3            # Max mass of emitted cloud
+MC_EMISSION_VELOCITY = 0.8         # Emission kick speed
+MC_EMISSION_SPREAD = 16              # Max spawn distance from parent
+MC_EMISSION_COUNT = 10               # Max number of emissions per cloud
+
 PROTOSTAR_THRESHOLD = 32
 PROTOSTAR_EJECTA_COUNT = 20
-PROTOSTAR_EJECTA_SPREAD = 60
+PROTOSTAR_EJECTA_SPREAD = 40
 
 # Element weight boundaries for star tiers
 ELEMENT_WEIGHT_MEDIUM = 5   # Index threshold for medium tier
@@ -101,11 +110,11 @@ NEUTRON_STAR_DECAY_RATE = 0.6
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8
 NEUTRON_STAR_COLOR = (0, 120, 255)
 NEUTRON_STAR_PULSE_RATE = 0.03
-NEUTRON_STAR_PULSE_STRENGTH = 20
+NEUTRON_STAR_PULSE_STRENGTH = 8
 NEUTRON_STAR_PULSE_COLOR = (0, 60, 180, 80)
 NEUTRON_STAR_PULSE_WIDTH = 2
-NEUTRON_STAR_RIPPLE_SPEED = 40
-NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 10
+NEUTRON_STAR_RIPPLE_SPEED = 60
+NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 20
 
 BH_DECAY_CLOUD_COUNT = 6
 BH_DECAY_CLOUD_MASS_MIN = 12
@@ -140,17 +149,15 @@ BH_BARRIER_GRAVITY_FACTOR = 0.01
 NS_BARRIER_GRAVITY_FACTOR = 0.03
 
 MC_BARRIER_DEFORM_FACTOR = 2.0
-BH_BARRIER_DEFORM_FACTOR = 20.0
-NS_BARRIER_DEFORM_FACTOR = 8.0
+BH_BARRIER_DEFORM_FACTOR = 10.0
+NS_BARRIER_DEFORM_FACTOR = 6.0
 
-NS_TO_BH_GRAVITY_FACTOR = 1.5
-BH_RECOIL_FROM_NS_FACTOR = 0.3
 
 CMB_PERTURBATION_MODES = 6
 CMB_PERTURBATION_SCALE = 0.08
 CMB_DENSITY_CONTRAST = 0.6
 
-VELOCITY_DAMPING = 0.74
+VELOCITY_DAMPING = 0.97
 
 BACKGROUND_COLOR = (0, 10, 20)
 LABEL_COLOR = (60, 60, 200)
@@ -560,6 +567,7 @@ class MolecularCloud:
         self.vy = 0.0
         self.size = size
         self.mass = mass
+        self.emission_count = 0
         self.is_star = mass >= PROTOSTAR_THRESHOLD
         if self.mass >= PROTOSTAR_THRESHOLD:
             self.opacity = 255
@@ -653,6 +661,7 @@ class BlackHole:
         self.mass = min(mass, BLACK_HOLE_MAX_MASS)
         self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.tracer_angle = random.uniform(0, 2 * math.pi)
+        self.angular_momentum = 0.0  # Spin from off-center accretion
         self.jet_streams = []  # list of [time_remaining, stars_left, angle]
 
     def draw(self, screen, offset_x=0, offset_y=0):
@@ -676,6 +685,16 @@ class BlackHole:
 
                 if self.mass > black_hole.mass and distance < self.border_radius:
                     bh_to_remove.add(black_hole)
+                    # Transfer angular momentum from merger
+                    rel_vx = black_hole.vx - self.vx
+                    rel_vy = black_hole.vy - self.vy
+                    self.angular_momentum += (dx * rel_vy - dy * rel_vx) * black_hole.mass
+                    self.angular_momentum += black_hole.angular_momentum
+                    # Conserve momentum during BH merger
+                    total_mass = self.mass + black_hole.mass
+                    if total_mass > 0:
+                        self.vx = (self.mass * self.vx + black_hole.mass * black_hole.vx) / total_mass
+                        self.vy = (self.mass * self.vy + black_hole.mass * black_hole.vy) / total_mass
                     self.mass += black_hole.mass
                     self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
                     state.black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
@@ -692,16 +711,30 @@ class BlackHole:
             dx = self.x - entity.x
             dy = self.y - entity.y
             distance = max(math.hypot(dx, dy), 1)
-            if distance < self.border_radius:
+            # Check both current distance and swept trajectory for tunneling prevention
+            captured = distance < self.border_radius or check_swept_collision(entity, self.x, self.y, self.border_radius, delta_time)
+            if captured:
                 mc_to_remove.add(entity)
+                # Transfer angular momentum from off-center accretion: L = r x p
+                rel_vx = entity.vx - self.vx
+                rel_vy = entity.vy - self.vy
+                self.angular_momentum += (dx * rel_vy - dy * rel_vx) * entity.mass
+                # Conserve momentum during accretion
+                total_mass = self.mass + entity.mass
+                if total_mass > 0:
+                    self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
+                    self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
                 self.mass += entity.mass
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
                 if random.random() < BH_JET_CHANCE:
                     self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
             else:
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
+                # Newton's 3rd law: MC pulled toward BH, BH pulled toward MC
                 entity.vx += (dx / distance) * force * delta_time
                 entity.vy += (dy / distance) * force * delta_time
+                self.vx -= (dx / distance) * force * delta_time
+                self.vy -= (dy / distance) * force * delta_time
 
         for entity in state.neutron_stars:
             if entity in ns_to_remove:
@@ -709,32 +742,29 @@ class BlackHole:
             dx = self.x - entity.x
             dy = self.y - entity.y
             distance = max(math.hypot(dx, dy), 1)
-            if distance < self.border_radius:
+            captured = distance < self.border_radius or check_swept_collision(entity, self.x, self.y, self.border_radius, delta_time)
+            if captured:
                 ns_to_remove.add(entity)
+                # Transfer angular momentum from off-center accretion
+                rel_vx = entity.vx - self.vx
+                rel_vy = entity.vy - self.vy
+                self.angular_momentum += (dx * rel_vy - dy * rel_vx) * entity.mass
+                # Conserve momentum during NS accretion
+                total_mass = self.mass + entity.mass
+                if total_mass > 0:
+                    self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
+                    self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
                 self.mass += entity.mass
                 if random.random() < BH_JET_CHANCE:
                     self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
             else:
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
+                # Newton's 3rd law: NS pulled toward BH, BH pulled toward NS
                 entity.vx += (dx / distance) * force * delta_time
                 entity.vy += (dy / distance) * force * delta_time
-
-    def update_gravity(self, state, delta_time):
-        for mc in state.molecular_clouds:
-            dx = mc.x - self.x
-            dy = mc.y - self.y
-            distance = max(math.hypot(dx, dy), 1)
-            force = MOLECULAR_CLOUD_GRAVITY_CONSTANT * (self.mass * mc.mass) / (distance ** 2)
-            self.vx += (dx / distance) * force * delta_time
-            self.vy += (dy / distance) * force * delta_time
-        for ns in state.neutron_stars:
-            dx = ns.x - self.x
-            dy = ns.y - self.y
-            distance = max(math.hypot(dx, dy), 1)
-            force = MOLECULAR_CLOUD_GRAVITY_CONSTANT * (self.mass * ns.mass) / (distance ** 2)
-            self.vx += (dx / distance) * force * delta_time
-            self.vy += (dy / distance) * force * delta_time
+                self.vx -= (dx / distance) * force * delta_time
+                self.vy -= (dy / distance) * force * delta_time
 
     def decay(self, delta_time):
         self.mass -= BLACK_HOLE_DECAY_RATE * delta_time
@@ -749,6 +779,7 @@ class NeutronStar:
         self.vy = 0.0
         self.mass = mass
         self.radius = NEUTRON_STAR_RADIUS
+        self.angular_momentum = 0.0  # Spin from formation/interactions
         self.pulse_rate = NEUTRON_STAR_PULSE_RATE
         self.pulse_strength = NEUTRON_STAR_PULSE_STRENGTH
         self.time_since_last_pulse = 0
@@ -816,8 +847,8 @@ class NeutronStar:
                 by = cy + ring.radii[bi] * math.sin(ring.angles[bi])
                 dist_to_star = math.hypot(bx - self.x, by - self.y)
                 if abs(dist_to_star - new_radius) < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
-                    ring.flash[bi] = max(ring.flash[bi], new_fade * 0.6)
-                    ring.radii_vel[bi] += BARRIER_WAVE_PUSH * new_fade * delta_time
+                    ring.flash[bi] = max(ring.flash[bi], new_fade * 0.4)
+                    ring.radii_vel[bi] += BARRIER_WAVE_PUSH * 0.3 * new_fade * delta_time
 
             r_inner = max(0, radius - NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
             r_outer = radius + NEUTRON_STAR_RIPPLE_EFFECT_WIDTH
@@ -839,8 +870,10 @@ class NeutronStar:
                     if distance > 0:
                         molecular_cloud.vx += (dx / distance) * force * delta_time
                         molecular_cloud.vy += (dy / distance) * force * delta_time
-                        molecular_cloud.mass += NS_PULSE_MASS_BOOST * effect_factor * delta_time
-                        molecular_cloud.mass = min(molecular_cloud.mass, MOLECULAR_CLOUD_MAX_MASS)
+                        # Energy cost: subtract imparted kinetic energy from NS mass
+                        energy_cost = force * delta_time * NS_PULSE_MASS_BOOST
+                        self.mass -= energy_cost
+                        self.mass = max(self.mass, 0.1)
 
             for black_hole in state.black_holes:
                 dx = black_hole.x - self.x
@@ -893,17 +926,44 @@ class NeutronStar:
 
             force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
 
-            self.vx += (dx / distance) * force * delta_time * NS_TO_BH_GRAVITY_FACTOR
-            self.vy += (dy / distance) * force * delta_time * NS_TO_BH_GRAVITY_FACTOR
-
-            black_hole.vx -= (dx / distance) * force * delta_time * BH_RECOIL_FROM_NS_FACTOR
-            black_hole.vy -= (dy / distance) * force * delta_time * BH_RECOIL_FROM_NS_FACTOR
+            # Newton's 3rd law: equal and opposite forces
+            self.vx += (dx / distance) * force * delta_time
+            self.vy += (dy / distance) * force * delta_time
+            black_hole.vx -= (dx / distance) * force * delta_time
+            black_hole.vy -= (dy / distance) * force * delta_time
 
     def decay(self, delta_time):
         self.mass -= NEUTRON_STAR_DECAY_RATE * delta_time
 
 
+def check_swept_collision(entity, target_x, target_y, target_radius, delta_time):
+    """Check if entity's trajectory over this frame passes within target_radius of a point.
+    Returns True if the closest approach distance is less than target_radius."""
+    # Ray from entity's current position along its velocity vector
+    dx = entity.vx * delta_time
+    dy = entity.vy * delta_time
+    move_dist_sq = dx * dx + dy * dy
+    if move_dist_sq < 0.01:
+        return False  # Not moving fast enough to tunnel
+
+    # Vector from entity to target
+    fx = target_x - entity.x
+    fy = target_y - entity.y
+
+    # Project target onto movement ray: t = dot(f, d) / dot(d, d)
+    t = max(0.0, min(1.0, (fx * dx + fy * dy) / move_dist_sq))
+
+    # Closest point on ray
+    closest_x = entity.x + t * dx
+    closest_y = entity.y + t * dy
+    closest_dist_sq = (target_x - closest_x) ** 2 + (target_y - closest_y) ** 2
+
+    return closest_dist_sq < target_radius * target_radius
+
+
 def integrate_entity(entity, delta_time):
+    # Symplectic Euler: update velocity first (with damping), then position using new velocity
+    # This preserves energy much better than forward Euler and allows stable orbits
     damping = VELOCITY_DAMPING ** delta_time
     entity.vx *= damping
     entity.vy *= damping
@@ -949,6 +1009,11 @@ def handle_collisions(state):
                 else:
                     survivor, consumed = mc, other
                 to_remove.add(consumed)
+                # Conserve momentum: v_new = (m1*v1 + m2*v2) / (m1+m2)
+                total_mass = survivor.mass + consumed.mass
+                if total_mass > 0:
+                    survivor.vx = (survivor.mass * survivor.vx + consumed.mass * consumed.vx) / total_mass
+                    survivor.vy = (survivor.mass * survivor.vy + consumed.mass * consumed.vy) / total_mass
                 survivor.mass = min(merged_mass, MOLECULAR_CLOUD_MAX_MASS)
                 survivor.update()
                 if consumed is mc:
@@ -1003,6 +1068,29 @@ def update_entities(state):
                 molecular_cloud.mass = MOLECULAR_CLOUD_START_MASS
                 molecular_cloud.size = MOLECULAR_CLOUD_START_SIZE
                 molecular_cloud.update()
+        elif molecular_cloud.mass >= MC_EMISSION_MIN_PARENT_MASS and molecular_cloud.emission_count < MC_EMISSION_COUNT and molecular_cloud not in to_remove:
+            # Emission: clouds shed small daughter clouds, losing mass in the process
+            if random.random() < MC_EMISSION_CHANCE:
+                emit_mass = random.uniform(MC_EMISSION_MASS_MIN, min(MC_EMISSION_MASS_MAX, molecular_cloud.mass - MOLECULAR_CLOUD_START_MASS))
+                if emit_mass > 0:
+                    offset_angle = random.uniform(0, 2 * math.pi)
+                    offset_dist = random.uniform(2, MC_EMISSION_SPREAD)
+                    ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
+                    ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
+                    size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((emit_mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+                    child = MolecularCloud(ex, ey, size, emit_mass)
+                    child.element_index = molecular_cloud.element_index
+                    child.start_color = MOLECULAR_CLOUD_START_COLORS[child.element_index]
+                    # Emission velocity: parent's velocity + kick away
+                    child.vx = molecular_cloud.vx + math.cos(offset_angle) * MC_EMISSION_VELOCITY
+                    child.vy = molecular_cloud.vy + math.sin(offset_angle) * MC_EMISSION_VELOCITY
+                    # Conserve momentum: recoil on parent
+                    molecular_cloud.vx -= (emit_mass / molecular_cloud.mass) * math.cos(offset_angle) * MC_EMISSION_VELOCITY
+                    molecular_cloud.vy -= (emit_mass / molecular_cloud.mass) * math.sin(offset_angle) * MC_EMISSION_VELOCITY
+                    molecular_cloud.mass -= emit_mass
+                    molecular_cloud.emission_count += 1
+                    molecular_cloud.update()
+                    new_clouds.append(child)
     if to_remove:
         state.molecular_clouds = [mc for mc in state.molecular_clouds if mc not in to_remove]
     state.molecular_clouds.extend(new_clouds)
@@ -1088,7 +1176,11 @@ def update_simulation_state(state, ring, delta_time):
     ring.enforce(state, delta_time)
 
     for black_hole in state.black_holes:
-        black_hole.tracer_angle += DISK_ROTATION * delta_time
+        # Tracer rotation driven by angular momentum (with base rotation)
+        spin_rate = DISK_ROTATION + black_hole.angular_momentum / max(black_hole.mass, 1.0)
+        black_hole.tracer_angle += spin_rate * delta_time
+        # Gradually dissipate angular momentum
+        black_hole.angular_momentum *= 0.999 ** delta_time
 
     pulses_to_remove = []
     for i, pulse in enumerate(state.black_hole_pulses):
@@ -1096,12 +1188,19 @@ def update_simulation_state(state, ring, delta_time):
         new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time * 1.5)
         state.black_hole_pulses[i] = [x, y, new_radius, consumed_mass]
 
-        bh_ew = NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2
+        # Track energy budget from consumed mass
+        energy_budget = consumed_mass
+
+        # BH merger pulse: force scales with consumed mass (heavier mergers = stronger waves)
+        mass_scale = consumed_mass / 5.0
+        bh_ew = NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3
         bh_r_inner = max(0, radius - bh_ew)
         bh_r_outer = radius + bh_ew
         bh_r_inner_sq = bh_r_inner * bh_r_inner
         bh_r_outer_sq = bh_r_outer * bh_r_outer
         for molecular_cloud in state.molecular_clouds:
+            if energy_budget <= 0:
+                break
             dx = molecular_cloud.x - x
             dy = molecular_cloud.y - y
             dist_sq = dx * dx + dy * dy
@@ -1112,39 +1211,49 @@ def update_simulation_state(state, ring, delta_time):
             ripple_dist = abs(distance - radius)
             if ripple_dist < bh_ew:
                 effect_factor = 1.0 - (ripple_dist / bh_ew)
-                force = NEUTRON_STAR_PULSE_STRENGTH * 5 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 1.5)
+                force = NEUTRON_STAR_PULSE_STRENGTH * 3 * effect_factor * mass_scale / ((ripple_dist + 1) ** 1.5)
 
                 if distance > 0:
                     molecular_cloud.vx += (dx / distance) * force * delta_time
                     molecular_cloud.vy += (dy / distance) * force * delta_time
+                    energy_budget -= force * delta_time * 0.01
 
         for black_hole in state.black_holes:
+            if energy_budget <= 0:
+                break
             dx = black_hole.x - x
             dy = black_hole.y - y
             distance = math.hypot(dx, dy)
 
             ripple_dist = abs(distance - radius)
-            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
-                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3))
-                force = NEUTRON_STAR_PULSE_STRENGTH * 2 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 2)
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4:
+                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4))
+                force = NEUTRON_STAR_PULSE_STRENGTH * 2 * effect_factor * mass_scale / ((ripple_dist + 1) ** 2)
 
                 if distance > 0:
-                    black_hole.vx += (dx / distance) * force * delta_time * 0.5
-                    black_hole.vy += (dy / distance) * force * delta_time * 0.5
+                    black_hole.vx += (dx / distance) * force * delta_time
+                    black_hole.vy += (dy / distance) * force * delta_time
+                    energy_budget -= force * delta_time * 0.01
 
         for neutron_star in state.neutron_stars:
+            if energy_budget <= 0:
+                break
             dx = neutron_star.x - x
             dy = neutron_star.y - y
             distance = math.hypot(dx, dy)
 
             ripple_dist = abs(distance - radius)
-            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
-                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2))
-                force = NEUTRON_STAR_PULSE_STRENGTH * 3 * effect_factor * (consumed_mass / 10) / ((ripple_dist + 1) ** 1.8)
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
+                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3))
+                force = NEUTRON_STAR_PULSE_STRENGTH * 2.5 * effect_factor * mass_scale / ((ripple_dist + 1) ** 1.8)
 
                 if distance > 0:
-                    neutron_star.vx += (dx / distance) * force * delta_time * 1.5
-                    neutron_star.vy += (dy / distance) * force * delta_time * 1.5
+                    neutron_star.vx += (dx / distance) * force * delta_time
+                    neutron_star.vy += (dy / distance) * force * delta_time
+                    energy_budget -= force * delta_time * 0.01
+
+        # Update consumed_mass to reflect energy spent
+        state.black_hole_pulses[i][3] = max(0, energy_budget)
 
         cx, cy = ring.center
         pulse_fade = max(0.0, 1.0 - new_radius / ring.rest_radius)
@@ -1152,9 +1261,9 @@ def update_simulation_state(state, ring, delta_time):
             bx = cx + ring.radii[bi] * math.cos(ring.angles[bi])
             by = cy + ring.radii[bi] * math.sin(ring.angles[bi])
             dist_to_pulse = math.hypot(bx - x, by - y)
-            if abs(dist_to_pulse - new_radius) < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
-                ring.flash[bi] = max(ring.flash[bi], pulse_fade * 0.8)
-                ring.radii_vel[bi] += BARRIER_WAVE_PUSH * 1.5 * pulse_fade * delta_time
+            if abs(dist_to_pulse - new_radius) < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4:
+                ring.flash[bi] = max(ring.flash[bi], pulse_fade * 0.9)
+                ring.radii_vel[bi] += BARRIER_WAVE_PUSH * 2.0 * mass_scale * pulse_fade * delta_time
 
         if new_radius > max(ring.radii):
             pulses_to_remove.append(i)
@@ -1172,7 +1281,6 @@ def update_simulation_state(state, ring, delta_time):
         if black_hole in bh_to_remove:
             continue
         black_hole.attract(state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove)
-        black_hole.update_gravity(state, delta_time)
         black_hole.decay(delta_time)
         # Jet streams: emit H/He/O clouds over time
         jets_done = []
