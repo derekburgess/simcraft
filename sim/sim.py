@@ -8,8 +8,8 @@ import bisect
 # ── Display ──
 BACKGROUND_COLOR = (0, 10, 20) # RGB background color (dark blue-black, like space).
 LABEL_COLOR = (60, 60, 200)    # RGB color for UI text labels.
-SCREEN_WIDTH = 1440             # Display width in pixels. Change to match your monitor.
-SCREEN_HEIGHT = 960             # Display height in pixels. Change to match your monitor.
+SCREEN_WIDTH = 1920             # Display width in pixels. Change to match your monitor.
+SCREEN_HEIGHT = 1080             # Display height in pixels. Change to match your monitor.
 
 # ── Zoom ──
 ZOOM_MIN = 0.5                 # Minimum zoom level (zoomed out). Lower = can see more.
@@ -97,11 +97,11 @@ MOLECULAR_CLOUD_START_COLORS = [
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)  # Color clouds fade toward as they gain mass (white-blue).
 MOLECULAR_CLOUD_OPACITY = 128   # Maximum opacity for clouds below protostar mass (0-255).
 MOLECULAR_CLOUD_MIN_OPACITY = 64  # Minimum opacity for the lightest clouds (0-255).
-DEFAULT_STATE_CHANCE = 0.002    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
+DEFAULT_STATE_CHANCE = 0.0008    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
 EJECTA_HEAVIER_ELEMENT_CHANCE = 0.4  # Probability that ejecta from supernovae produce heavier elements than the parent.
 
 # ── Molecular Cloud Emission (clouds shed daughter clouds) ──
-MC_EMISSION_CHANCE = 0.2          # Per-frame chance for eligible clouds to emit
+MC_EMISSION_CHANCE = 0.1          # Per-frame chance for eligible clouds to emit
 MC_EMISSION_MIN_PARENT_MASS = 6     # Minimum parent mass to emit
 MC_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
 MC_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
