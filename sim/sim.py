@@ -1600,7 +1600,7 @@ def run_simulation(screen, font, state, ring):
                 scaled = pygame.transform.scale(visible_area, (SCREEN_WIDTH, SCREEN_HEIGHT))
                 screen.blit(scaled, (0, 0))
 
-            draw_ui(screen, font, current_year, zoom)
+            #draw_ui(screen, font, current_year, zoom)
 
             current_year += delta_time * YEAR_RATE
 
