@@ -19,6 +19,7 @@ ZOOM_STEP = 0.25               # Zoom change per scroll wheel tick.
 # ── Timing ──
 YEAR_RATE = 60                 # Simulated years per real second. Higher = faster time progression in the UI counter.
 MAX_DELTA_TIME = 0.05          # Maximum physics time step per frame (seconds). Caps dt to prevent instability on lag spikes.
+HEAT_DEATH_LINGER_DURATION = 12.0  # Seconds to display the empty ring after all matter is gone before starting a new universe.
 
 # ── Physics ──
 GRAVITY_SCALE = 0.15  # Master gravity multiplier applied to all gravitational constants. Increase for stronger gravity everywhere.
@@ -145,8 +146,9 @@ BLACK_HOLE_CHANCE = 0.0004      # Per-frame probability a qualifying star become
 BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
 BLACK_HOLE_MAX_MASS = 64        # Maximum mass a black hole can accumulate.
 BLACK_HOLE_GRAVITY_CONSTANT = 14.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
-BLACK_HOLE_DECAY_RATE = 0.8     # Mass lost per second (Hawking radiation analog). Higher = shorter lifespan.
+BLACK_HOLE_DECAY_RATE = 0.8     # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
+BH_GRAVITY_SOFTENING = 5.0     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
 BLACK_HOLE_BORDER_COLOR = (100, 0, 0)  # RGB color of the event horizon ring (dark red).
 BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)  # RGBA color of the gravitational wave pulse from BH mergers.
@@ -730,9 +732,10 @@ class BlackHole:
                     if random.random() < BH_JET_CHANCE:
                         self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 elif distance > 0:
-                    force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
-                    black_hole.vx += (dx / distance) * force * delta_time
-                    black_hole.vy += (dy / distance) * force * delta_time
+                    soft_dist = math.sqrt(distance * distance + BH_GRAVITY_SOFTENING * BH_GRAVITY_SOFTENING)
+                    force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (soft_dist ** 2)
+                    black_hole.vx += (dx / soft_dist) * force * delta_time
+                    black_hole.vy += (dy / soft_dist) * force * delta_time
 
         for entity in state.molecular_clouds:
             if entity in mc_to_remove:
@@ -758,12 +761,13 @@ class BlackHole:
                 if random.random() < BH_JET_CHANCE:
                     self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
             else:
-                force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
+                soft_dist = math.sqrt(distance * distance + BH_GRAVITY_SOFTENING * BH_GRAVITY_SOFTENING)
+                force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
                 # Newton's 3rd law: MC pulled toward BH, BH pulled toward MC
-                entity.vx += (dx / distance) * force * delta_time
-                entity.vy += (dy / distance) * force * delta_time
-                self.vx -= (dx / distance) * force * delta_time
-                self.vy -= (dy / distance) * force * delta_time
+                entity.vx += (dx / soft_dist) * force * delta_time
+                entity.vy += (dy / soft_dist) * force * delta_time
+                self.vx -= (dx / soft_dist) * force * delta_time
+                self.vy -= (dy / soft_dist) * force * delta_time
 
         for entity in state.neutron_stars:
             if entity in ns_to_remove:
@@ -788,15 +792,17 @@ class BlackHole:
                     self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
             else:
-                force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (distance**2)
+                soft_dist = math.sqrt(distance * distance + BH_GRAVITY_SOFTENING * BH_GRAVITY_SOFTENING)
+                force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
                 # Newton's 3rd law: NS pulled toward BH, BH pulled toward NS
-                entity.vx += (dx / distance) * force * delta_time
-                entity.vy += (dy / distance) * force * delta_time
-                self.vx -= (dx / distance) * force * delta_time
-                self.vy -= (dy / distance) * force * delta_time
+                entity.vx += (dx / soft_dist) * force * delta_time
+                entity.vy += (dy / soft_dist) * force * delta_time
+                self.vx -= (dx / soft_dist) * force * delta_time
+                self.vy -= (dy / soft_dist) * force * delta_time
 
     def decay(self, delta_time):
-        self.mass -= BLACK_HOLE_DECAY_RATE * delta_time
+        rate = BLACK_HOLE_DECAY_RATE * (BLACK_HOLE_DECAY_THRESHOLD / self.mass) ** 2
+        self.mass -= rate * delta_time
 
 
 class NeutronStar:
@@ -1148,10 +1154,13 @@ def screen_to_world(screen_x, screen_y, zoom, view_center_x, view_center_y):
 
 def handle_input(zoom, view_center_x, view_center_y):
     running = True
+    take_screenshot = False
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
             running = False
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            take_screenshot = True
         if event.type == pygame.MOUSEWHEEL:
             mouse_sx, mouse_sy = pygame.mouse.get_pos()
             world_x, world_y = screen_to_world(mouse_sx, mouse_sy, zoom, view_center_x, view_center_y)
@@ -1166,7 +1175,7 @@ def handle_input(zoom, view_center_x, view_center_y):
                     view_center_x = world_x - (mouse_sx - SCREEN_WIDTH / 2) / zoom
                     view_center_y = world_y - (mouse_sy - SCREEN_HEIGHT / 2) / zoom
 
-    return running, zoom, view_center_x, view_center_y
+    return running, zoom, view_center_x, view_center_y, take_screenshot
 
 
 def resolve_pulse_collisions(state, delta_time):
@@ -1534,6 +1543,7 @@ def run_simulation(screen, font, state, ring):
         clock = pygame.time.Clock()
         current_year = 0.0
         last_frame_time = pygame.time.get_ticks()
+        heat_death_timer = 0.0
         zoom = 1.0
         view_center_x = SCREEN_WIDTH / 2.0
         view_center_y = SCREEN_HEIGHT / 2.0
@@ -1547,7 +1557,7 @@ def run_simulation(screen, font, state, ring):
             delta_time = min(delta_time, MAX_DELTA_TIME)
             last_frame_time = current_time
 
-            running, zoom, view_center_x, view_center_y = handle_input(
+            running, zoom, view_center_x, view_center_y, take_screenshot = handle_input(
                 zoom, view_center_x, view_center_y
             )
             if not running:
@@ -1564,12 +1574,17 @@ def run_simulation(screen, font, state, ring):
                 + sum(ns.mass for ns in state.neutron_stars)
             )
             if entity_count == 0 or total_mass <= 0:
-                print(f"Reset at year {current_year}: entities={entity_count}, mass={total_mass}")
-                state, ring = initialize_state()
-                current_year = 0.0
-                zoom = 1.0
-                view_center_x = SCREEN_WIDTH / 2.0
-                view_center_y = SCREEN_HEIGHT / 2.0
+                heat_death_timer += delta_time
+                if heat_death_timer >= HEAT_DEATH_LINGER_DURATION:
+                    print(f"Reset at year {current_year}: entities={entity_count}, mass={total_mass}")
+                    state, ring = initialize_state()
+                    current_year = 0.0
+                    zoom = 1.0
+                    view_center_x = SCREEN_WIDTH / 2.0
+                    view_center_y = SCREEN_HEIGHT / 2.0
+                    heat_death_timer = 0.0
+            else:
+                heat_death_timer = 0.0
 
             view_w = int(SCREEN_WIDTH / zoom)
             view_h = int(SCREEN_HEIGHT / zoom)
@@ -1606,6 +1621,38 @@ def run_simulation(screen, font, state, ring):
 
             pygame.display.flip()
             clock.tick(60)
+
+            if take_screenshot:
+                try:
+                    from sim.rng import serialize_state, generate
+                    state_bytes, _ = serialize_state(state)
+                    result = generate(state_bytes, 10000000000000000000, 99999999999999999999)
+                    rng_number = result['random_number']
+                except Exception:
+                    rng_number = None
+
+                # Crop to centered square using window height
+                crop_size = SCREEN_HEIGHT
+                crop_x = (SCREEN_WIDTH - crop_size) // 2
+                crop_rect = pygame.Rect(crop_x, 0, crop_size, crop_size)
+                shot = screen.subsurface(crop_rect).copy()
+
+                # Full-width white bar at bottom with centered number
+                label = str(rng_number) if rng_number is not None else "RNG ERROR"
+                shot_font = pygame.font.SysFont('notosansmono', 80, bold=True)
+                text_surf = shot_font.render(label, True, (0, 0, 0))
+                padding = 8
+                box_h = text_surf.get_height() + padding * 2
+                box_y = crop_size - box_h
+                pygame.draw.rect(shot, (255, 255, 255), (0, box_y, crop_size, box_h))
+                text_x = (crop_size - text_surf.get_width()) // 2
+                shot.blit(text_surf, (text_x, box_y + padding))
+
+                import os as _os
+                mnemonic_dir = _os.path.join(_os.path.dirname(__file__), 'mnemonic')
+                filename = _os.path.join(mnemonic_dir, f"{rng_number}.png")
+                pygame.image.save(shot, filename)
+                print(f"Screenshot saved: {rng_number}")
 
         print("Exited simulation")
 
