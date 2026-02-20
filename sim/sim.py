@@ -98,11 +98,11 @@ MOLECULAR_CLOUD_START_COLORS = [
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)  # Color clouds fade toward as they gain mass (white-blue).
 MOLECULAR_CLOUD_OPACITY = 128   # Maximum opacity for clouds below protostar mass (0-255).
 MOLECULAR_CLOUD_MIN_OPACITY = 64  # Minimum opacity for the lightest clouds (0-255).
-DEFAULT_STATE_CHANCE = 0.0008    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
-EJECTA_HEAVIER_ELEMENT_CHANCE = 0.4  # Probability that ejecta from supernovae produce heavier elements than the parent.
+DEFAULT_STATE_CHANCE = 0.0004    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
+EJECTA_HEAVIER_ELEMENT_CHANCE = 0.2  # Probability that ejecta from supernovae produce heavier elements than the parent.
 
 # ── Molecular Cloud Emission (clouds shed daughter clouds) ──
-MC_EMISSION_CHANCE = 0.1          # Per-frame chance for eligible clouds to emit
+MC_EMISSION_CHANCE = 0.05          # Per-frame chance for eligible clouds to emit
 MC_EMISSION_MIN_PARENT_MASS = 6     # Minimum parent mass to emit
 MC_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
 MC_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
@@ -144,7 +144,7 @@ RED_GIANT_BLACK_HOLE_CHANCE = 0.00002
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
 BLACK_HOLE_CHANCE = 0.0004      # Per-frame probability a qualifying star becomes a black hole. Very rare.
 BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
-BLACK_HOLE_MAX_MASS = 64        # Maximum mass a black hole can accumulate.
+BLACK_HOLE_MAX_MASS = 72        # Maximum mass a black hole can accumulate.
 BLACK_HOLE_GRAVITY_CONSTANT = 14.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
 BLACK_HOLE_DECAY_RATE = 0.8     # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
