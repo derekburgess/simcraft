@@ -7,19 +7,31 @@ import bisect
 
 # ── Display ──
 BACKGROUND_COLOR = (0, 10, 20) # RGB background color (dark blue-black, like space).
-LABEL_COLOR = (60, 60, 200)    # RGB color for UI text labels.
+
 SCREEN_WIDTH = 1920             # Display width in pixels. Change to match your monitor.
 SCREEN_HEIGHT = 1080             # Display height in pixels. Change to match your monitor.
+
+# ── UI ──
+LABEL_COLOR = (60, 60, 200)    # RGB color for UI text labels.
+
+UI_LABEL_X = 30                 # X position (pixels from left) for all HUD text labels.
+UI_ZOOM_Y_OFFSET = 140          # Y offset from bottom of screen for the zoom label.
+UI_EXIT_Y_OFFSET = 110          # Y offset from bottom of screen for the exit/quit label.
+UI_TEXT_Y_OFFSET = 40           # Y offset from bottom of screen for the year counter display.
 
 # ── Zoom ──
 ZOOM_MIN = 0.5                 # Minimum zoom level (zoomed out). Lower = can see more.
 ZOOM_MAX = 1.5                 # Maximum zoom level (zoomed in). Higher = can zoom in more.
 ZOOM_STEP = 0.25               # Zoom change per scroll wheel tick.
 
+# ── Simulation ──
+SPATIAL_HASH_CELL_SIZE = 40     # Cell size (pixels) for the spatial hash grid. Should match typical entity interaction radius.
+
 # ── Timing ──
 YEAR_RATE = 60                 # Simulated years per real second. Higher = faster time progression in the UI counter.
 MAX_DELTA_TIME = 0.05          # Maximum physics time step per frame (seconds). Caps dt to prevent instability on lag spikes.
 HEAT_DEATH_LINGER_DURATION = 12.0  # Seconds to display the empty ring after all matter is gone before starting a new universe.
+TARGET_FPS = 60                    # Target frame rate cap for the simulation loop.
 
 # ── Physics ──
 GRAVITY_SCALE = 0.15  # Master gravity multiplier applied to all gravitational constants. Increase for stronger gravity everywhere.
@@ -31,17 +43,17 @@ VELOCITY_DAMPING = 0.97        # Per-frame velocity multiplier for all entities.
 # and clouds spawn denser in the "dented" regions, seeding the clumps that
 # eventually collapse into stars and black holes. Set all to 0 for a perfectly
 # uniform start (boring). Crank them up for wild, lumpy initial conditions.
-CMB_PERTURBATION_MODES = 10     # Number of sine-wave modes layered onto the barrier shape. 1 = simple oval,
+CMB_PERTURBATION_MODES = 18     # Number of sine-wave modes layered onto the barrier shape. 1 = simple oval,
                                 # 6 = complex bumpy ring, 20+ = very jagged. Each higher mode adds finer detail.
-CMB_PERTURBATION_SCALE = 0.08  # Amplitude of each mode (as a fraction of barrier radius). 0 = perfect circle,
+CMB_PERTURBATION_SCALE = 0.4  # Amplitude of each mode (as a fraction of barrier radius). 0 = perfect circle,
                                 # 0.08 = subtle bumps (~8%), 0.3+ = dramatic deformations.
-CMB_DENSITY_CONTRAST = 0.4     # How strongly barrier shape biases initial cloud placement. 0 = clouds spread
+CMB_DENSITY_CONTRAST = 0.8     # How strongly barrier shape biases initial cloud placement. 0 = clouds spread
                                 # evenly regardless of barrier shape, 0.6 = noticeably clumpy, 1.0 = extreme
                                 # clustering in dented regions (can leave large voids elsewhere).
 
 # ── Barrier (cosmic boundary ring) ──
 BARRIER_POINT_COUNT = 640       # Number of vertices defining the barrier ring. More = smoother circle, but slower.
-BARRIER_INITIAL_SIZE = 240      # Starting diameter of the barrier ring in pixels.
+BARRIER_INITIAL_SIZE = 128      # Starting diameter of the barrier ring in pixels.
 BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Higher = stronger inward pull.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
 BARRIER_BASE_OPACITY = 150      # Transparency of the barrier at rest (0=invisible, 255=opaque).
@@ -54,15 +66,25 @@ BARRIER_DEFORM_THRESHOLD = 0.1  # Minimum radius change (pixels) to trigger a fl
 BARRIER_HEAVY_MASS_THRESHOLD = 100  # Combined mass near a barrier section that weakens containment. Higher = harder to break out.
 BARRIER_SMOOTHING_PASSES = 3    # Number of smoothing iterations when drawing the barrier. More = smoother shape.
 BARRIER_SMOOTHING_WINDOW = 5    # Window size for the smoothing algorithm (must be odd). Larger = smoother but less detail.
+BARRIER_DEFORMATION_PROXIMITY_FACTOR = 0.3  # Fraction of rest radius used as proximity threshold for deformation accumulation.
+BARRIER_SECTION_SEARCH_RANGE = 3  # Angular step multiplier when searching for nearby compact objects at a barrier section.
+BARRIER_LINE_WIDTH = 3          # Line width (pixels) for drawing the barrier ring polygon and flash segments.
 
 # ── Barrier Interaction (how different entities interact with the barrier) ──
-MC_BARRIER_GRAVITY_FACTOR = 0.001  # Gravity multiplier for clouds vs barrier. Very weak — clouds drift inward gently.
-BH_BARRIER_GRAVITY_FACTOR = 0.01   # Gravity multiplier for black holes vs barrier. 10x stronger than clouds.
-NS_BARRIER_GRAVITY_FACTOR = 0.008   # Gravity multiplier for neutron stars vs barrier. Strongest pull.
+MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR = 0.001  # Gravity multiplier for clouds vs barrier. Very weak — clouds drift inward gently.
+MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 2.0     # How strongly massive clouds dent the barrier on approach.
 
-MC_BARRIER_DEFORM_FACTOR = 2.0     # How strongly massive clouds dent the barrier on approach.
-BH_BARRIER_DEFORM_FACTOR = 12.0    # How strongly black holes dent the barrier. Very high.
-NS_BARRIER_DEFORM_FACTOR = 6.0     # How strongly neutron stars dent the barrier.
+BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.01   # Gravity multiplier for black holes vs barrier. 10x stronger than clouds.
+BLACK_HOLE_BARRIER_DEFORM_FACTOR = 20.0    # How strongly black holes dent the barrier. Very high.
+BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.7  # How much nearby mass weakens containment for black holes. Higher = escapes more easily.
+BLACK_HOLE_BARRIER_PUSH_STRENGTH = 60.0    # Base push force applied to black holes hitting the barrier boundary.
+
+NEUTRON_STAR_BARRIER_GRAVITY_FACTOR = 0.008   # Gravity multiplier for neutron stars vs barrier. Strongest pull.
+NEUTRON_STAR_BARRIER_DEFORM_FACTOR = 6.0     # How strongly neutron stars dent the barrier.
+NEUTRON_STAR_BARRIER_WEAKENING_FACTOR = 0.7  # How much nearby mass weakens containment for neutron stars (0=no effect, 1=full escape).
+NEUTRON_STAR_BARRIER_PUSH_STRENGTH = 100.0   # Base push force applied to neutron stars hitting the barrier boundary.
+
+BARRIER_CONTAINMENT_THRESHOLD = 0.05  # Minimum containment strength below which the barrier stops pushing an entity back.
 
 # ── Molecular Clouds ──
 MOLECULAR_CLOUD_COUNT = 4800    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
@@ -98,17 +120,26 @@ MOLECULAR_CLOUD_START_COLORS = [
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)  # Color clouds fade toward as they gain mass (white-blue).
 MOLECULAR_CLOUD_OPACITY = 128   # Maximum opacity for clouds below protostar mass (0-255).
 MOLECULAR_CLOUD_MIN_OPACITY = 64  # Minimum opacity for the lightest clouds (0-255).
-DEFAULT_STATE_CHANCE = 0.0004    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
-EJECTA_HEAVIER_ELEMENT_CHANCE = 0.2  # Probability that ejecta from supernovae produce heavier elements than the parent.
+
+# ── Supernova (molecular cloud reset events) ──
+MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.0002    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
+MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE = 0.2  # Probability that ejecta from supernovae produce heavier elements than the parent.
+SUPERNOVA_EJECTA_COUNT_HIGH = 6   # Number of ejecta pieces from a high-tier (heavy element) supernova.
+SUPERNOVA_EJECTA_COUNT_MEDIUM = 8 # Number of ejecta pieces from a medium-tier supernova.
+SUPERNOVA_EJECTA_COUNT_LOW = 12    # Number of ejecta pieces from a low-tier (light element) supernova.
+SUPERNOVA_EJECTA_SPREAD_HIGH = 60  # Max spawn radius (pixels) of ejecta from a high-tier supernova.
+SUPERNOVA_EJECTA_SPREAD_MEDIUM = 80  # Max spawn radius (pixels) of ejecta from a medium-tier supernova.
+SUPERNOVA_EJECTA_SPREAD_LOW = 100   # Max spawn radius (pixels) of ejecta from a low-tier supernova.
+SUPERNOVA_EJECTA_MAX_MASS_FRACTION = 0.35    # Maximum ejecta mass as a fraction of PROTOSTAR_THRESHOLD.
 
 # ── Molecular Cloud Emission (clouds shed daughter clouds) ──
-MC_EMISSION_CHANCE = 0.05          # Per-frame chance for eligible clouds to emit
-MC_EMISSION_MIN_PARENT_MASS = 6     # Minimum parent mass to emit
-MC_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
-MC_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
-MC_EMISSION_VELOCITY = 0.8         # Emission kick speed
-MC_EMISSION_SPREAD = 12              # Max spawn distance from parent
-MC_EMISSION_COUNT = 4               # Max number of emissions per cloud
+MOLECULAR_CLOUD_EMISSION_CHANCE = 0.2          # Per-frame chance for eligible clouds to emit
+MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS = 6     # Minimum parent mass to emit
+MOLECULAR_CLOUD_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
+MOLECULAR_CLOUD_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
+MOLECULAR_CLOUD_EMISSION_VELOCITY = 0.8         # Emission kick speed
+MOLECULAR_CLOUD_EMISSION_SPREAD = 18              # Max spawn distance from parent
+MOLECULAR_CLOUD_EMISSION_COUNT = 4               # Max number of emissions per cloud
 
 # ── Protostars (clouds that reach enough mass to ignite) ──
 PROTOSTAR_THRESHOLD = 32        # Mass at which a cloud becomes a protostar (changes appearance and behavior).
@@ -122,8 +153,8 @@ PROTOSTAR_EJECTA_SPREAD = 32    # Max spawn distance (pixels) of ejecta from the
 #   Index 5-9  (N, Fe, Si, Au, S)           → MEDIUM tier — mid-size yellow-green star
 #   Index 10-19 (Mg, P, Li, Pt, Co, Ca...) → HIGH tier — large red giant
 # Lowering these values makes heavier stars more common; raising them makes them rarer.
-ELEMENT_WEIGHT_MEDIUM = 5   # Element index at or above which a star becomes medium tier.
-ELEMENT_WEIGHT_HEAVY = 10   # Element index at or above which a star becomes a red giant (high tier).
+PROTOSTAR_ELEMENT_WEIGHT_MEDIUM = 5   # Element index at or above which a star becomes medium tier.
+PROTOSTAR_ELEMENT_WEIGHT_HEAVY = 10   # Element index at or above which a star becomes a red giant (high tier).
 
 PROTOSTAR_LOW_COLOR = (225, 255, 255)      # White (current)
 PROTOSTAR_LOW_SIZE = 2
@@ -138,7 +169,7 @@ PROTOSTAR_HIGH_SIZE = 6
 PROTOSTAR_HIGH_MASS_BOOST = 12             # Red giants get +6 mass on formation
 
 # Higher BH conversion chance for red giants
-RED_GIANT_BLACK_HOLE_CHANCE = 0.00002
+PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.00002
 
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
@@ -148,36 +179,39 @@ BLACK_HOLE_MAX_MASS = 72        # Maximum mass a black hole can accumulate.
 BLACK_HOLE_GRAVITY_CONSTANT = 14.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
 BLACK_HOLE_DECAY_RATE = 0.8     # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
-BH_GRAVITY_SOFTENING = 5.0     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
+BLACK_HOLE_GRAVITY_SOFTENING = 5.0     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
 BLACK_HOLE_BORDER_COLOR = (100, 0, 0)  # RGB color of the event horizon ring (dark red).
 BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)  # RGBA color of the gravitational wave pulse from BH mergers.
-DISK_COLOR = (255, 100, 100)    # RGB color of the accretion disk tracer dot (light red).
-DISK_SIZE = 1                   # Visual size in pixels of the accretion disk tracer.
-DISK_ROTATION = 10.0            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
+BLACK_HOLE_DISK_COLOR = (255, 100, 100)    # RGB color of the accretion disk tracer dot (light red).
+BLACK_HOLE_DISK_SIZE = 1                   # Visual size in pixels of the accretion disk tracer.
+BLACK_HOLE_DISK_ROTATION = 10.0            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
 
 # ── Black Hole Decay (when BH evaporates) ──
-BH_DECAY_CLOUD_COUNT = 6       # Number of heavy clouds spawned when a BH evaporates.
-BH_DECAY_CLOUD_MASS_MIN = 24   # Minimum mass of each decay cloud. These are heavy!
-BH_DECAY_CLOUD_MASS_MAX = 28   # Maximum mass of each decay cloud.
-BH_DECAY_EJECTA_SPREAD = 20    # Max spawn distance (pixels) of decay ejecta from the BH.
+BLACK_HOLE_DECAY_CLOUD_COUNT = 6       # Number of heavy clouds spawned when a BH evaporates.
+BLACK_HOLE_DECAY_CLOUD_MASS_MIN = 24   # Minimum mass of each decay cloud. These are heavy!
+BLACK_HOLE_DECAY_CLOUD_MASS_MAX = 28   # Maximum mass of each decay cloud.
+BLACK_HOLE_DECAY_EJECTA_SPREAD = 20    # Max spawn distance (pixels) of decay ejecta from the BH.
 
 # ── Black Hole Jets (relativistic jets from accretion events) ──
-BH_JET_CHANCE = 0.4             # Probability of jet formation when a BH absorbs something.
-BH_JET_STAR_COUNT = 8           # Number of clouds emitted per jet burst.
-BH_JET_DURATION = 4             # Duration of jet emission in seconds.
-BH_JET_SPREAD = 60              # Max spawn distance (pixels) of jet particles from the BH.
-BH_JET_VELOCITY = 12.0           # Speed of ejected jet particles. Higher = faster jets.
+BLACK_HOLE_JET_CHANCE = 0.4             # Probability of jet formation when a BH absorbs something.
+BLACK_HOLE_JET_STAR_COUNT = 8           # Number of clouds emitted per jet burst.
+BLACK_HOLE_JET_DURATION = 4             # Duration of jet emission in seconds.
+BLACK_HOLE_JET_SPREAD = 40              # Max spawn distance (pixels) of jet particles from the BH.
+BLACK_HOLE_JET_VELOCITY = 20.0           # Speed of ejected jet particles. Higher = faster jets.
 
 # ── Black Hole Emission (random mass leakage) ──
-BH_EMISSION_CHANCE = 0.008       # Per-frame chance a BH randomly emits a small cloud.
-BH_EMISSION_MASS_MIN = 1        # Minimum mass of emitted particles.
-BH_EMISSION_MASS_MAX = 3        # Maximum mass of emitted particles.
-BH_EMISSION_EJECTA_SPREAD = 20  # Max spawn distance (pixels) of emitted particles.
-BH_EMISSION_VELOCITY = 0.8      # Speed of emitted particles.
+BLACK_HOLE_EMISSION_CHANCE = 0.0002       # Per-frame chance a BH randomly emits a small cloud.
+BLACK_HOLE_EMISSION_MASS_MIN = 1        # Minimum mass of emitted particles.
+BLACK_HOLE_EMISSION_MASS_MAX = 3        # Maximum mass of emitted particles.
+BLACK_HOLE_EMISSION_EJECTA_SPREAD = 40  # Max spawn distance (pixels) of emitted particles.
+BLACK_HOLE_EMISSION_VELOCITY = 0.4      # Speed of emitted particles.
+BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION = 0.999  # Per-second dissipation rate for black hole angular momentum (spin-down).
+BLACK_HOLE_PULSE_SPEED_MULTIPLIER = 1.5  # Speed multiplier applied to BH merger pulses relative to NS ripple speed.
+BLACK_HOLE_PULSE_MASS_SCALE = 5.0        # Divisor for consumed mass when scaling BH merger pulse forces.
 
 # ── Neutron Stars ──
-NEUTRON_STAR_CHANCE = 0.08      # Probability of becoming a neutron star instead of a black hole on collapse.
+NEUTRON_STAR_CHANCE = 0.1      # Probability of becoming a neutron star instead of a black hole on collapse.
 NEUTRON_STAR_RADIUS = 1         # Visual radius in pixels (tiny, as expected).
 NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE  # Gravitational pull strength. Moderate — between clouds and BHs.
 NEUTRON_STAR_DECAY_RATE = 0.8   # Mass lost per second. Higher = shorter lifespan.
@@ -189,18 +223,24 @@ NEUTRON_STAR_PULSE_COLOR = (0, 60, 180, 80)  # RGBA color of the expanding pulse
 NEUTRON_STAR_PULSE_WIDTH = 2    # Line width (pixels) for drawing pulse rings.
 NEUTRON_STAR_RIPPLE_SPEED = 64  # How fast (pixels/sec) pulse ripples expand outward.
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripples exert force on entities.
-NS_PULSE_MASS_BOOST = 0.02      # Mass cost per unit of pulse force. Pulsing drains the neutron star.
-
-# ── Neutron Star Decay (when NS loses enough mass) ──
-NS_DECAY_CLOUD_COUNT = 2        # Number of clouds spawned when a neutron star dissipates.
-NS_DECAY_CLOUD_MASS_MIN = 1     # Minimum mass of each decay cloud.
-NS_DECAY_CLOUD_MASS_MAX = 4     # Maximum mass of each decay cloud.
-NS_DECAY_EJECTA_SPREAD = 20     # Max spawn distance (pixels) of decay ejecta.
+NEUTRON_STAR_PULSE_MASS_BOOST = 0.02      # Mass cost per unit of pulse force. Pulsing drains the neutron star.
+NEUTRON_STAR_PULSE_COLOR_DURATION = 0.1  # Seconds the neutron star flashes white after each pulse.
+NEUTRON_STAR_PULSE_FADE_RATE = 1.5  # Rate multiplier for pulse fade once the wavefront reaches the barrier.
+NEUTRON_STAR_DECAY_CLOUD_COUNT = 2        # Number of clouds spawned when a neutron star dissipates.
+NEUTRON_STAR_DECAY_CLOUD_MASS_MIN = 1     # Minimum mass of each decay cloud.
+NEUTRON_STAR_DECAY_CLOUD_MASS_MAX = 4     # Maximum mass of each decay cloud.
+NEUTRON_STAR_DECAY_EJECTA_SPREAD = 20     # Max spawn distance (pixels) of decay ejecta.
 
 # ── Kilonova (neutron star merger) ──
 KILONOVA_EJECTA_COUNT = 20      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements.
 KILONOVA_COLLISION_DISTANCE = 6 # Distance (pixels) at which two neutron stars merge.
-KILONOVA_EJECTA_SPREAD = 80    # Max spawn distance (pixels) of kilonova ejecta. Large explosion!
+KILONOVA_EJECTA_SPREAD = 80     # Max spawn distance (pixels) of kilonova ejecta. Large explosion!
+
+# ── Pulse Rendering ──
+PULSE_RENDER_POINT_COUNT = 64   # Number of polygon vertices used to draw each pulse ring.
+PULSE_RENDER_MARGIN = 2         # Pixel margin added around pulse bounding boxes when allocating draw surfaces.
+PULSE_COLLISION_FADE_RATE = 4.0 # Rate at which overlapping pulse wavefronts fade each other out.
+PULSE_BARRIER_CLIP_MARGIN = 4   # Pixels inside the barrier edge where pulse ring points are clipped.
 
 
 entity_id_counter = 0
@@ -210,16 +250,16 @@ def generate_unique_id():
     return entity_id_counter
 
 
-_mc_surface_cache = {}
+_molecular_cloud_surface_cache = {}
 
-def _get_mc_surface(size):
-    if size not in _mc_surface_cache:
-        _mc_surface_cache[size] = pygame.Surface((size, size), pygame.SRCALPHA)
-    return _mc_surface_cache[size]
+def _get_molecular_cloud_surface(size):
+    if size not in _molecular_cloud_surface_cache:
+        _molecular_cloud_surface_cache[size] = pygame.Surface((size, size), pygame.SRCALPHA)
+    return _molecular_cloud_surface_cache[size]
 
 
 class SpatialHash:
-    def __init__(self, cell_size=40):
+    def __init__(self, cell_size=SPATIAL_HASH_CELL_SIZE):
         self.cell_size = cell_size
         self.grid = {}
 
@@ -256,7 +296,7 @@ class SimulationState:
         self.black_holes = []
         self.neutron_stars = []
         self.black_hole_pulses = []
-        self.spatial_hash = SpatialHash(40)
+        self.spatial_hash = SpatialHash(SPATIAL_HASH_CELL_SIZE)
 
 
 class Barrier:
@@ -305,7 +345,7 @@ class Barrier:
             target_dx = cx + barrier_r * math.cos(angle) - mc.x
             target_dy = cy + barrier_r * math.sin(angle) - mc.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * math.sqrt(mc.mass) / (target_dist ** 2)) * MC_BARRIER_GRAVITY_FACTOR
+            force = (BARRIER_GRAVITY_CONSTANT * math.sqrt(mc.mass) / (target_dist ** 2)) * MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR
             if target_dist > mc.size / 2:
                 mc.vx += (target_dx / target_dist) * force * delta_time
                 mc.vy += (target_dy / target_dist) * force * delta_time
@@ -316,7 +356,7 @@ class Barrier:
             target_dx = cx + barrier_r * math.cos(angle) - bh.x
             target_dy = cy + barrier_r * math.sin(angle) - bh.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * bh.mass / (target_dist ** 2)) * BH_BARRIER_GRAVITY_FACTOR
+            force = (BARRIER_GRAVITY_CONSTANT * bh.mass / (target_dist ** 2)) * BLACK_HOLE_BARRIER_GRAVITY_FACTOR
             bh.vx += (target_dx / target_dist) * force * delta_time
             bh.vy += (target_dy / target_dist) * force * delta_time
 
@@ -326,7 +366,7 @@ class Barrier:
             target_dx = cx + barrier_r * math.cos(angle) - ns.x
             target_dy = cy + barrier_r * math.sin(angle) - ns.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * ns.mass / (target_dist ** 2)) * NS_BARRIER_GRAVITY_FACTOR
+            force = (BARRIER_GRAVITY_CONSTANT * ns.mass / (target_dist ** 2)) * NEUTRON_STAR_BARRIER_GRAVITY_FACTOR
             ns.vx += (target_dx / target_dist) * force * delta_time
             ns.vy += (target_dy / target_dist) * force * delta_time
 
@@ -345,18 +385,18 @@ class Barrier:
     def update_deformation(self, state, delta_time):
         mass_accum = [0.0] * self.num_points
         step = 2 * math.pi / self.num_points
-        proximity_threshold = self.rest_radius * 0.3
+        proximity_threshold = self.rest_radius * BARRIER_DEFORMATION_PROXIMITY_FACTOR
 
         for mc in state.molecular_clouds:
             if mc.mass < PROTOSTAR_THRESHOLD:
                 continue
-            self._accum_deformation(mc, mass_accum, step, proximity_threshold, MC_BARRIER_DEFORM_FACTOR)
+            self._accum_deformation(mc, mass_accum, step, proximity_threshold, MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR)
 
         for bh in state.black_holes:
-            self._accum_deformation(bh, mass_accum, step, proximity_threshold, BH_BARRIER_DEFORM_FACTOR)
+            self._accum_deformation(bh, mass_accum, step, proximity_threshold, BLACK_HOLE_BARRIER_DEFORM_FACTOR)
 
         for ns in state.neutron_stars:
-            self._accum_deformation(ns, mass_accum, step, proximity_threshold, NS_BARRIER_DEFORM_FACTOR)
+            self._accum_deformation(ns, mass_accum, step, proximity_threshold, NEUTRON_STAR_BARRIER_DEFORM_FACTOR)
 
         damping = BARRIER_DAMPING ** delta_time
         for i in range(self.num_points):
@@ -405,12 +445,12 @@ class Barrier:
             if dist >= barrier_r:
                 section_mass = sum(
                     m for a, m in compact_angles_masses
-                    if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * 3
+                    if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * BARRIER_SECTION_SEARCH_RANGE
                 )
                 weakness = min(section_mass / BARRIER_HEAVY_MASS_THRESHOLD, 1.0)
-                containment = 1.0 - weakness * 0.7
-                if dist > 0 and containment > 0.05:
-                    push_strength = 200.0 * containment
+                containment = 1.0 - weakness * NEUTRON_STAR_BARRIER_WEAKENING_FACTOR
+                if dist > 0 and containment > BARRIER_CONTAINMENT_THRESHOLD:
+                    push_strength = NEUTRON_STAR_BARRIER_PUSH_STRENGTH * containment
                     ns.vx -= (dx / dist) * push_strength * delta_time
                     ns.vy -= (dy / dist) * push_strength * delta_time
 
@@ -420,12 +460,12 @@ class Barrier:
             if dist >= barrier_r:
                 section_mass = sum(
                     m for a, m in compact_angles_masses
-                    if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * 3
+                    if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * BARRIER_SECTION_SEARCH_RANGE
                 )
                 weakness = min(section_mass / BARRIER_HEAVY_MASS_THRESHOLD, 1.0)
-                containment = 1.0 - weakness * 0.9
-                if dist > 0 and containment > 0.05:
-                    push_strength = 80.0 * containment
+                containment = 1.0 - weakness * BLACK_HOLE_BARRIER_WEAKENING_FACTOR
+                if dist > 0 and containment > BARRIER_CONTAINMENT_THRESHOLD:
+                    push_strength = BLACK_HOLE_BARRIER_PUSH_STRENGTH * containment
                     bh.vx -= (dx / dist) * push_strength * delta_time
                     bh.vy -= (dy / dist) * push_strength * delta_time
 
@@ -452,7 +492,7 @@ class Barrier:
         barrier_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
 
         base_color = BARRIER_COLOR + (BARRIER_BASE_OPACITY,)
-        pygame.draw.polygon(barrier_surface, base_color, points, 3)
+        pygame.draw.polygon(barrier_surface, base_color, points, BARRIER_LINE_WIDTH)
 
         for i in range(self.num_points):
             j = (i + 1) % self.num_points
@@ -463,7 +503,7 @@ class Barrier:
                 g = int(BARRIER_COLOR[1] + flash_val * (BARRIER_FLASH_COLOR[1] - BARRIER_COLOR[1]))
                 b = int(BARRIER_COLOR[2] + flash_val * (BARRIER_FLASH_COLOR[2] - BARRIER_COLOR[2]))
                 color = (r, g, b, min(255, opacity))
-                pygame.draw.line(barrier_surface, color, points[i], points[j], 3)
+                pygame.draw.line(barrier_surface, color, points[i], points[j], BARRIER_LINE_WIDTH)
 
         screen.blit(barrier_surface, (0, 0))
 
@@ -543,7 +583,7 @@ EJECTA_ELEMENTAL_ABUNDANCE = [
     (0.9998, 1.0), # Titanium range: 99.98-100%
 ]
 
-BH_DECAY_ELEMENTAL_ABUNDANCE = [
+BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE = [
     (0, 0.08),     # Hydrogen range: 0-8%
     (0.08, 0.16),  # Helium range: 8-16%
     (0.16, 0.22),  # Oxygen range: 16-22%
@@ -618,10 +658,10 @@ class MolecularCloud:
             self.start_color = MOLECULAR_CLOUD_START_COLORS[-1]
 
         if self.mass >= PROTOSTAR_THRESHOLD:
-            if self.element_index >= ELEMENT_WEIGHT_HEAVY:
+            if self.element_index >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY:
                 self.color = PROTOSTAR_HIGH_COLOR
                 self.size = PROTOSTAR_HIGH_SIZE
-            elif self.element_index >= ELEMENT_WEIGHT_MEDIUM:
+            elif self.element_index >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM:
                 self.color = PROTOSTAR_MEDIUM_COLOR
                 self.size = PROTOSTAR_MEDIUM_SIZE
             else:
@@ -637,7 +677,7 @@ class MolecularCloud:
         draw_x = self.x + offset_x
         draw_y = self.y + offset_y
         if self.opacity < 255:
-            s = _get_mc_surface(self.size)
+            s = _get_molecular_cloud_surface(self.size)
             s.fill(self.color + (self.opacity,))
             screen.blit(s, (draw_x, draw_y))
         else:
@@ -649,17 +689,17 @@ class MolecularCloud:
         if self.mass >= PROTOSTAR_THRESHOLD:
             if not self.is_star:
                 self.is_star = True
-                if self.element_index >= ELEMENT_WEIGHT_HEAVY:
+                if self.element_index >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY:
                     self.mass = min(self.mass + PROTOSTAR_HIGH_MASS_BOOST, MOLECULAR_CLOUD_MAX_MASS)
-                elif self.element_index >= ELEMENT_WEIGHT_MEDIUM:
+                elif self.element_index >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM:
                     self.mass = min(self.mass + PROTOSTAR_MEDIUM_MASS_BOOST, MOLECULAR_CLOUD_MAX_MASS)
                 else:
                     self.mass = min(self.mass + PROTOSTAR_LOW_MASS_BOOST, MOLECULAR_CLOUD_MAX_MASS)
             self.opacity = 255
-            if self.element_index >= ELEMENT_WEIGHT_HEAVY:
+            if self.element_index >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY:
                 self.color = PROTOSTAR_HIGH_COLOR
                 self.size = PROTOSTAR_HIGH_SIZE
-            elif self.element_index >= ELEMENT_WEIGHT_MEDIUM:
+            elif self.element_index >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM:
                 self.color = PROTOSTAR_MEDIUM_COLOR
                 self.size = PROTOSTAR_MEDIUM_SIZE
             else:
@@ -705,7 +745,7 @@ class BlackHole:
 
         tracer_x = draw_x + self.border_radius * math.cos(self.tracer_angle)
         tracer_y = draw_y + self.border_radius * math.sin(self.tracer_angle)
-        pygame.draw.circle(screen, DISK_COLOR, (int(tracer_x), int(tracer_y)), DISK_SIZE)
+        pygame.draw.circle(screen, BLACK_HOLE_DISK_COLOR, (int(tracer_x), int(tracer_y)), BLACK_HOLE_DISK_SIZE)
 
     def attract(self, state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove):
         for black_hole in state.black_holes:
@@ -729,10 +769,10 @@ class BlackHole:
                     self.mass += black_hole.mass
                     self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
                     state.black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
-                    if random.random() < BH_JET_CHANCE:
-                        self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
+                    if random.random() < BLACK_HOLE_JET_CHANCE:
+                        self.jet_streams.append([BLACK_HOLE_JET_DURATION, BLACK_HOLE_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 elif distance > 0:
-                    soft_dist = math.sqrt(distance * distance + BH_GRAVITY_SOFTENING * BH_GRAVITY_SOFTENING)
+                    soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                     force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (soft_dist ** 2)
                     black_hole.vx += (dx / soft_dist) * force * delta_time
                     black_hole.vy += (dy / soft_dist) * force * delta_time
@@ -758,10 +798,10 @@ class BlackHole:
                     self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
                 self.mass += entity.mass
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
-                if random.random() < BH_JET_CHANCE:
-                    self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
+                if random.random() < BLACK_HOLE_JET_CHANCE:
+                    self.jet_streams.append([BLACK_HOLE_JET_DURATION, BLACK_HOLE_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
             else:
-                soft_dist = math.sqrt(distance * distance + BH_GRAVITY_SOFTENING * BH_GRAVITY_SOFTENING)
+                soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
                 # Newton's 3rd law: MC pulled toward BH, BH pulled toward MC
                 entity.vx += (dx / soft_dist) * force * delta_time
@@ -788,11 +828,11 @@ class BlackHole:
                     self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
                     self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
                 self.mass += entity.mass
-                if random.random() < BH_JET_CHANCE:
-                    self.jet_streams.append([BH_JET_DURATION, BH_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
+                if random.random() < BLACK_HOLE_JET_CHANCE:
+                    self.jet_streams.append([BLACK_HOLE_JET_DURATION, BLACK_HOLE_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
             else:
-                soft_dist = math.sqrt(distance * distance + BH_GRAVITY_SOFTENING * BH_GRAVITY_SOFTENING)
+                soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
                 # Newton's 3rd law: NS pulled toward BH, BH pulled toward NS
                 entity.vx += (dx / soft_dist) * force * delta_time
@@ -820,7 +860,7 @@ class NeutronStar:
         self.time_since_last_pulse = 0
         self.active_pulses = []
         self.pulse_color_state = 0  # 0: normal color, 1: white during pulse
-        self.pulse_color_duration = 0.1  # Duration of white color in seconds
+        self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION  # Duration of white color in seconds
 
     def draw(self, screen, ring, all_pulses, offset_x=0, offset_y=0):
         draw_x = int(self.x + offset_x)
@@ -839,10 +879,10 @@ class NeutronStar:
             alpha = max(0, min(255, alpha))
             color = (NEUTRON_STAR_PULSE_COLOR[0], NEUTRON_STAR_PULSE_COLOR[1], NEUTRON_STAR_PULSE_COLOR[2], alpha)
 
-            min_x = min(p[0] for p in points) - 2
-            min_y = min(p[1] for p in points) - 2
-            max_x = max(p[0] for p in points) + 2
-            max_y = max(p[1] for p in points) + 2
+            min_x = min(p[0] for p in points) - PULSE_RENDER_MARGIN
+            min_y = min(p[1] for p in points) - PULSE_RENDER_MARGIN
+            max_x = max(p[0] for p in points) + PULSE_RENDER_MARGIN
+            max_y = max(p[1] for p in points) + PULSE_RENDER_MARGIN
             w = max_x - min_x
             h = max_y - min_y
             if w > 0 and h > 0:
@@ -858,7 +898,7 @@ class NeutronStar:
             self.pulse_color_duration -= delta_time
             if self.pulse_color_duration <= 0:
                 self.pulse_color_state = 0
-                self.pulse_color_duration = 0.1
+                self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION
 
         dist_to_center = math.hypot(self.x - ring.center[0], self.y - ring.center[1])
         min_barrier_dist = max((ring.rest_radius - dist_to_center) / 2, 1.0)
@@ -872,7 +912,7 @@ class NeutronStar:
             new_fade = fade
 
             if new_radius >= min_barrier_dist:
-                new_fade -= delta_time * 1.5
+                new_fade -= delta_time * NEUTRON_STAR_PULSE_FADE_RATE
 
             self.active_pulses[i] = [new_radius, new_time, new_fade]
 
@@ -906,7 +946,7 @@ class NeutronStar:
                         molecular_cloud.vx += (dx / distance) * force * delta_time
                         molecular_cloud.vy += (dy / distance) * force * delta_time
                         # Energy cost: subtract imparted kinetic energy from NS mass
-                        energy_cost = force * delta_time * NS_PULSE_MASS_BOOST
+                        energy_cost = force * delta_time * NEUTRON_STAR_PULSE_MASS_BOOST
                         self.mass -= energy_cost
                         self.mass = max(self.mass, 0.1)
 
@@ -935,7 +975,7 @@ class NeutronStar:
             self.active_pulses.append([0, 0, 1.0])
             self.time_since_last_pulse = 0
             self.pulse_color_state = 1  # Set to white during pulse
-            self.pulse_color_duration = 0.1  # Reset duration
+            self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION  # Reset duration
 
     def apply_gravity(self, state, delta_time):
         for molecular_cloud in state.spatial_hash.query_neighbors(self):
@@ -1065,23 +1105,23 @@ def update_entities(state):
     for molecular_cloud in state.molecular_clouds:
         molecular_cloud.update()
         if molecular_cloud.mass > BLACK_HOLE_THRESHOLD:
-            bh_chance = RED_GIANT_BLACK_HOLE_CHANCE if molecular_cloud.element_index >= ELEMENT_WEIGHT_HEAVY else BLACK_HOLE_CHANCE
+            bh_chance = PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE if molecular_cloud.element_index >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY else BLACK_HOLE_CHANCE
             if random.random() < bh_chance:
                 if random.random() < NEUTRON_STAR_CHANCE:
                     state.neutron_stars.append(NeutronStar(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 else:
                     state.black_holes.append(BlackHole(molecular_cloud.x, molecular_cloud.y, molecular_cloud.mass))
                 to_remove.add(molecular_cloud)
-            elif random.random() < DEFAULT_STATE_CHANCE:
-                if molecular_cloud.element_index >= ELEMENT_WEIGHT_HEAVY:
-                    ejecta_count = 25
-                    ejecta_spread = 80
-                elif molecular_cloud.element_index >= ELEMENT_WEIGHT_MEDIUM:
-                    ejecta_count = 20
-                    ejecta_spread = 60
+            elif random.random() < MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE:
+                if molecular_cloud.element_index >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY:
+                    ejecta_count = SUPERNOVA_EJECTA_COUNT_HIGH
+                    ejecta_spread = SUPERNOVA_EJECTA_SPREAD_HIGH
+                elif molecular_cloud.element_index >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM:
+                    ejecta_count = SUPERNOVA_EJECTA_COUNT_MEDIUM
+                    ejecta_spread = SUPERNOVA_EJECTA_SPREAD_MEDIUM
                 else:
-                    ejecta_count = 15
-                    ejecta_spread = 50
+                    ejecta_count = SUPERNOVA_EJECTA_COUNT_LOW
+                    ejecta_spread = SUPERNOVA_EJECTA_SPREAD_LOW
                 parent_idx = molecular_cloud.element_index
                 max_idx = len(MOLECULAR_CLOUD_START_COLORS) - 1
                 for _ in range(ejecta_count):
@@ -1089,10 +1129,10 @@ def update_entities(state):
                     offset_dist = random.uniform(5, ejecta_spread)
                     ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
                     ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
-                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * 0.35)
+                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
                     child = MolecularCloud(ex, ey, size, mass)
-                    if random.random() < EJECTA_HEAVIER_ELEMENT_CHANCE and parent_idx < max_idx:
+                    if random.random() < MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE and parent_idx < max_idx:
                         child.element_index = min(parent_idx + random.randint(1, 3), max_idx)
                     else:
                         child.element_index = parent_idx
@@ -1103,13 +1143,13 @@ def update_entities(state):
                 molecular_cloud.mass = MOLECULAR_CLOUD_START_MASS
                 molecular_cloud.size = MOLECULAR_CLOUD_START_SIZE
                 molecular_cloud.update()
-        elif molecular_cloud.mass >= MC_EMISSION_MIN_PARENT_MASS and molecular_cloud.emission_count < MC_EMISSION_COUNT and molecular_cloud not in to_remove:
+        elif molecular_cloud.mass >= MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS and molecular_cloud.emission_count < MOLECULAR_CLOUD_EMISSION_COUNT and molecular_cloud not in to_remove:
             # Emission: clouds shed small daughter clouds, losing mass in the process
-            if random.random() < MC_EMISSION_CHANCE:
-                emit_mass = random.uniform(MC_EMISSION_MASS_MIN, min(MC_EMISSION_MASS_MAX, molecular_cloud.mass - MOLECULAR_CLOUD_START_MASS))
+            if random.random() < MOLECULAR_CLOUD_EMISSION_CHANCE:
+                emit_mass = random.uniform(MOLECULAR_CLOUD_EMISSION_MASS_MIN, min(MOLECULAR_CLOUD_EMISSION_MASS_MAX, molecular_cloud.mass - MOLECULAR_CLOUD_START_MASS))
                 if emit_mass > 0:
                     offset_angle = random.uniform(0, 2 * math.pi)
-                    offset_dist = random.uniform(2, MC_EMISSION_SPREAD)
+                    offset_dist = random.uniform(2, MOLECULAR_CLOUD_EMISSION_SPREAD)
                     ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
                     ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((emit_mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
@@ -1117,11 +1157,11 @@ def update_entities(state):
                     child.element_index = molecular_cloud.element_index
                     child.start_color = MOLECULAR_CLOUD_START_COLORS[child.element_index]
                     # Emission velocity: parent's velocity + kick away
-                    child.vx = molecular_cloud.vx + math.cos(offset_angle) * MC_EMISSION_VELOCITY
-                    child.vy = molecular_cloud.vy + math.sin(offset_angle) * MC_EMISSION_VELOCITY
+                    child.vx = molecular_cloud.vx + math.cos(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
+                    child.vy = molecular_cloud.vy + math.sin(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
                     # Conserve momentum: recoil on parent
-                    molecular_cloud.vx -= (emit_mass / molecular_cloud.mass) * math.cos(offset_angle) * MC_EMISSION_VELOCITY
-                    molecular_cloud.vy -= (emit_mass / molecular_cloud.mass) * math.sin(offset_angle) * MC_EMISSION_VELOCITY
+                    molecular_cloud.vx -= (emit_mass / molecular_cloud.mass) * math.cos(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
+                    molecular_cloud.vy -= (emit_mass / molecular_cloud.mass) * math.sin(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
                     molecular_cloud.mass -= emit_mass
                     molecular_cloud.emission_count += 1
                     molecular_cloud.update()
@@ -1132,13 +1172,13 @@ def update_entities(state):
 
 
 def draw_static_key(screen, font, zoom):
-    snapshot_pos = (30, SCREEN_HEIGHT - 140)
+    snapshot_pos = (UI_LABEL_X, SCREEN_HEIGHT - UI_ZOOM_Y_OFFSET)
     if zoom != 1.0:
         zoom_text = f'[SCROLL] ZOOM: {zoom:.1f}x'
     else:
         zoom_text = '[SCROLL] ZOOM'
     screen.blit(font.render(zoom_text, True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-    snapshot_pos = (30, SCREEN_HEIGHT - 110)
+    snapshot_pos = (UI_LABEL_X, SCREEN_HEIGHT - UI_EXIT_Y_OFFSET)
     screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
 
 
@@ -1198,7 +1238,7 @@ def resolve_pulse_collisions(state, delta_time):
             wavefront_gap = d - r_a - r_b
             if wavefront_gap < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
                 overlap = 1.0 - max(wavefront_gap, 0) / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2)
-                fade_rate = 4.0 * overlap
+                fade_rate = PULSE_COLLISION_FADE_RATE * overlap
                 pulse_a[2] -= fade_rate * delta_time
                 pulse_b[2] -= fade_rate * delta_time
 
@@ -1215,22 +1255,22 @@ def update_simulation_state(state, ring, delta_time):
 
     for black_hole in state.black_holes:
         # Tracer rotation driven by angular momentum (with base rotation)
-        spin_rate = DISK_ROTATION + black_hole.angular_momentum / max(black_hole.mass, 1.0)
+        spin_rate = BLACK_HOLE_DISK_ROTATION + black_hole.angular_momentum / max(black_hole.mass, 1.0)
         black_hole.tracer_angle += spin_rate * delta_time
         # Gradually dissipate angular momentum
-        black_hole.angular_momentum *= 0.999 ** delta_time
+        black_hole.angular_momentum *= BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION ** delta_time
 
     pulses_to_remove = []
     for i, pulse in enumerate(state.black_hole_pulses):
         x, y, radius, consumed_mass = pulse
-        new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time * 1.5)
+        new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time * BLACK_HOLE_PULSE_SPEED_MULTIPLIER)
         state.black_hole_pulses[i] = [x, y, new_radius, consumed_mass]
 
         # Track energy budget from consumed mass
         energy_budget = consumed_mass
 
         # BH merger pulse: force scales with consumed mass (heavier mergers = stronger waves)
-        mass_scale = consumed_mass / 5.0
+        mass_scale = consumed_mass / BLACK_HOLE_PULSE_MASS_SCALE
         bh_ew = NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3
         bh_r_inner = max(0, radius - bh_ew)
         bh_r_outer = radius + bh_ew
@@ -1327,45 +1367,45 @@ def update_simulation_state(state, ring, delta_time):
             if jet[0] <= 0 or jet[1] <= 0:
                 jets_done.append(ji)
                 continue
-            emit_interval = BH_JET_DURATION / BH_JET_STAR_COUNT
+            emit_interval = BLACK_HOLE_JET_DURATION / BLACK_HOLE_JET_STAR_COUNT
             if jet[0] % emit_interval < delta_time:
                 jet[1] -= 1
                 angle = jet[2]
-                offset_dist = random.uniform(5, BH_JET_SPREAD)
+                offset_dist = random.uniform(5, BLACK_HOLE_JET_SPREAD)
                 ex = black_hole.x + offset_dist * math.cos(angle)
                 ey = black_hole.y + offset_dist * math.sin(angle)
-                mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * 0.35)
+                mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
                 child = MolecularCloud(ex, ey, size, mass, SEED_ELEMENTAL_ABUNDANCE)
-                child.vx = math.cos(angle) * BH_JET_VELOCITY
-                child.vy = math.sin(angle) * BH_JET_VELOCITY
+                child.vx = math.cos(angle) * BLACK_HOLE_JET_VELOCITY
+                child.vy = math.sin(angle) * BLACK_HOLE_JET_VELOCITY
                 new_clouds.append(child)
         for ji in sorted(jets_done, reverse=True):
             black_hole.jet_streams.pop(ji)
-        if black_hole.mass > BLACK_HOLE_DECAY_THRESHOLD and random.random() < BH_EMISSION_CHANCE:
-            leak_mass = random.uniform(BH_EMISSION_MASS_MIN, BH_EMISSION_MASS_MAX)
+        if black_hole.mass > BLACK_HOLE_DECAY_THRESHOLD and random.random() < BLACK_HOLE_EMISSION_CHANCE:
+            leak_mass = random.uniform(BLACK_HOLE_EMISSION_MASS_MIN, BLACK_HOLE_EMISSION_MASS_MAX)
             leak_mass = min(leak_mass, black_hole.mass - BLACK_HOLE_DECAY_THRESHOLD)
             if leak_mass > 0:
                 black_hole.mass -= leak_mass
                 offset_angle = random.uniform(0, 2 * math.pi)
-                offset_dist = random.uniform(3, BH_EMISSION_EJECTA_SPREAD)
+                offset_dist = random.uniform(3, BLACK_HOLE_EMISSION_EJECTA_SPREAD)
                 ex = black_hole.x + offset_dist * math.cos(offset_angle)
                 ey = black_hole.y + offset_dist * math.sin(offset_angle)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((leak_mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
                 child = MolecularCloud(ex, ey, size, leak_mass, SEED_ELEMENTAL_ABUNDANCE)
-                child.vx = math.cos(offset_angle) * BH_EMISSION_VELOCITY
-                child.vy = math.sin(offset_angle) * BH_EMISSION_VELOCITY
+                child.vx = math.cos(offset_angle) * BLACK_HOLE_EMISSION_VELOCITY
+                child.vy = math.sin(offset_angle) * BLACK_HOLE_EMISSION_VELOCITY
                 new_clouds.append(child)
         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
             bh_to_remove.add(black_hole)
-            for _ in range(BH_DECAY_CLOUD_COUNT):
+            for _ in range(BLACK_HOLE_DECAY_CLOUD_COUNT):
                 offset_angle = random.uniform(0, 2 * math.pi)
-                offset_dist = random.uniform(5, BH_DECAY_EJECTA_SPREAD)
+                offset_dist = random.uniform(5, BLACK_HOLE_DECAY_EJECTA_SPREAD)
                 ex = black_hole.x + offset_dist * math.cos(offset_angle)
                 ey = black_hole.y + offset_dist * math.sin(offset_angle)
-                mass = random.uniform(BH_DECAY_CLOUD_MASS_MIN, BH_DECAY_CLOUD_MASS_MAX)
+                mass = random.uniform(BLACK_HOLE_DECAY_CLOUD_MASS_MIN, BLACK_HOLE_DECAY_CLOUD_MASS_MAX)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                child = MolecularCloud(ex, ey, size, mass, BH_DECAY_ELEMENTAL_ABUNDANCE)
+                child = MolecularCloud(ex, ey, size, mass, BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE)
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
                 child.vy = math.sin(offset_angle) * offset_dist * 0.5
                 new_clouds.append(child)
@@ -1381,12 +1421,12 @@ def update_simulation_state(state, ring, delta_time):
         neutron_star.decay(delta_time)
         if neutron_star.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
             ns_to_remove.add(neutron_star)
-            for _ in range(NS_DECAY_CLOUD_COUNT):
+            for _ in range(NEUTRON_STAR_DECAY_CLOUD_COUNT):
                 offset_angle = random.uniform(0, 2 * math.pi)
-                offset_dist = random.uniform(5, NS_DECAY_EJECTA_SPREAD)
+                offset_dist = random.uniform(5, NEUTRON_STAR_DECAY_EJECTA_SPREAD)
                 ex = neutron_star.x + offset_dist * math.cos(offset_angle)
                 ey = neutron_star.y + offset_dist * math.sin(offset_angle)
-                mass = random.uniform(NS_DECAY_CLOUD_MASS_MIN, NS_DECAY_CLOUD_MASS_MAX)
+                mass = random.uniform(NEUTRON_STAR_DECAY_CLOUD_MASS_MIN, NEUTRON_STAR_DECAY_CLOUD_MASS_MAX)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
                 child = MolecularCloud(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
@@ -1420,7 +1460,7 @@ def update_simulation_state(state, ring, delta_time):
                     offset_dist = random.uniform(5, KILONOVA_EJECTA_SPREAD)
                     ex = cx + offset_dist * math.cos(offset_angle)
                     ey = cy + offset_dist * math.sin(offset_angle)
-                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * 0.35)
+                    mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
                     child = MolecularCloud(ex, ey, size, mass, KILONOVA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
@@ -1449,7 +1489,7 @@ def update_simulation_state(state, ring, delta_time):
 
 
 
-def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_pts=64, offset_x=0, offset_y=0):
+def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_pts=PULSE_RENDER_POINT_COUNT, offset_x=0, offset_y=0):
     cx = ring.center[0] + offset_x
     cy = ring.center[1] + offset_y
     points = []
@@ -1474,8 +1514,8 @@ def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_p
         if dist_from_center > 0:
             barrier_angle = math.atan2(dyc, dxc) % (2 * math.pi)
             barrier_r = ring.get_radius_at_angle(barrier_angle)
-            if dist_from_center > barrier_r - 4:
-                px = cx + (barrier_r - 4) * math.cos(barrier_angle)
+            if dist_from_center > barrier_r - PULSE_BARRIER_CLIP_MARGIN:
+                px = cx + (barrier_r - PULSE_BARRIER_CLIP_MARGIN) * math.cos(barrier_angle)
                 py = cy + (barrier_r - 4) * math.sin(barrier_angle)
 
         points.append((int(px), int(py)))
@@ -1502,10 +1542,10 @@ def draw_simulation(screen, ring, state, offset_x=0, offset_y=0):
             draw_y = y + offset_y
             pulse_width = max(2, int(consumed_mass / 20))
             points = _clip_pulse_points(draw_x, draw_y, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
-            min_x = min(p[0] for p in points) - 2
-            min_y = min(p[1] for p in points) - 2
-            max_x = max(p[0] for p in points) + 2
-            max_y = max(p[1] for p in points) + 2
+            min_x = min(p[0] for p in points) - PULSE_RENDER_MARGIN
+            min_y = min(p[1] for p in points) - PULSE_RENDER_MARGIN
+            max_x = max(p[0] for p in points) + PULSE_RENDER_MARGIN
+            max_y = max(p[1] for p in points) + PULSE_RENDER_MARGIN
             w = max_x - min_x
             h = max_y - min_y
             if w > 0 and h > 0:
@@ -1534,7 +1574,7 @@ def draw_ui(screen, font, current_year, zoom=1.0):
     draw_static_key(screen, font, zoom)
 
     year_text = font.render(format_year_display(current_year), True, LABEL_COLOR)
-    screen.blit(year_text, (30, SCREEN_HEIGHT - 40 ))
+    screen.blit(year_text, (UI_LABEL_X, SCREEN_HEIGHT - UI_TEXT_Y_OFFSET))
 
 
 def run_simulation(screen, font, state, ring):
@@ -1620,7 +1660,7 @@ def run_simulation(screen, font, state, ring):
             current_year += delta_time * YEAR_RATE
 
             pygame.display.flip()
-            clock.tick(60)
+            clock.tick(TARGET_FPS)
 
             if take_screenshot:
                 try:
