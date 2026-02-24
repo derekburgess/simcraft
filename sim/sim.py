@@ -35,7 +35,7 @@ TARGET_FPS = 60                    # Target frame rate cap for the simulation lo
 
 # ── Physics ──
 GRAVITY_SCALE = 0.15  # Master gravity multiplier applied to all gravitational constants. Increase for stronger gravity everywhere.
-VELOCITY_DAMPING = 0.97        # Per-frame velocity multiplier for all entities. Below 1.0 = energy dissipation. 1.0 = no damping.
+VELOCITY_DAMPING = 0.995        # Per-frame velocity multiplier for all entities. Below 1.0 = energy dissipation. 1.0 = no damping.
 
 # ── CMB Perturbations (initial conditions, inspired by real cosmic microwave background) ──
 # These control how the universe looks at the very start of the simulation.
@@ -53,7 +53,7 @@ CMB_DENSITY_CONTRAST = 0.8     # How strongly barrier shape biases initial cloud
 
 # ── Barrier (cosmic boundary ring) ──
 BARRIER_POINT_COUNT = 640       # Number of vertices defining the barrier ring. More = smoother circle, but slower.
-BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
+BARRIER_INITIAL_SIZE = 64      # Starting diameter of the barrier ring in pixels.
 BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Higher = stronger inward pull.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
 BARRIER_BASE_OPACITY = 150      # Transparency of the barrier at rest (0=invisible, 255=opaque).
@@ -87,13 +87,13 @@ NEUTRON_STAR_BARRIER_PUSH_STRENGTH = 20.0   # Base push force applied to neutron
 BARRIER_CONTAINMENT_THRESHOLD = 0.05  # Minimum containment strength below which the barrier stops pushing an entity back.
 
 # ── Molecular Clouds ──
-MOLECULAR_CLOUD_COUNT = 3200    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
+MOLECULAR_CLOUD_COUNT = 2400    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
 MOLECULAR_CLOUD_START_SIZE = 20 # Initial visual size of clouds in pixels.
 MOLECULAR_CLOUD_MIN_SIZE = 6    # Smallest a cloud can shrink to as it gains mass.
-MOLECULAR_CLOUD_GROWTH_RATE = 0.2  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
+MOLECULAR_CLOUD_GROWTH_RATE = 0.06  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
 MOLECULAR_CLOUD_START_MASS = 1  # Initial mass of each cloud.
-MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0008 * GRAVITY_SCALE  # Gravitational attraction between clouds. Very low to prevent instant clumping.
-MOLECULAR_CLOUD_MERGE_CHANCE = 0.08  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
+MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.003 * GRAVITY_SCALE  # Gravitational attraction between clouds. Very low to prevent instant clumping.
+MOLECULAR_CLOUD_MERGE_CHANCE = 0.12  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
 MOLECULAR_CLOUD_MAX_MASS = 48   # Maximum mass a cloud/star can reach. Caps growth.
 MOLECULAR_CLOUD_START_COLORS = [
     (140, 20, 20),   # Hydrogen - Red (H-alpha)
@@ -131,8 +131,8 @@ MOLECULAR_CLOUD_EMISSION_SPREAD = 14              # Max spawn distance from pare
 MOLECULAR_CLOUD_EMISSION_COUNT = 10               # Max number of emissions per cloud
 
 # ── Supernova (molecular cloud reset events) ──
-MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.04    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
-MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE = 0.2  # Probability that ejecta from supernovae produce heavier elements than the parent.
+MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.08    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
+MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE = 0.07  # Probability that ejecta from supernovae produce heavier elements than the parent.
 SUPERNOVA_EJECTA_COUNT_HIGH = 2   # Number of ejecta pieces from a high-tier (heavy element) supernova.
 SUPERNOVA_EJECTA_COUNT_MEDIUM = 6 # Number of ejecta pieces from a medium-tier supernova.
 SUPERNOVA_EJECTA_COUNT_LOW = 10    # Number of ejecta pieces from a low-tier (light element) supernova.
@@ -142,19 +142,19 @@ SUPERNOVA_EJECTA_SPREAD_LOW = 26   # Max spawn radius (pixels) of ejecta from a 
 SUPERNOVA_EJECTA_MAX_MASS_FRACTION = 0.35    # Maximum ejecta mass as a fraction of PROTOSTAR_THRESHOLD.
 
 # ── Protostars (clouds that reach enough mass to ignite) ──
-PROTOSTAR_THRESHOLD = 32        # Mass at which a cloud becomes a protostar (changes appearance and behavior).
+PROTOSTAR_THRESHOLD = 28        # Mass at which a cloud becomes a protostar (changes appearance and behavior).
 PROTOSTAR_EJECTA_COUNT = 4     # Number of ejecta pieces produced during protostar formation events.
 PROTOSTAR_EJECTA_SPREAD = 14    # Max spawn distance (pixels) of ejecta from the parent star.
 
 # Element weight boundaries for star tiers.
 # When a cloud reaches PROTOSTAR_THRESHOLD mass, its element_index (position in
 # MOLECULAR_CLOUD_START_COLORS above) determines which tier of star it becomes:
-#   Index 0-4  (H, He, O, C, Ne)           → LOW tier  — small white star
-#   Index 5-9  (N, Fe, Si, Au, S)           → MEDIUM tier — mid-size yellow-green star
-#   Index 10-19 (Mg, P, Li, Pt, Co, Ca...) → HIGH tier — large red giant
+#   Index 0-2  (H, He, O)                   → LOW tier  — small white star
+#   Index 3-14 (C, Ne, N, Fe, Si, Au, S...) → MEDIUM tier — mid-size yellow-green star
+#   Index 15-19 (Co, Ca, Na, Ni, Cr, Ti)   → HIGH tier — large red giant
 # Lowering these values makes heavier stars more common; raising them makes them rarer.
-PROTOSTAR_ELEMENT_WEIGHT_MEDIUM = 5   # Element index at or above which a star becomes medium tier.
-PROTOSTAR_ELEMENT_WEIGHT_HEAVY = 10   # Element index at or above which a star becomes a red giant (high tier).
+PROTOSTAR_ELEMENT_WEIGHT_MEDIUM = 3   # Element index at or above which a star becomes medium tier.
+PROTOSTAR_ELEMENT_WEIGHT_HEAVY = 15   # Element index at or above which a star becomes a red giant (high tier).
 
 PROTOSTAR_LOW_COLOR = (225, 255, 255)      # White (current)
 PROTOSTAR_LOW_SIZE = 2
@@ -169,15 +169,15 @@ PROTOSTAR_HIGH_SIZE = 6
 PROTOSTAR_HIGH_MASS_BOOST = 12             # Red giants get +6 mass on formation
 
 # Higher BH conversion chance for red giants
-PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.002
+PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.001
 
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
-BLACK_HOLE_CHANCE = 0.006      # Per-frame probability a qualifying star becomes a black hole. Very rare.
+BLACK_HOLE_CHANCE = 0.00001      # Per-frame probability a qualifying star becomes a black hole. Very rare.
 BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
-BLACK_HOLE_MAX_MASS = 64        # Maximum mass a black hole can accumulate.
+BLACK_HOLE_MAX_MASS = 72        # Maximum mass a black hole can accumulate.
 BLACK_HOLE_GRAVITY_CONSTANT = 12.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
-BLACK_HOLE_DECAY_RATE = 1.2     # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
+BLACK_HOLE_DECAY_RATE = 10     # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
 BLACK_HOLE_GRAVITY_SOFTENING = 5.0     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
@@ -548,26 +548,26 @@ ELEMENTAL_ABUNDANCE = [
 ]
 
 EJECTA_ELEMENTAL_ABUNDANCE = [
-    (0, 0.50),     # Hydrogen range: 0-50%
-    (0.50, 0.78),  # Helium range: 50-78%
-    (0.78, 0.85),  # Oxygen range: 78-85%
-    (0.85, 0.89),  # Carbon range: 85-89%
-    (0.89, 0.89),  # Neon - not produced in stellar ejecta
-    (0.89, 0.89),  # Nitrogen - not produced in stellar ejecta
-    (0.89, 0.93),  # Iron range: 89-93%
-    (0.93, 0.96),  # Silicon range: 93-96%
-    (0.96, 0.97),  # Gold range: 96-97%
-    (0.97, 0.98),  # Sulfur range: 97-98%
-    (0.98, 0.99),  # Magnesium range: 98-99%
-    (0.99, 0.993), # Phosphorus range: 99-99.3%
-    (0.993, 0.993),# Lithium - not produced in supernovae
-    (0.993, 0.995),# Platinum range: 99.3-99.5%
-    (0.995, 0.997),# Cobalt range: 99.5-99.7%
+    (0, 0.65),     # Hydrogen range: 0-65%
+    (0.65, 0.88),  # Helium range: 65-88%
+    (0.88, 0.93),  # Oxygen range: 88-93%
+    (0.93, 0.95),  # Carbon range: 93-95%
+    (0.95, 0.95),  # Neon - not produced in stellar ejecta
+    (0.95, 0.95),  # Nitrogen - not produced in stellar ejecta
+    (0.95, 0.97),  # Iron range: 95-97%
+    (0.97, 0.98),  # Silicon range: 97-98%
+    (0.98, 0.985), # Gold range: 98-98.5%
+    (0.985, 0.99), # Sulfur range: 98.5-99%
+    (0.99, 0.993), # Magnesium range: 99-99.3%
+    (0.993, 0.995),# Phosphorus range: 99.3-99.5%
+    (0.995, 0.995),# Lithium - not produced in supernovae
+    (0.995, 0.996),# Platinum range: 99.5-99.6%
+    (0.996, 0.997),# Cobalt range: 99.6-99.7%
     (0.997, 0.998),# Calcium range: 99.7-99.8%
     (0.998, 0.999),# Sodium range: 99.8-99.9%
-    (0.999, 0.9995),# Nickel range: 99.9-99.95%
-    (0.9995, 0.9998),# Chromium range: 99.95-99.98%
-    (0.9998, 1.0), # Titanium range: 99.98-100%
+    (0.999, 0.9994),# Nickel range: 99.9-99.94%
+    (0.9994, 0.9997),# Chromium range: 99.94-99.97%
+    (0.9997, 1.0), # Titanium range: 99.97-100%
 ]
 
 BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE = [
