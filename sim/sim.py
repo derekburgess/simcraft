@@ -133,7 +133,7 @@ MOLECULAR_CLOUD_EMISSION_SPREAD = 14              # Max spawn distance from pare
 MOLECULAR_CLOUD_EMISSION_COUNT = 10               # Max number of emissions per cloud
 
 # ── Supernova (molecular cloud reset events) ──
-MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.08    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
+MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.01    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
 MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE = 0.07  # Probability that ejecta from supernovae produce heavier elements than the parent.
 SUPERNOVA_EJECTA_COUNT_HIGH = 2   # Number of ejecta pieces from a high-tier (heavy element) supernova.
 SUPERNOVA_EJECTA_COUNT_MEDIUM = 6 # Number of ejecta pieces from a medium-tier supernova.
@@ -175,12 +175,12 @@ PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.001
 
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
-BLACK_HOLE_CHANCE = 0.0002      # Per-frame probability a qualifying star becomes a black hole. Very rare.
+BLACK_HOLE_CHANCE = 0.0001      # Per-frame probability a qualifying star becomes a black hole. Very rare.
 BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
 BLACK_HOLE_MAX_MASS = 72        # Maximum mass a black hole can accumulate.
 BLACK_HOLE_GRAVITY_CONSTANT = 12 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
 BLACK_HOLE_GROWTH_RATE = 1      # Maximum mass gained per second from the accretion buffer. Must stay below minimum decay rate (~1.23/sec at max mass) so BHs always net-decay.
-BLACK_HOLE_DECAY_RATE = 40    # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
+BLACK_HOLE_DECAY_RATE = 50    # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
 BLACK_HOLE_GRAVITY_SOFTENING = 5     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
