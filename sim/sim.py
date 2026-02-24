@@ -59,8 +59,8 @@ BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
 BARRIER_BASE_OPACITY = 150      # Transparency of the barrier at rest (0=invisible, 255=opaque).
 BARRIER_FLASH_COLOR = (0, 184, 106)  # RGB color the barrier flashes when deformed (green).
 BARRIER_FLASH_OPACITY = 255     # Peak opacity during a barrier flash (0-255).
-BARRIER_FLASH_DECAY = 4.0       # How fast barrier flashes fade per second. Higher = faster fade.
-BARRIER_WAVE_PUSH = 400.0       # Force magnitude when pulses hit the barrier. Higher = more barrier wobble.
+BARRIER_FLASH_DECAY = 4      # How fast barrier flashes fade per second. Higher = faster fade.
+BARRIER_WAVE_PUSH = 400      # Force magnitude when pulses hit the barrier. Higher = more barrier wobble.
 BARRIER_DAMPING = 0.04          # Damping factor for barrier deformation velocity. Lower = more oscillation.
 BARRIER_DEFORM_THRESHOLD = 0.1  # Minimum radius change (pixels) to trigger a flash effect.
 BARRIER_HEAVY_MASS_THRESHOLD = 100  # Combined mass near a barrier section that weakens containment. Higher = harder to break out.
@@ -72,22 +72,24 @@ BARRIER_LINE_WIDTH = 3          # Line width (pixels) for drawing the barrier ri
 
 # ── Barrier Interaction (how different entities interact with the barrier) ──
 MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR = 0.001  # Gravity multiplier for clouds vs barrier. Very weak — clouds drift inward gently.
-MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 2.0     # How strongly massive clouds dent the barrier on approach.
+MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 6     # How strongly massive clouds dent the barrier on approach.
 
-BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.02   # Gravity multiplier for black holes vs barrier. 10x stronger than clouds.
-BLACK_HOLE_BARRIER_DEFORM_FACTOR = 40.0    # How strongly black holes dent the barrier. Very high.
-BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.7  # How much nearby mass weakens containment for black holes. Higher = escapes more easily.
-BLACK_HOLE_BARRIER_PUSH_STRENGTH = 40.0    # Base push force applied to black holes hitting the barrier boundary.
+STAR_BARRIER_GRAVITY_FACTOR = 0.005    # Gravity multiplier for ignited stars vs barrier. Stronger than clouds.
+STAR_BARRIER_DEFORM_FACTOR = 10        # How strongly stars dent the barrier on approach.
 
-NEUTRON_STAR_BARRIER_GRAVITY_FACTOR = 0.004   # Gravity multiplier for neutron stars vs barrier. Strongest pull.
-NEUTRON_STAR_BARRIER_DEFORM_FACTOR = 4.0     # How strongly neutron stars dent the barrier.
+BLACK_HOLE_BARRIER_DEFORM_FACTOR = 80    # How strongly black holes dent the barrier. Very high.
+BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.01  # How much nearby mass weakens containment for black holes. Higher = escapes more easily.
+BLACK_HOLE_BARRIER_PUSH_STRENGTH = 10    # Base push force applied to black holes hitting the barrier boundary.
+
+NEUTRON_STAR_BARRIER_GRAVITY_FACTOR = 0.001   # Gravity multiplier for neutron stars vs barrier. Strongest pull.
+NEUTRON_STAR_BARRIER_DEFORM_FACTOR = 10     # How strongly neutron stars dent the barrier.
 NEUTRON_STAR_BARRIER_WEAKENING_FACTOR = 0.7  # How much nearby mass weakens containment for neutron stars (0=no effect, 1=full escape).
-NEUTRON_STAR_BARRIER_PUSH_STRENGTH = 20.0   # Base push force applied to neutron stars hitting the barrier boundary.
+NEUTRON_STAR_BARRIER_PUSH_STRENGTH = 6   # Base push force applied to neutron stars hitting the barrier boundary.
 
 BARRIER_CONTAINMENT_THRESHOLD = 0.05  # Minimum containment strength below which the barrier stops pushing an entity back.
 
 # ── Molecular Clouds ──
-MOLECULAR_CLOUD_COUNT = 2400    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
+MOLECULAR_CLOUD_COUNT = 1800    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
 MOLECULAR_CLOUD_START_SIZE = 20 # Initial visual size of clouds in pixels.
 MOLECULAR_CLOUD_MIN_SIZE = 6    # Smallest a cloud can shrink to as it gains mass.
 MOLECULAR_CLOUD_GROWTH_RATE = 0.06  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
@@ -122,7 +124,7 @@ MOLECULAR_CLOUD_OPACITY = 128   # Maximum opacity for clouds below protostar mas
 MOLECULAR_CLOUD_MIN_OPACITY = 64  # Minimum opacity for the lightest clouds (0-255).
 
 # ── Molecular Cloud Emission (clouds shed daughter clouds) ──
-MOLECULAR_CLOUD_EMISSION_CHANCE = 0.6         # Per-frame chance for eligible clouds to emit
+MOLECULAR_CLOUD_EMISSION_CHANCE = 0.2         # Per-frame chance for eligible clouds to emit
 MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS = 1     # Minimum parent mass to emit
 MOLECULAR_CLOUD_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
 MOLECULAR_CLOUD_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
@@ -135,7 +137,7 @@ MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.08    # Per-frame chance a massive star
 MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE = 0.07  # Probability that ejecta from supernovae produce heavier elements than the parent.
 SUPERNOVA_EJECTA_COUNT_HIGH = 2   # Number of ejecta pieces from a high-tier (heavy element) supernova.
 SUPERNOVA_EJECTA_COUNT_MEDIUM = 6 # Number of ejecta pieces from a medium-tier supernova.
-SUPERNOVA_EJECTA_COUNT_LOW = 10    # Number of ejecta pieces from a low-tier (light element) supernova.
+SUPERNOVA_EJECTA_COUNT_LOW = 20    # Number of ejecta pieces from a low-tier (light element) supernova.
 SUPERNOVA_EJECTA_SPREAD_HIGH = 14  # Max spawn radius (pixels) of ejecta from a high-tier supernova.
 SUPERNOVA_EJECTA_SPREAD_MEDIUM = 20  # Max spawn radius (pixels) of ejecta from a medium-tier supernova.
 SUPERNOVA_EJECTA_SPREAD_LOW = 26   # Max spawn radius (pixels) of ejecta from a low-tier supernova.
@@ -150,11 +152,11 @@ PROTOSTAR_EJECTA_SPREAD = 14    # Max spawn distance (pixels) of ejecta from the
 # When a cloud reaches PROTOSTAR_THRESHOLD mass, its element_index (position in
 # MOLECULAR_CLOUD_START_COLORS above) determines which tier of star it becomes:
 #   Index 0-2  (H, He, O)                   → LOW tier  — small white star
-#   Index 3-14 (C, Ne, N, Fe, Si, Au, S...) → MEDIUM tier — mid-size yellow-green star
-#   Index 15-19 (Co, Ca, Na, Ni, Cr, Ti)   → HIGH tier — large red giant
+#   Index 3-9  (C, Ne, N, Fe, Si, Au, S)               → MEDIUM tier — mid-size yellow-green star
+#   Index 10-19 (Mg, P, Li, Pt, Co, Ca, Na, Ni, Cr, Ti) → HIGH tier — large red giant
 # Lowering these values makes heavier stars more common; raising them makes them rarer.
 PROTOSTAR_ELEMENT_WEIGHT_MEDIUM = 3   # Element index at or above which a star becomes medium tier.
-PROTOSTAR_ELEMENT_WEIGHT_HEAVY = 15   # Element index at or above which a star becomes a red giant (high tier).
+PROTOSTAR_ELEMENT_WEIGHT_HEAVY = 10   # Element index at or above which a star becomes a red giant (high tier).
 
 PROTOSTAR_LOW_COLOR = (225, 255, 255)      # White (current)
 PROTOSTAR_LOW_SIZE = 2
@@ -173,22 +175,23 @@ PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.001
 
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
-BLACK_HOLE_CHANCE = 0.00001      # Per-frame probability a qualifying star becomes a black hole. Very rare.
+BLACK_HOLE_CHANCE = 0.0002      # Per-frame probability a qualifying star becomes a black hole. Very rare.
 BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
 BLACK_HOLE_MAX_MASS = 72        # Maximum mass a black hole can accumulate.
-BLACK_HOLE_GRAVITY_CONSTANT = 12.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
-BLACK_HOLE_DECAY_RATE = 10     # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
+BLACK_HOLE_GRAVITY_CONSTANT = 12 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
+BLACK_HOLE_GROWTH_RATE = 1      # Maximum mass gained per second from the accretion buffer. Must stay below minimum decay rate (~1.23/sec at max mass) so BHs always net-decay.
+BLACK_HOLE_DECAY_RATE = 40    # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
-BLACK_HOLE_GRAVITY_SOFTENING = 5.0     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
+BLACK_HOLE_GRAVITY_SOFTENING = 5     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
 BLACK_HOLE_BORDER_COLOR = (100, 0, 0)  # RGB color of the event horizon ring (dark red).
 BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)  # RGBA color of the gravitational wave pulse from BH mergers.
 BLACK_HOLE_DISK_COLOR = (255, 100, 100)    # RGB color of the accretion disk tracer dot (light red).
 BLACK_HOLE_DISK_SIZE = 1                   # Visual size in pixels of the accretion disk tracer.
-BLACK_HOLE_DISK_ROTATION = 10.0            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
+BLACK_HOLE_DISK_ROTATION = 10            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
 BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION = 0.999  # Per-second dissipation rate for black hole angular momentum (spin-down).
 BLACK_HOLE_PULSE_SPEED_MULTIPLIER = 1.5  # Speed multiplier applied to BH merger pulses relative to NS ripple speed.
-BLACK_HOLE_PULSE_MASS_SCALE = 5.0        # Divisor for consumed mass when scaling BH merger pulse forces.
+BLACK_HOLE_PULSE_MASS_SCALE = 5        # Divisor for consumed mass when scaling BH merger pulse forces.
 
 # ── Black Hole Decay (when BH evaporates) ──
 BLACK_HOLE_DECAY_CLOUD_COUNT = 6       # Number of heavy clouds spawned when a BH evaporates.
@@ -225,7 +228,7 @@ KILONOVA_EJECTA_SPREAD = 24     # Max spawn distance (pixels) of kilonova ejecta
 # ── Pulse Rendering ──
 PULSE_RENDER_POINT_COUNT = 64   # Number of polygon vertices used to draw each pulse ring.
 PULSE_RENDER_MARGIN = 2         # Pixel margin added around pulse bounding boxes when allocating draw surfaces.
-PULSE_COLLISION_FADE_RATE = 4.0 # Rate at which overlapping pulse wavefronts fade each other out.
+PULSE_COLLISION_FADE_RATE = 4 # Rate at which overlapping pulse wavefronts fade each other out.
 PULSE_BARRIER_CLIP_MARGIN = 4   # Pixels inside the barrier edge where pulse ring points are clipped.
 
 
@@ -332,20 +335,11 @@ class Barrier:
             target_dx = cx + barrier_r * math.cos(angle) - mc.x
             target_dy = cy + barrier_r * math.sin(angle) - mc.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * math.sqrt(mc.mass) / (target_dist ** 2)) * MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR
+            grav_factor = STAR_BARRIER_GRAVITY_FACTOR if mc.is_star else MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR
+            force = (BARRIER_GRAVITY_CONSTANT * math.sqrt(mc.mass) / (target_dist ** 2)) * grav_factor
             if target_dist > mc.size / 2:
                 mc.vx += (target_dx / target_dist) * force * delta_time
                 mc.vy += (target_dy / target_dist) * force * delta_time
-
-        for bh in state.black_holes:
-            angle, dist, dx, dy = self._entity_angle_and_dist(bh)
-            barrier_r = self.get_radius_at_angle(angle)
-            target_dx = cx + barrier_r * math.cos(angle) - bh.x
-            target_dy = cy + barrier_r * math.sin(angle) - bh.y
-            target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * bh.mass / (target_dist ** 2)) * BLACK_HOLE_BARRIER_GRAVITY_FACTOR
-            bh.vx += (target_dx / target_dist) * force * delta_time
-            bh.vy += (target_dy / target_dist) * force * delta_time
 
         for ns in state.neutron_stars:
             angle, dist, dx, dy = self._entity_angle_and_dist(ns)
@@ -377,7 +371,8 @@ class Barrier:
         for mc in state.molecular_clouds:
             if mc.mass < PROTOSTAR_THRESHOLD:
                 continue
-            self._accum_deformation(mc, mass_accum, step, proximity_threshold, MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR)
+            deform_factor = STAR_BARRIER_DEFORM_FACTOR if mc.is_star else MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR
+            self._accum_deformation(mc, mass_accum, step, proximity_threshold, deform_factor)
 
         for bh in state.black_holes:
             self._accum_deformation(bh, mass_accum, step, proximity_threshold, BLACK_HOLE_BARRIER_DEFORM_FACTOR)
@@ -525,26 +520,26 @@ SEED_ELEMENTAL_ABUNDANCE = [
 ]
 
 ELEMENTAL_ABUNDANCE = [
-    (0, 0.75),        # Hydrogen range: 0-75%
-    (0.75, 0.98),     # Helium range: 75-98%
-    (0.98, 0.988),    # Oxygen range: 98-98.8%
-    (0.988, 0.992),   # Carbon range: 98.8-99.2%
-    (0.992, 0.9935),  # Neon range: 99.2-99.35%
-    (0.9935, 0.9955), # Nitrogen range: 99.35-99.55%
-    (0.9955, 0.9965), # Iron range: 99.55-99.65%
-    (0.9965, 0.9975), # Silicon range: 99.65-99.75%
-    (0.9975, 0.998),  # Gold range: 99.75-99.8%
-    (0.998, 0.9988),  # Sulfur range: 99.8-99.88%
-    (0.9988, 0.9993), # Magnesium range: 99.88-99.93%
-    (0.9993, 0.9996), # Phosphorus range: 99.93-99.96%
-    (0.9996, 0.9998), # Lithium range: 99.96-99.98%
-    (0.9998, 0.99985),  # Platinum range: 99.98-99.985%
-    (0.99985, 0.9999),  # Cobalt range: 99.985-99.99%
-    (0.9999, 0.99994),  # Calcium range: 99.99-99.994%
-    (0.99994, 0.99997), # Sodium range: 99.994-99.997%
-    (0.99997, 0.99998), # Nickel range: 99.997-99.998%
-    (0.99998, 0.99999), # Chromium range: 99.998-99.999%
-    (0.99999, 1.0),     # Titanium range: 99.999-100%
+    (0, 0.35),        # Hydrogen range: 0-35%     } LOW  ~60%
+    (0.35, 0.55),     # Helium range: 35-55%      }
+    (0.55, 0.60),     # Oxygen range: 55-60%      }
+    (0.60, 0.64),     # Carbon range: 60-64%      } MEDIUM ~30%
+    (0.64, 0.68),     # Neon range: 64-68%        }
+    (0.68, 0.72),     # Nitrogen range: 68-72%    }
+    (0.72, 0.77),     # Iron range: 72-77%        }
+    (0.77, 0.81),     # Silicon range: 77-81%     }
+    (0.81, 0.85),     # Gold range: 81-85%        }
+    (0.85, 0.90),     # Sulfur range: 85-90%      }
+    (0.90, 0.91),     # Magnesium range: 90-91%   } HIGH ~10%
+    (0.91, 0.92),     # Phosphorus range: 91-92%  }
+    (0.92, 0.93),     # Lithium range: 92-93%     }
+    (0.93, 0.94),     # Platinum range: 93-94%    }
+    (0.94, 0.95),     # Cobalt range: 94-95%      }
+    (0.95, 0.96),     # Calcium range: 95-96%     }
+    (0.96, 0.97),     # Sodium range: 96-97%      }
+    (0.97, 0.98),     # Nickel range: 97-98%      }
+    (0.98, 0.99),     # Chromium range: 98-99%    }
+    (0.99, 1.0),      # Titanium range: 99-100%   }
 ]
 
 EJECTA_ELEMENTAL_ABUNDANCE = [
@@ -737,6 +732,7 @@ class BlackHole:
         self.vx = 0.0
         self.vy = 0.0
         self.mass = min(mass, BLACK_HOLE_MAX_MASS)
+        self.accretion_mass = 0.0
         self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.tracer_angle = random.uniform(0, 2 * math.pi)
         self.angular_momentum = 0.0  # Spin from off-center accretion
@@ -760,7 +756,7 @@ class BlackHole:
                 dy = self.y - black_hole.y
                 distance = max(math.hypot(dx, dy), 1)
 
-                if self.mass > black_hole.mass and distance < self.border_radius:
+                if self.mass >= black_hole.mass and distance < self.border_radius and (self.mass > black_hole.mass or self.id > black_hole.id):
                     bh_to_remove.add(black_hole)
                     # Transfer angular momentum from merger
                     rel_vx = black_hole.vx - self.vx
@@ -772,8 +768,7 @@ class BlackHole:
                     if total_mass > 0:
                         self.vx = (self.mass * self.vx + black_hole.mass * black_hole.vx) / total_mass
                         self.vy = (self.mass * self.vy + black_hole.mass * black_hole.vy) / total_mass
-                    self.mass += black_hole.mass
-                    self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
+                    self.accretion_mass += black_hole.mass
                     state.black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
                 elif distance > 0:
                     soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
@@ -800,8 +795,7 @@ class BlackHole:
                 if total_mass > 0:
                     self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
                     self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
-                self.mass += entity.mass
-                self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
+                self.accretion_mass += entity.mass
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
@@ -829,8 +823,7 @@ class BlackHole:
                 if total_mass > 0:
                     self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
                     self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
-                self.mass += entity.mass
-                self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
+                self.accretion_mass += entity.mass
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
@@ -841,8 +834,13 @@ class BlackHole:
                 self.vy -= (dy / soft_dist) * force * delta_time
 
     def decay(self, delta_time):
+        if self.accretion_mass > 0:
+            growth = min(BLACK_HOLE_GROWTH_RATE * delta_time, self.accretion_mass)
+            self.mass = min(self.mass + growth, BLACK_HOLE_MAX_MASS)
+            self.accretion_mass = max(0.0, self.accretion_mass - growth)
         rate = BLACK_HOLE_DECAY_RATE * (BLACK_HOLE_DECAY_THRESHOLD / self.mass) ** 2
         self.mass -= rate * delta_time
+        self.accretion_mass = max(0.0, self.accretion_mass - rate * delta_time)
 
 
 class NeutronStar:
@@ -1122,8 +1120,6 @@ def update_entities(state):
                 else:
                     ejecta_count = SUPERNOVA_EJECTA_COUNT_LOW
                     ejecta_spread = SUPERNOVA_EJECTA_SPREAD_LOW
-                parent_idx = molecular_cloud.element_index
-                max_idx = len(MOLECULAR_CLOUD_START_COLORS) - 1
                 for _ in range(ejecta_count):
                     offset_angle = random.uniform(0, 2 * math.pi)
                     offset_dist = random.uniform(5, ejecta_spread)
@@ -1131,12 +1127,7 @@ def update_entities(state):
                     ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
                     mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
                     size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                    child = MolecularCloud(ex, ey, size, mass)
-                    if random.random() < MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE and parent_idx < max_idx:
-                        child.element_index = min(parent_idx + random.randint(1, 3), max_idx)
-                    else:
-                        child.element_index = parent_idx
-                    child.start_color = MOLECULAR_CLOUD_START_COLORS[child.element_index]
+                    child = MolecularCloud(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
                     child.vx = math.cos(offset_angle) * offset_dist * 0.5
                     child.vy = math.sin(offset_angle) * offset_dist * 0.5
                     new_clouds.append(child)
