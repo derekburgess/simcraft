@@ -53,7 +53,7 @@ CMB_DENSITY_CONTRAST = 0.8     # How strongly barrier shape biases initial cloud
 
 # ── Barrier (cosmic boundary ring) ──
 BARRIER_POINT_COUNT = 640       # Number of vertices defining the barrier ring. More = smoother circle, but slower.
-BARRIER_INITIAL_SIZE = 64      # Starting diameter of the barrier ring in pixels.
+BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
 BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Higher = stronger inward pull.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
 BARRIER_BASE_OPACITY = 150      # Transparency of the barrier at rest (0=invisible, 255=opaque).
@@ -200,30 +200,26 @@ BLACK_HOLE_DECAY_CLOUD_MASS_MAX = 28   # Maximum mass of each decay cloud.
 BLACK_HOLE_DECAY_EJECTA_SPREAD = 20    # Max spawn distance (pixels) of decay ejecta from the BH.
 
 # ── Neutron Stars ──
-NEUTRON_STAR_CHANCE = 0.06      # Probability of becoming a neutron star instead of a black hole on collapse.
+NEUTRON_STAR_CHANCE = 0.6      # Probability of becoming a neutron star instead of a black hole on collapse.
 NEUTRON_STAR_RADIUS = 1         # Visual radius in pixels (tiny, as expected).
 NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE  # Gravitational pull strength. Moderate — between clouds and BHs.
-NEUTRON_STAR_DECAY_RATE = 0.8   # Mass lost per second. Higher = shorter lifespan.
+NEUTRON_STAR_DECAY_RATE = 2   # Mass lost per second. Higher = shorter lifespan.
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8  # Mass at which a neutron star dissipates into ejecta.
 NEUTRON_STAR_COLOR = (0, 120, 255)  # RGB color of the neutron star (cyan-blue).
-NEUTRON_STAR_PULSE_RATE = 0.03  # Seconds between pulsar pulses. Lower = faster pulsing.
-NEUTRON_STAR_PULSE_STRENGTH = 8 # Force magnitude of each pulse ripple. Higher = stronger push on nearby entities.
-NEUTRON_STAR_PULSE_COLOR = (0, 60, 180, 80)  # RGBA color of the expanding pulse ring.
+NEUTRON_STAR_PULSE_RATE = 0.015  # Seconds between pulsar pulses. Lower = faster pulsing.
+NEUTRON_STAR_PULSE_STRENGTH = 7 # Force magnitude of each pulse ripple. Higher = stronger push on nearby entities.
+NEUTRON_STAR_PULSE_COLOR = (0, 140, 255, 210)  # RGBA color of the expanding pulse ring.
 NEUTRON_STAR_PULSE_WIDTH = 2    # Line width (pixels) for drawing pulse rings.
 NEUTRON_STAR_RIPPLE_SPEED = 64  # How fast (pixels/sec) pulse ripples expand outward.
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripples exert force on entities.
 NEUTRON_STAR_PULSE_MASS_BOOST = 0.02      # Mass cost per unit of pulse force. Pulsing drains the neutron star.
 NEUTRON_STAR_PULSE_COLOR_DURATION = 0.1  # Seconds the neutron star flashes white after each pulse.
 NEUTRON_STAR_PULSE_FADE_RATE = 1.5  # Rate multiplier for pulse fade once the wavefront reaches the barrier.
-NEUTRON_STAR_DECAY_CLOUD_COUNT = 8       # Number of kilonova ejecta clouds spawned when a neutron star decays.
-NEUTRON_STAR_DECAY_CLOUD_MASS_MIN = 1     # Minimum mass of each decay cloud.
-NEUTRON_STAR_DECAY_CLOUD_MASS_MAX = 4     # Maximum mass of each decay cloud.
-NEUTRON_STAR_DECAY_EJECTA_SPREAD = 14     # Max spawn distance (pixels) of decay kilonova ejecta.
 
 # ── Kilonova (neutron star merger) ──
-KILONOVA_EJECTA_COUNT = 14      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements.
+KILONOVA_EJECTA_COUNT = 20      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements.
 KILONOVA_COLLISION_DISTANCE = 6 # Distance (pixels) at which two neutron stars merge.
-KILONOVA_EJECTA_SPREAD = 24     # Max spawn distance (pixels) of kilonova ejecta. Large explosion!
+KILONOVA_EJECTA_SPREAD = 40     # Max spawn distance (pixels) of kilonova ejecta. Large explosion!
 
 # ── Pulse Rendering ──
 PULSE_RENDER_POINT_COUNT = 64   # Number of polygon vertices used to draw each pulse ring.
@@ -341,15 +337,6 @@ class Barrier:
                 mc.vx += (target_dx / target_dist) * force * delta_time
                 mc.vy += (target_dy / target_dist) * force * delta_time
 
-        for ns in state.neutron_stars:
-            angle, dist, dx, dy = self._entity_angle_and_dist(ns)
-            barrier_r = self.get_radius_at_angle(angle)
-            target_dx = cx + barrier_r * math.cos(angle) - ns.x
-            target_dy = cy + barrier_r * math.sin(angle) - ns.y
-            target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * ns.mass / (target_dist ** 2)) * NEUTRON_STAR_BARRIER_GRAVITY_FACTOR
-            ns.vx += (target_dx / target_dist) * force * delta_time
-            ns.vy += (target_dy / target_dist) * force * delta_time
 
     def _accum_deformation(self, entity, mass_accum, step, proximity_threshold, factor):
         angle, dist, _, _ = self._entity_angle_and_dist(entity)
@@ -425,6 +412,14 @@ class Barrier:
             angle, dist, dx, dy = self._entity_angle_and_dist(ns)
             barrier_r = self.get_radius_at_angle(angle)
             if dist >= barrier_r:
+                ns.x = cx + barrier_r * 0.99 * math.cos(angle)
+                ns.y = cy + barrier_r * 0.99 * math.sin(angle)
+                if dist > 0:
+                    radial_vx = (dx / dist) * ((ns.vx * dx + ns.vy * dy) / dist)
+                    radial_vy = (dy / dist) * ((ns.vx * dx + ns.vy * dy) / dist)
+                    if ns.vx * dx + ns.vy * dy > 0:
+                        ns.vx -= radial_vx
+                        ns.vy -= radial_vy
                 section_mass = sum(
                     m for a, m in compact_angles_masses
                     if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * BARRIER_SECTION_SEARCH_RANGE
@@ -863,6 +858,9 @@ class NeutronStar:
     def draw(self, screen, ring, all_pulses, offset_x=0, offset_y=0):
         draw_x = int(self.x + offset_x)
         draw_y = int(self.y + offset_y)
+        # Float origin for pulse clipping — keeps self-exclusion check accurate
+        pulse_ox = self.x + offset_x
+        pulse_oy = self.y + offset_y
         current_color = (255, 255, 255) if self.pulse_color_state == 1 else NEUTRON_STAR_COLOR
         pygame.draw.circle(screen, current_color, (draw_x, draw_y), self.radius)
 
@@ -871,10 +869,12 @@ class NeutronStar:
             if pulse_radius <= 1:
                 continue
 
-            points = _clip_pulse_points(draw_x, draw_y, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
-
             alpha = int(NEUTRON_STAR_PULSE_COLOR[3] * fade)
             alpha = max(0, min(255, alpha))
+            if alpha == 0:
+                continue
+
+            points = _clip_pulse_points(pulse_ox, pulse_oy, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
             color = (NEUTRON_STAR_PULSE_COLOR[0], NEUTRON_STAR_PULSE_COLOR[1], NEUTRON_STAR_PULSE_COLOR[2], alpha)
 
             min_x = min(p[0] for p in points) - PULSE_RENDER_MARGIN
@@ -898,19 +898,14 @@ class NeutronStar:
                 self.pulse_color_state = 0
                 self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION
 
-        dist_to_center = math.hypot(self.x - ring.center[0], self.y - ring.center[1])
-        min_barrier_dist = max((ring.rest_radius - dist_to_center) / 2, 1.0)
-        max_barrier_dist = (dist_to_center + ring.rest_radius) / 2
-
         pulses_to_remove = []
         for i, pulse in enumerate(self.active_pulses):
             radius, time_alive, fade = pulse
-            new_radius = min(radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time), max_barrier_dist)
+            new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time)
             new_time = time_alive + delta_time
-            new_fade = fade
-
-            if new_radius >= min_barrier_dist:
-                new_fade -= delta_time * NEUTRON_STAR_PULSE_FADE_RATE
+            new_fade = 1.0  # visual only — pulse stays fully visible all the way to barrier
+            effect_fade_start = ring.rest_radius * 0.75
+            effect_fade = max(0.0, 1.0 - max(0.0, new_radius - effect_fade_start) / (ring.rest_radius * 0.25))
 
             self.active_pulses[i] = [new_radius, new_time, new_fade]
 
@@ -920,8 +915,8 @@ class NeutronStar:
                 by = cy + ring.radii[bi] * math.sin(ring.angles[bi])
                 dist_to_star = math.hypot(bx - self.x, by - self.y)
                 if abs(dist_to_star - new_radius) < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
-                    ring.flash[bi] = max(ring.flash[bi], new_fade * 0.4)
-                    ring.radii_vel[bi] += BARRIER_WAVE_PUSH * 0.3 * new_fade * delta_time
+                    ring.flash[bi] = max(ring.flash[bi], effect_fade * 0.4)
+                    ring.radii_vel[bi] += BARRIER_WAVE_PUSH * 0.3 * effect_fade * delta_time
 
             r_inner = max(0, radius - NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
             r_outer = radius + NEUTRON_STAR_RIPPLE_EFFECT_WIDTH
@@ -943,10 +938,6 @@ class NeutronStar:
                     if distance > 0:
                         molecular_cloud.vx += (dx / distance) * force * delta_time
                         molecular_cloud.vy += (dy / distance) * force * delta_time
-                        # Energy cost: subtract imparted kinetic energy from NS mass
-                        energy_cost = force * delta_time * NEUTRON_STAR_PULSE_MASS_BOOST
-                        self.mass -= energy_cost
-                        self.mass = max(self.mass, 0.1)
 
             for black_hole in state.black_holes:
                 dx = black_hole.x - self.x
@@ -962,7 +953,7 @@ class NeutronStar:
                         black_hole.vx += (dx / distance) * force * delta_time * 0.2
                         black_hole.vy += (dy / distance) * force * delta_time * 0.2
 
-            if new_fade <= 0.01:
+            if new_radius > max(ring.radii):
                 pulses_to_remove.append(i)
 
         for i in sorted(pulses_to_remove, reverse=True):
@@ -1369,12 +1360,12 @@ def update_simulation_state(state, ring, delta_time):
         neutron_star.decay(delta_time)
         if neutron_star.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
             ns_to_remove.add(neutron_star)
-            for _ in range(NEUTRON_STAR_DECAY_CLOUD_COUNT):
+            for _ in range(KILONOVA_EJECTA_COUNT):
                 offset_angle = random.uniform(0, 2 * math.pi)
-                offset_dist = random.uniform(5, NEUTRON_STAR_DECAY_EJECTA_SPREAD)
+                offset_dist = random.uniform(5, KILONOVA_EJECTA_SPREAD)
                 ex = neutron_star.x + offset_dist * math.cos(offset_angle)
                 ey = neutron_star.y + offset_dist * math.sin(offset_angle)
-                mass = random.uniform(NEUTRON_STAR_DECAY_CLOUD_MASS_MIN, NEUTRON_STAR_DECAY_CLOUD_MASS_MAX)
+                mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
                 child = MolecularCloud(ex, ey, size, mass, KILONOVA_ELEMENTAL_ABUNDANCE)
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
