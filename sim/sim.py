@@ -90,10 +90,10 @@ BARRIER_CONTAINMENT_THRESHOLD = 0.05  # Minimum containment strength below which
 MOLECULAR_CLOUD_COUNT = 3200    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
 MOLECULAR_CLOUD_START_SIZE = 20 # Initial visual size of clouds in pixels.
 MOLECULAR_CLOUD_MIN_SIZE = 6    # Smallest a cloud can shrink to as it gains mass.
-MOLECULAR_CLOUD_GROWTH_RATE = 0.4  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
+MOLECULAR_CLOUD_GROWTH_RATE = 0.2  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
 MOLECULAR_CLOUD_START_MASS = 1  # Initial mass of each cloud.
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0008 * GRAVITY_SCALE  # Gravitational attraction between clouds. Very low to prevent instant clumping.
-MOLECULAR_CLOUD_MERGE_CHANCE = 0.2  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
+MOLECULAR_CLOUD_MERGE_CHANCE = 0.08  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
 MOLECULAR_CLOUD_MAX_MASS = 48   # Maximum mass a cloud/star can reach. Caps growth.
 MOLECULAR_CLOUD_START_COLORS = [
     (140, 20, 20),   # Hydrogen - Red (H-alpha)
@@ -122,29 +122,29 @@ MOLECULAR_CLOUD_OPACITY = 128   # Maximum opacity for clouds below protostar mas
 MOLECULAR_CLOUD_MIN_OPACITY = 64  # Minimum opacity for the lightest clouds (0-255).
 
 # ── Molecular Cloud Emission (clouds shed daughter clouds) ──
-MOLECULAR_CLOUD_EMISSION_CHANCE = 0.6          # Per-frame chance for eligible clouds to emit
+MOLECULAR_CLOUD_EMISSION_CHANCE = 0.6         # Per-frame chance for eligible clouds to emit
 MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS = 1     # Minimum parent mass to emit
 MOLECULAR_CLOUD_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
 MOLECULAR_CLOUD_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
 MOLECULAR_CLOUD_EMISSION_VELOCITY = 0.6         # Emission kick speed
-MOLECULAR_CLOUD_EMISSION_SPREAD = 10              # Max spawn distance from parent
-MOLECULAR_CLOUD_EMISSION_COUNT = 6               # Max number of emissions per cloud
+MOLECULAR_CLOUD_EMISSION_SPREAD = 14              # Max spawn distance from parent
+MOLECULAR_CLOUD_EMISSION_COUNT = 10               # Max number of emissions per cloud
 
 # ── Supernova (molecular cloud reset events) ──
-MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.02    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
+MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.04    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
 MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE = 0.2  # Probability that ejecta from supernovae produce heavier elements than the parent.
-SUPERNOVA_EJECTA_COUNT_HIGH = 6   # Number of ejecta pieces from a high-tier (heavy element) supernova.
-SUPERNOVA_EJECTA_COUNT_MEDIUM = 8 # Number of ejecta pieces from a medium-tier supernova.
-SUPERNOVA_EJECTA_COUNT_LOW = 12    # Number of ejecta pieces from a low-tier (light element) supernova.
-SUPERNOVA_EJECTA_SPREAD_HIGH = 60  # Max spawn radius (pixels) of ejecta from a high-tier supernova.
-SUPERNOVA_EJECTA_SPREAD_MEDIUM = 80  # Max spawn radius (pixels) of ejecta from a medium-tier supernova.
-SUPERNOVA_EJECTA_SPREAD_LOW = 100   # Max spawn radius (pixels) of ejecta from a low-tier supernova.
+SUPERNOVA_EJECTA_COUNT_HIGH = 2   # Number of ejecta pieces from a high-tier (heavy element) supernova.
+SUPERNOVA_EJECTA_COUNT_MEDIUM = 6 # Number of ejecta pieces from a medium-tier supernova.
+SUPERNOVA_EJECTA_COUNT_LOW = 10    # Number of ejecta pieces from a low-tier (light element) supernova.
+SUPERNOVA_EJECTA_SPREAD_HIGH = 14  # Max spawn radius (pixels) of ejecta from a high-tier supernova.
+SUPERNOVA_EJECTA_SPREAD_MEDIUM = 20  # Max spawn radius (pixels) of ejecta from a medium-tier supernova.
+SUPERNOVA_EJECTA_SPREAD_LOW = 26   # Max spawn radius (pixels) of ejecta from a low-tier supernova.
 SUPERNOVA_EJECTA_MAX_MASS_FRACTION = 0.35    # Maximum ejecta mass as a fraction of PROTOSTAR_THRESHOLD.
 
 # ── Protostars (clouds that reach enough mass to ignite) ──
 PROTOSTAR_THRESHOLD = 32        # Mass at which a cloud becomes a protostar (changes appearance and behavior).
-PROTOSTAR_EJECTA_COUNT = 12     # Number of ejecta pieces produced during protostar formation events.
-PROTOSTAR_EJECTA_SPREAD = 32    # Max spawn distance (pixels) of ejecta from the parent star.
+PROTOSTAR_EJECTA_COUNT = 4     # Number of ejecta pieces produced during protostar formation events.
+PROTOSTAR_EJECTA_SPREAD = 14    # Max spawn distance (pixels) of ejecta from the parent star.
 
 # Element weight boundaries for star tiers.
 # When a cloud reaches PROTOSTAR_THRESHOLD mass, its element_index (position in
@@ -169,11 +169,11 @@ PROTOSTAR_HIGH_SIZE = 6
 PROTOSTAR_HIGH_MASS_BOOST = 12             # Red giants get +6 mass on formation
 
 # Higher BH conversion chance for red giants
-PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.00002
+PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.002
 
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
-BLACK_HOLE_CHANCE = 0.002      # Per-frame probability a qualifying star becomes a black hole. Very rare.
+BLACK_HOLE_CHANCE = 0.006      # Per-frame probability a qualifying star becomes a black hole. Very rare.
 BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
 BLACK_HOLE_MAX_MASS = 64        # Maximum mass a black hole can accumulate.
 BLACK_HOLE_GRAVITY_CONSTANT = 12.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
@@ -212,15 +212,15 @@ NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripple
 NEUTRON_STAR_PULSE_MASS_BOOST = 0.02      # Mass cost per unit of pulse force. Pulsing drains the neutron star.
 NEUTRON_STAR_PULSE_COLOR_DURATION = 0.1  # Seconds the neutron star flashes white after each pulse.
 NEUTRON_STAR_PULSE_FADE_RATE = 1.5  # Rate multiplier for pulse fade once the wavefront reaches the barrier.
-NEUTRON_STAR_DECAY_CLOUD_COUNT = 2        # Number of clouds spawned when a neutron star dissipates.
+NEUTRON_STAR_DECAY_CLOUD_COUNT = 8       # Number of kilonova ejecta clouds spawned when a neutron star decays.
 NEUTRON_STAR_DECAY_CLOUD_MASS_MIN = 1     # Minimum mass of each decay cloud.
 NEUTRON_STAR_DECAY_CLOUD_MASS_MAX = 4     # Maximum mass of each decay cloud.
-NEUTRON_STAR_DECAY_EJECTA_SPREAD = 20     # Max spawn distance (pixels) of decay ejecta.
+NEUTRON_STAR_DECAY_EJECTA_SPREAD = 14     # Max spawn distance (pixels) of decay kilonova ejecta.
 
 # ── Kilonova (neutron star merger) ──
-KILONOVA_EJECTA_COUNT = 20      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements.
+KILONOVA_EJECTA_COUNT = 14      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements.
 KILONOVA_COLLISION_DISTANCE = 6 # Distance (pixels) at which two neutron stars merge.
-KILONOVA_EJECTA_SPREAD = 80     # Max spawn distance (pixels) of kilonova ejecta. Large explosion!
+KILONOVA_EJECTA_SPREAD = 24     # Max spawn distance (pixels) of kilonova ejecta. Large explosion!
 
 # ── Pulse Rendering ──
 PULSE_RENDER_POINT_COUNT = 64   # Number of polygon vertices used to draw each pulse ring.
@@ -1385,10 +1385,11 @@ def update_simulation_state(state, ring, delta_time):
                 ey = neutron_star.y + offset_dist * math.sin(offset_angle)
                 mass = random.uniform(NEUTRON_STAR_DECAY_CLOUD_MASS_MIN, NEUTRON_STAR_DECAY_CLOUD_MASS_MAX)
                 size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                child = MolecularCloud(ex, ey, size, mass, EJECTA_ELEMENTAL_ABUNDANCE)
+                child = MolecularCloud(ex, ey, size, mass, KILONOVA_ELEMENTAL_ABUNDANCE)
                 child.vx = math.cos(offset_angle) * offset_dist * 0.5
                 child.vy = math.sin(offset_angle) * offset_dist * 0.5
                 new_clouds.append(child)
+            state.black_hole_pulses.append([neutron_star.x, neutron_star.y, 0, neutron_star.mass])
 
     # NS-NS Kilonova mergers
     alive_ns = [ns for ns in state.neutron_stars if ns not in ns_to_remove]
@@ -1424,6 +1425,12 @@ def update_simulation_state(state, ring, delta_time):
                     child.vy = math.sin(offset_angle) * offset_dist * 0.5
                     new_clouds.append(child)
                 state.black_hole_pulses.append([cx, cy, 0, combined_mass])
+                bh_vx = (ns_a.mass * ns_a.vx + ns_b.mass * ns_b.vx) / combined_mass
+                bh_vy = (ns_a.mass * ns_a.vy + ns_b.mass * ns_b.vy) / combined_mass
+                new_bh = BlackHole(cx, cy, combined_mass)
+                new_bh.vx = bh_vx
+                new_bh.vy = bh_vy
+                state.black_holes.append(new_bh)
                 break
 
     resolve_pulse_collisions(state, delta_time)
