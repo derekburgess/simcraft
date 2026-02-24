@@ -21,7 +21,7 @@ UI_TEXT_Y_OFFSET = 40           # Y offset from bottom of screen for the year co
 
 # ── Zoom ──
 ZOOM_MIN = 0.5                 # Minimum zoom level (zoomed out). Lower = can see more.
-ZOOM_MAX = 1.5                 # Maximum zoom level (zoomed in). Higher = can zoom in more.
+ZOOM_MAX = 2.0                 # Maximum zoom level (zoomed in). Higher = can zoom in more.
 ZOOM_STEP = 0.25               # Zoom change per scroll wheel tick.
 
 # ── Simulation ──
@@ -53,7 +53,7 @@ CMB_DENSITY_CONTRAST = 0.8     # How strongly barrier shape biases initial cloud
 
 # ── Barrier (cosmic boundary ring) ──
 BARRIER_POINT_COUNT = 640       # Number of vertices defining the barrier ring. More = smoother circle, but slower.
-BARRIER_INITIAL_SIZE = 128      # Starting diameter of the barrier ring in pixels.
+BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
 BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Higher = stronger inward pull.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
 BARRIER_BASE_OPACITY = 150      # Transparency of the barrier at rest (0=invisible, 255=opaque).
@@ -74,26 +74,26 @@ BARRIER_LINE_WIDTH = 3          # Line width (pixels) for drawing the barrier ri
 MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR = 0.001  # Gravity multiplier for clouds vs barrier. Very weak — clouds drift inward gently.
 MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 2.0     # How strongly massive clouds dent the barrier on approach.
 
-BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.01   # Gravity multiplier for black holes vs barrier. 10x stronger than clouds.
-BLACK_HOLE_BARRIER_DEFORM_FACTOR = 20.0    # How strongly black holes dent the barrier. Very high.
+BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.02   # Gravity multiplier for black holes vs barrier. 10x stronger than clouds.
+BLACK_HOLE_BARRIER_DEFORM_FACTOR = 40.0    # How strongly black holes dent the barrier. Very high.
 BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.7  # How much nearby mass weakens containment for black holes. Higher = escapes more easily.
-BLACK_HOLE_BARRIER_PUSH_STRENGTH = 60.0    # Base push force applied to black holes hitting the barrier boundary.
+BLACK_HOLE_BARRIER_PUSH_STRENGTH = 40.0    # Base push force applied to black holes hitting the barrier boundary.
 
-NEUTRON_STAR_BARRIER_GRAVITY_FACTOR = 0.008   # Gravity multiplier for neutron stars vs barrier. Strongest pull.
-NEUTRON_STAR_BARRIER_DEFORM_FACTOR = 6.0     # How strongly neutron stars dent the barrier.
+NEUTRON_STAR_BARRIER_GRAVITY_FACTOR = 0.004   # Gravity multiplier for neutron stars vs barrier. Strongest pull.
+NEUTRON_STAR_BARRIER_DEFORM_FACTOR = 4.0     # How strongly neutron stars dent the barrier.
 NEUTRON_STAR_BARRIER_WEAKENING_FACTOR = 0.7  # How much nearby mass weakens containment for neutron stars (0=no effect, 1=full escape).
-NEUTRON_STAR_BARRIER_PUSH_STRENGTH = 100.0   # Base push force applied to neutron stars hitting the barrier boundary.
+NEUTRON_STAR_BARRIER_PUSH_STRENGTH = 20.0   # Base push force applied to neutron stars hitting the barrier boundary.
 
 BARRIER_CONTAINMENT_THRESHOLD = 0.05  # Minimum containment strength below which the barrier stops pushing an entity back.
 
 # ── Molecular Clouds ──
-MOLECULAR_CLOUD_COUNT = 4800    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
+MOLECULAR_CLOUD_COUNT = 3200    # Number of clouds spawned at simulation start. More = denser universe, slower performance.
 MOLECULAR_CLOUD_START_SIZE = 20 # Initial visual size of clouds in pixels.
 MOLECULAR_CLOUD_MIN_SIZE = 6    # Smallest a cloud can shrink to as it gains mass.
-MOLECULAR_CLOUD_GROWTH_RATE = 0.24  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
+MOLECULAR_CLOUD_GROWTH_RATE = 0.4  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
 MOLECULAR_CLOUD_START_MASS = 1  # Initial mass of each cloud.
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0008 * GRAVITY_SCALE  # Gravitational attraction between clouds. Very low to prevent instant clumping.
-MOLECULAR_CLOUD_MERGE_CHANCE = 0.008  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
+MOLECULAR_CLOUD_MERGE_CHANCE = 0.2  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
 MOLECULAR_CLOUD_MAX_MASS = 48   # Maximum mass a cloud/star can reach. Caps growth.
 MOLECULAR_CLOUD_START_COLORS = [
     (140, 20, 20),   # Hydrogen - Red (H-alpha)
@@ -121,8 +121,17 @@ MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)  # Color clouds fade toward as they 
 MOLECULAR_CLOUD_OPACITY = 128   # Maximum opacity for clouds below protostar mass (0-255).
 MOLECULAR_CLOUD_MIN_OPACITY = 64  # Minimum opacity for the lightest clouds (0-255).
 
+# ── Molecular Cloud Emission (clouds shed daughter clouds) ──
+MOLECULAR_CLOUD_EMISSION_CHANCE = 0.6          # Per-frame chance for eligible clouds to emit
+MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS = 1     # Minimum parent mass to emit
+MOLECULAR_CLOUD_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
+MOLECULAR_CLOUD_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
+MOLECULAR_CLOUD_EMISSION_VELOCITY = 0.6         # Emission kick speed
+MOLECULAR_CLOUD_EMISSION_SPREAD = 10              # Max spawn distance from parent
+MOLECULAR_CLOUD_EMISSION_COUNT = 6               # Max number of emissions per cloud
+
 # ── Supernova (molecular cloud reset events) ──
-MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.0002    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
+MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.02    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
 MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE = 0.2  # Probability that ejecta from supernovae produce heavier elements than the parent.
 SUPERNOVA_EJECTA_COUNT_HIGH = 6   # Number of ejecta pieces from a high-tier (heavy element) supernova.
 SUPERNOVA_EJECTA_COUNT_MEDIUM = 8 # Number of ejecta pieces from a medium-tier supernova.
@@ -131,15 +140,6 @@ SUPERNOVA_EJECTA_SPREAD_HIGH = 60  # Max spawn radius (pixels) of ejecta from a 
 SUPERNOVA_EJECTA_SPREAD_MEDIUM = 80  # Max spawn radius (pixels) of ejecta from a medium-tier supernova.
 SUPERNOVA_EJECTA_SPREAD_LOW = 100   # Max spawn radius (pixels) of ejecta from a low-tier supernova.
 SUPERNOVA_EJECTA_MAX_MASS_FRACTION = 0.35    # Maximum ejecta mass as a fraction of PROTOSTAR_THRESHOLD.
-
-# ── Molecular Cloud Emission (clouds shed daughter clouds) ──
-MOLECULAR_CLOUD_EMISSION_CHANCE = 0.2          # Per-frame chance for eligible clouds to emit
-MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS = 6     # Minimum parent mass to emit
-MOLECULAR_CLOUD_EMISSION_MASS_MIN = 1            # Min mass of emitted cloud
-MOLECULAR_CLOUD_EMISSION_MASS_MAX = 4            # Max mass of emitted cloud
-MOLECULAR_CLOUD_EMISSION_VELOCITY = 0.8         # Emission kick speed
-MOLECULAR_CLOUD_EMISSION_SPREAD = 18              # Max spawn distance from parent
-MOLECULAR_CLOUD_EMISSION_COUNT = 4               # Max number of emissions per cloud
 
 # ── Protostars (clouds that reach enough mass to ignite) ──
 PROTOSTAR_THRESHOLD = 32        # Mass at which a cloud becomes a protostar (changes appearance and behavior).
@@ -173,11 +173,11 @@ PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.00002
 
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
-BLACK_HOLE_CHANCE = 0.0004      # Per-frame probability a qualifying star becomes a black hole. Very rare.
+BLACK_HOLE_CHANCE = 0.002      # Per-frame probability a qualifying star becomes a black hole. Very rare.
 BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
-BLACK_HOLE_MAX_MASS = 72        # Maximum mass a black hole can accumulate.
-BLACK_HOLE_GRAVITY_CONSTANT = 14.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
-BLACK_HOLE_DECAY_RATE = 0.8     # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
+BLACK_HOLE_MAX_MASS = 64        # Maximum mass a black hole can accumulate.
+BLACK_HOLE_GRAVITY_CONSTANT = 12.0 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
+BLACK_HOLE_DECAY_RATE = 1.2     # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
 BLACK_HOLE_GRAVITY_SOFTENING = 5.0     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
@@ -186,6 +186,9 @@ BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)  # RGBA color of the gravitational wa
 BLACK_HOLE_DISK_COLOR = (255, 100, 100)    # RGB color of the accretion disk tracer dot (light red).
 BLACK_HOLE_DISK_SIZE = 1                   # Visual size in pixels of the accretion disk tracer.
 BLACK_HOLE_DISK_ROTATION = 10.0            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
+BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION = 0.999  # Per-second dissipation rate for black hole angular momentum (spin-down).
+BLACK_HOLE_PULSE_SPEED_MULTIPLIER = 1.5  # Speed multiplier applied to BH merger pulses relative to NS ripple speed.
+BLACK_HOLE_PULSE_MASS_SCALE = 5.0        # Divisor for consumed mass when scaling BH merger pulse forces.
 
 # ── Black Hole Decay (when BH evaporates) ──
 BLACK_HOLE_DECAY_CLOUD_COUNT = 6       # Number of heavy clouds spawned when a BH evaporates.
@@ -193,25 +196,8 @@ BLACK_HOLE_DECAY_CLOUD_MASS_MIN = 24   # Minimum mass of each decay cloud. These
 BLACK_HOLE_DECAY_CLOUD_MASS_MAX = 28   # Maximum mass of each decay cloud.
 BLACK_HOLE_DECAY_EJECTA_SPREAD = 20    # Max spawn distance (pixels) of decay ejecta from the BH.
 
-# ── Black Hole Jets (relativistic jets from accretion events) ──
-BLACK_HOLE_JET_CHANCE = 0.4             # Probability of jet formation when a BH absorbs something.
-BLACK_HOLE_JET_STAR_COUNT = 8           # Number of clouds emitted per jet burst.
-BLACK_HOLE_JET_DURATION = 4             # Duration of jet emission in seconds.
-BLACK_HOLE_JET_SPREAD = 40              # Max spawn distance (pixels) of jet particles from the BH.
-BLACK_HOLE_JET_VELOCITY = 20.0           # Speed of ejected jet particles. Higher = faster jets.
-
-# ── Black Hole Emission (random mass leakage) ──
-BLACK_HOLE_EMISSION_CHANCE = 0.0002       # Per-frame chance a BH randomly emits a small cloud.
-BLACK_HOLE_EMISSION_MASS_MIN = 1        # Minimum mass of emitted particles.
-BLACK_HOLE_EMISSION_MASS_MAX = 3        # Maximum mass of emitted particles.
-BLACK_HOLE_EMISSION_EJECTA_SPREAD = 40  # Max spawn distance (pixels) of emitted particles.
-BLACK_HOLE_EMISSION_VELOCITY = 0.4      # Speed of emitted particles.
-BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION = 0.999  # Per-second dissipation rate for black hole angular momentum (spin-down).
-BLACK_HOLE_PULSE_SPEED_MULTIPLIER = 1.5  # Speed multiplier applied to BH merger pulses relative to NS ripple speed.
-BLACK_HOLE_PULSE_MASS_SCALE = 5.0        # Divisor for consumed mass when scaling BH merger pulse forces.
-
 # ── Neutron Stars ──
-NEUTRON_STAR_CHANCE = 0.1      # Probability of becoming a neutron star instead of a black hole on collapse.
+NEUTRON_STAR_CHANCE = 0.06      # Probability of becoming a neutron star instead of a black hole on collapse.
 NEUTRON_STAR_RADIUS = 1         # Visual radius in pixels (tiny, as expected).
 NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE  # Gravitational pull strength. Moderate — between clouds and BHs.
 NEUTRON_STAR_DECAY_RATE = 0.8   # Mass lost per second. Higher = shorter lifespan.
@@ -254,7 +240,8 @@ _molecular_cloud_surface_cache = {}
 
 def _get_molecular_cloud_surface(size):
     if size not in _molecular_cloud_surface_cache:
-        _molecular_cloud_surface_cache[size] = pygame.Surface((size, size), pygame.SRCALPHA)
+        # Use size*2 to give room for circles drawn with offsets from center
+        _molecular_cloud_surface_cache[size] = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
     return _molecular_cloud_surface_cache[size]
 
 
@@ -640,6 +627,12 @@ class MolecularCloud:
         self.mass = mass
         self.emission_count = 0
         self.is_star = mass >= PROTOSTAR_THRESHOLD
+        # Normalized circle offsets (fraction of size) — fixed per cloud, scale at draw time
+        self._circle_offsets = [
+            (random.uniform(0.05, 0.22) * math.cos(random.uniform(0, 2 * math.pi)),
+             random.uniform(0.05, 0.22) * math.sin(random.uniform(0, 2 * math.pi)))
+            for _ in range(7)
+        ]
         if self.mass >= PROTOSTAR_THRESHOLD:
             self.opacity = 255
         else:
@@ -676,12 +669,25 @@ class MolecularCloud:
     def draw(self, screen, offset_x=0, offset_y=0):
         draw_x = self.x + offset_x
         draw_y = self.y + offset_y
-        if self.opacity < 255:
-            s = _get_molecular_cloud_surface(self.size)
-            s.fill(self.color + (self.opacity,))
-            screen.blit(s, (draw_x, draw_y))
-        else:
+        if self.is_star:
             pygame.draw.rect(screen, self.color, (draw_x, draw_y, self.size, self.size))
+            return
+        # Non-star cloud: draw as a cluster of small circles.
+        # Count grows linearly from 3 as the cloud shrinks (gains mass).
+        num_circles = 3 + (MOLECULAR_CLOUD_START_SIZE - self.size) // 4
+        circle_r = max(1, int(self.size * 0.3))
+        center_x = int(self.x + self.size / 2 + offset_x)
+        center_y = int(self.y + self.size / 2 + offset_y)
+        s = _get_molecular_cloud_surface(self.size)  # size*2 x size*2
+        s.fill((0, 0, 0, 0))
+        rgba = self.color + (self.opacity,)
+        half = self.size  # surface width // 2 == size
+        for i in range(min(num_circles, len(self._circle_offsets))):
+            ox, oy = self._circle_offsets[i]
+            cx = int(half + ox * self.size)
+            cy = int(half + oy * self.size)
+            pygame.draw.circle(s, rgba, (cx, cy), circle_r)
+        screen.blit(s, (center_x - half, center_y - half))
 
     def update(self):
         self.size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((self.mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
@@ -706,6 +712,7 @@ class MolecularCloud:
                 self.color = PROTOSTAR_LOW_COLOR
                 self.size = PROTOSTAR_LOW_SIZE
         else:
+            self.is_star = False
             factor = (self.mass - MOLECULAR_CLOUD_START_MASS) / (PROTOSTAR_THRESHOLD - MOLECULAR_CLOUD_START_MASS)
             factor = max(0.0, min(1.0, factor))
             self.opacity = int(MOLECULAR_CLOUD_MIN_OPACITY + factor * (MOLECULAR_CLOUD_OPACITY - MOLECULAR_CLOUD_MIN_OPACITY))
@@ -733,7 +740,6 @@ class BlackHole:
         self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.tracer_angle = random.uniform(0, 2 * math.pi)
         self.angular_momentum = 0.0  # Spin from off-center accretion
-        self.jet_streams = []  # list of [time_remaining, stars_left, angle]
 
     def draw(self, screen, offset_x=0, offset_y=0):
         draw_x = int(self.x + offset_x)
@@ -769,8 +775,6 @@ class BlackHole:
                     self.mass += black_hole.mass
                     self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
                     state.black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
-                    if random.random() < BLACK_HOLE_JET_CHANCE:
-                        self.jet_streams.append([BLACK_HOLE_JET_DURATION, BLACK_HOLE_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 elif distance > 0:
                     soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                     force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (soft_dist ** 2)
@@ -798,8 +802,6 @@ class BlackHole:
                     self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
                 self.mass += entity.mass
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
-                if random.random() < BLACK_HOLE_JET_CHANCE:
-                    self.jet_streams.append([BLACK_HOLE_JET_DURATION, BLACK_HOLE_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
@@ -828,8 +830,6 @@ class BlackHole:
                     self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
                     self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
                 self.mass += entity.mass
-                if random.random() < BLACK_HOLE_JET_CHANCE:
-                    self.jet_streams.append([BLACK_HOLE_JET_DURATION, BLACK_HOLE_JET_STAR_COUNT, random.uniform(0, 2 * math.pi)])
                 self.mass = min(self.mass, BLACK_HOLE_MAX_MASS)
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
@@ -1146,26 +1146,19 @@ def update_entities(state):
         elif molecular_cloud.mass >= MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS and molecular_cloud.emission_count < MOLECULAR_CLOUD_EMISSION_COUNT and molecular_cloud not in to_remove:
             # Emission: clouds shed small daughter clouds, losing mass in the process
             if random.random() < MOLECULAR_CLOUD_EMISSION_CHANCE:
-                emit_mass = random.uniform(MOLECULAR_CLOUD_EMISSION_MASS_MIN, min(MOLECULAR_CLOUD_EMISSION_MASS_MAX, molecular_cloud.mass - MOLECULAR_CLOUD_START_MASS))
-                if emit_mass > 0:
-                    offset_angle = random.uniform(0, 2 * math.pi)
-                    offset_dist = random.uniform(2, MOLECULAR_CLOUD_EMISSION_SPREAD)
-                    ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
-                    ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
-                    size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((emit_mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                    child = MolecularCloud(ex, ey, size, emit_mass)
-                    child.element_index = molecular_cloud.element_index
-                    child.start_color = MOLECULAR_CLOUD_START_COLORS[child.element_index]
-                    # Emission velocity: parent's velocity + kick away
-                    child.vx = molecular_cloud.vx + math.cos(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
-                    child.vy = molecular_cloud.vy + math.sin(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
-                    # Conserve momentum: recoil on parent
-                    molecular_cloud.vx -= (emit_mass / molecular_cloud.mass) * math.cos(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
-                    molecular_cloud.vy -= (emit_mass / molecular_cloud.mass) * math.sin(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
-                    molecular_cloud.mass -= emit_mass
-                    molecular_cloud.emission_count += 1
-                    molecular_cloud.update()
-                    new_clouds.append(child)
+                emit_mass = random.uniform(MOLECULAR_CLOUD_EMISSION_MASS_MIN, MOLECULAR_CLOUD_EMISSION_MASS_MAX)
+                offset_angle = random.uniform(0, 2 * math.pi)
+                offset_dist = random.uniform(2, MOLECULAR_CLOUD_EMISSION_SPREAD)
+                ex = molecular_cloud.x + offset_dist * math.cos(offset_angle)
+                ey = molecular_cloud.y + offset_dist * math.sin(offset_angle)
+                size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((emit_mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+                child = MolecularCloud(ex, ey, size, emit_mass)
+                child.element_index = molecular_cloud.element_index
+                child.start_color = MOLECULAR_CLOUD_START_COLORS[child.element_index]
+                child.vx = molecular_cloud.vx + math.cos(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
+                child.vy = molecular_cloud.vy + math.sin(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY
+                molecular_cloud.emission_count += 1
+                new_clouds.append(child)
     if to_remove:
         state.molecular_clouds = [mc for mc in state.molecular_clouds if mc not in to_remove]
     state.molecular_clouds.extend(new_clouds)
@@ -1360,42 +1353,6 @@ def update_simulation_state(state, ring, delta_time):
             continue
         black_hole.attract(state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove)
         black_hole.decay(delta_time)
-        # Jet streams: emit H/He/O clouds over time
-        jets_done = []
-        for ji, jet in enumerate(black_hole.jet_streams):
-            jet[0] -= delta_time
-            if jet[0] <= 0 or jet[1] <= 0:
-                jets_done.append(ji)
-                continue
-            emit_interval = BLACK_HOLE_JET_DURATION / BLACK_HOLE_JET_STAR_COUNT
-            if jet[0] % emit_interval < delta_time:
-                jet[1] -= 1
-                angle = jet[2]
-                offset_dist = random.uniform(5, BLACK_HOLE_JET_SPREAD)
-                ex = black_hole.x + offset_dist * math.cos(angle)
-                ey = black_hole.y + offset_dist * math.sin(angle)
-                mass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
-                size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                child = MolecularCloud(ex, ey, size, mass, SEED_ELEMENTAL_ABUNDANCE)
-                child.vx = math.cos(angle) * BLACK_HOLE_JET_VELOCITY
-                child.vy = math.sin(angle) * BLACK_HOLE_JET_VELOCITY
-                new_clouds.append(child)
-        for ji in sorted(jets_done, reverse=True):
-            black_hole.jet_streams.pop(ji)
-        if black_hole.mass > BLACK_HOLE_DECAY_THRESHOLD and random.random() < BLACK_HOLE_EMISSION_CHANCE:
-            leak_mass = random.uniform(BLACK_HOLE_EMISSION_MASS_MIN, BLACK_HOLE_EMISSION_MASS_MAX)
-            leak_mass = min(leak_mass, black_hole.mass - BLACK_HOLE_DECAY_THRESHOLD)
-            if leak_mass > 0:
-                black_hole.mass -= leak_mass
-                offset_angle = random.uniform(0, 2 * math.pi)
-                offset_dist = random.uniform(3, BLACK_HOLE_EMISSION_EJECTA_SPREAD)
-                ex = black_hole.x + offset_dist * math.cos(offset_angle)
-                ey = black_hole.y + offset_dist * math.sin(offset_angle)
-                size = max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - int((leak_mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
-                child = MolecularCloud(ex, ey, size, leak_mass, SEED_ELEMENTAL_ABUNDANCE)
-                child.vx = math.cos(offset_angle) * BLACK_HOLE_EMISSION_VELOCITY
-                child.vy = math.sin(offset_angle) * BLACK_HOLE_EMISSION_VELOCITY
-                new_clouds.append(child)
         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
             bh_to_remove.add(black_hole)
             for _ in range(BLACK_HOLE_DECAY_CLOUD_COUNT):
