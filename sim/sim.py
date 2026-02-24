@@ -1155,6 +1155,8 @@ def draw_static_key(screen, font, zoom):
     screen.blit(font.render(zoom_text, True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
     snapshot_pos = (UI_LABEL_X, SCREEN_HEIGHT - UI_EXIT_Y_OFFSET)
     screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
+    snapshot_pos = (UI_LABEL_X, SCREEN_HEIGHT - UI_EXIT_Y_OFFSET - 30)
+    screen.blit(font.render('[F11] FULLSCREEN', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
 
 
 def screen_to_world(screen_x, screen_y, zoom, view_center_x, view_center_y):
@@ -1176,6 +1178,8 @@ def handle_input(zoom, view_center_x, view_center_y):
             running = False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
             take_screenshot = True
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+            pygame.display.toggle_fullscreen()
         if event.type == pygame.MOUSEWHEEL:
             mouse_sx, mouse_sy = pygame.mouse.get_pos()
             world_x, world_y = screen_to_world(mouse_sx, mouse_sy, zoom, view_center_x, view_center_y)
