@@ -27,6 +27,16 @@ ZOOM_STEP = 0.25               # Zoom change per scroll wheel tick.
 # ── Simulation ──
 SPATIAL_HASH_CELL_SIZE = 40     # Cell size (pixels) for the spatial hash grid. Should match typical entity interaction radius.
 
+# ── Barnes-Hut N-body gravity (experimental) ──
+# When enabled, cloud-cloud gravity becomes long-range all-pairs (every cloud feels
+# every other) approximated in O(N log N) via a quadtree, instead of the short-range
+# spatial-hash neighbor model. This enables emergent large-scale structure but changes
+# the tuned local-clumping behavior — expect to retune MOLECULAR_CLOUD_GRAVITY_CONSTANT.
+BARNES_HUT_ENABLED = True       # Toggle Barnes-Hut cloud gravity. False = original short-range spatial-hash model.
+BARNES_HUT_THETA = 0.7          # Opening angle. Lower = more accurate & slower (0 = brute force O(N^2)).
+BARNES_HUT_SOFTENING = 2.0      # Softening length (pixels) added to the force denominator to prevent close-range spikes.
+BARNES_HUT_MAX_DEPTH = 28       # Max quadtree depth. Caps recursion when many clouds share near-identical positions.
+
 # ── Timing ──
 YEAR_RATE = 60                 # Simulated years per real second. Higher = faster time progression in the UI counter.
 MAX_DELTA_TIME = 0.05          # Maximum physics time step per frame (seconds). Caps dt to prevent instability on lag spikes.
@@ -35,7 +45,7 @@ TARGET_FPS = 60                    # Target frame rate cap for the simulation lo
 
 # ── Physics ──
 GRAVITY_SCALE = 0.15  # Master gravity multiplier applied to all gravitational constants. Increase for stronger gravity everywhere.
-VELOCITY_DAMPING = 0.995        # Per-frame velocity multiplier for all entities. Below 1.0 = energy dissipation. 1.0 = no damping.
+VELOCITY_DAMPING = 0.999        # Per-frame velocity multiplier for all entities. Below 1.0 = energy dissipation. 1.0 = no damping.
 
 # ── CMB Perturbations (initial conditions, inspired by real cosmic microwave background) ──
 # These control how the universe looks at the very start of the simulation.
@@ -54,7 +64,7 @@ CMB_DENSITY_CONTRAST = 0.8     # How strongly barrier shape biases initial cloud
 # ── Barrier (cosmic boundary ring) ──
 BARRIER_POINT_COUNT = 640       # Number of vertices defining the barrier ring. More = smoother circle, but slower.
 BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
-BARRIER_GRAVITY_CONSTANT = 120 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Higher = stronger inward pull.
+BARRIER_GRAVITY_CONSTANT = 70 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Reduced so it contains without out-competing black holes for nearby clumping.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
 BARRIER_BASE_OPACITY = 150      # Transparency of the barrier at rest (0=invisible, 255=opaque).
 BARRIER_FLASH_COLOR = (0, 184, 106)  # RGB color the barrier flashes when deformed (green).
@@ -62,6 +72,7 @@ BARRIER_FLASH_OPACITY = 255     # Peak opacity during a barrier flash (0-255).
 BARRIER_FLASH_DECAY = 4      # How fast barrier flashes fade per second. Higher = faster fade.
 BARRIER_WAVE_PUSH = 400      # Force magnitude when pulses hit the barrier. Higher = more barrier wobble.
 BARRIER_DAMPING = 0.04          # Damping factor for barrier deformation velocity. Lower = more oscillation.
+BARRIER_TENSION = 4.0           # Membrane tension: per second, each barrier vertex relaxes this strongly toward its neighbours' average radius. Keeps the ring a smooth closed curve under load instead of folding into spikes / a self-crossing web. 0 = no smoothing.
 BARRIER_DEFORM_THRESHOLD = 0.1  # Minimum radius change (pixels) to trigger a flash effect.
 BARRIER_HEAVY_MASS_THRESHOLD = 100  # Combined mass near a barrier section that weakens containment. Higher = harder to break out.
 BARRIER_SMOOTHING_PASSES = 3    # Number of smoothing iterations when drawing the barrier. More = smoother shape.
@@ -77,7 +88,8 @@ MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 6     # How strongly massive clouds dent
 STAR_BARRIER_GRAVITY_FACTOR = 0.005    # Gravity multiplier for ignited stars vs barrier. Stronger than clouds.
 STAR_BARRIER_DEFORM_FACTOR = 10        # How strongly stars dent the barrier on approach.
 
-BLACK_HOLE_BARRIER_DEFORM_FACTOR = 80    # How strongly black holes dent the barrier. Very high.
+BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.08  # Gravity multiplier for black holes vs barrier (the only thing the barrier attracts). Kept gentle: a stronger pull flings holes around faster than their disks rotate, smearing the swirl.
+BLACK_HOLE_BARRIER_DEFORM_FACTOR = 40    # How strongly black holes dent the barrier.
 BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.01  # How much nearby mass weakens containment for black holes. Higher = escapes more easily.
 BLACK_HOLE_BARRIER_PUSH_STRENGTH = 10    # Base push force applied to black holes hitting the barrier boundary.
 
@@ -94,7 +106,7 @@ MOLECULAR_CLOUD_START_SIZE = 20 # Initial visual size of clouds in pixels.
 MOLECULAR_CLOUD_MIN_SIZE = 6    # Smallest a cloud can shrink to as it gains mass.
 MOLECULAR_CLOUD_GROWTH_RATE = 0.06  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
 MOLECULAR_CLOUD_START_MASS = 1  # Initial mass of each cloud.
-MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.003 * GRAVITY_SCALE  # Gravitational attraction between clouds. Very low to prevent instant clumping.
+MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0004 * GRAVITY_SCALE  # Gravitational attraction between clouds/stars. Kept weak so entities don't clump on their own — black holes are the organizers, not entity-entity gravity.
 MOLECULAR_CLOUD_MERGE_CHANCE = 0.12  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
 MOLECULAR_CLOUD_MAX_MASS = 48   # Maximum mass a cloud/star can reach. Caps growth.
 MOLECULAR_CLOUD_START_COLORS = [
@@ -176,13 +188,29 @@ PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.001
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
 BLACK_HOLE_CHANCE = 0.0001      # Per-frame probability a qualifying star becomes a black hole. Very rare.
-BLACK_HOLE_RADIUS = 10           # Visual radius divisor — smaller value = larger drawn black hole (mass / this).
-BLACK_HOLE_MAX_MASS = 72        # Maximum mass a black hole can accumulate.
-BLACK_HOLE_GRAVITY_CONSTANT = 12 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds.
+BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead).
+BLACK_HOLE_RADIUS = 14           # Visual radius divisor — smaller value = larger drawn black hole (mass / this). Shrinks the drawn disk and event horizon without changing gravitational mass.
+BLACK_HOLE_MAX_MASS = 180       # Maximum mass a black hole can accumulate.
+BLACK_HOLE_GRAVITY_CONSTANT = 30 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds; raised so disk clouds orbit faster (more visible swirl) and bind tighter.
 BLACK_HOLE_GROWTH_RATE = 1      # Maximum mass gained per second from the accretion buffer. Must stay below minimum decay rate (~1.23/sec at max mass) so BHs always net-decay.
 BLACK_HOLE_DECAY_RATE = 50    # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
-BLACK_HOLE_GRAVITY_SOFTENING = 5     # Softening length (pixels) added to BH gravity denominator. Prevents catastrophic close-range force spikes when entities are nearly touching.
+BLACK_HOLE_GRAVITY_SOFTENING = 3     # Softening length (pixels) added to BH gravity denominator. Lower = steeper well = sharper slingshots, but less stable. Prevents catastrophic close-range force spikes.
+# The event horizon (where matter is actually consumed) is decoupled from the drawn disk
+# (border_radius). Making it a fraction of the visual radius leaves an annulus where clouds
+# can swing close, get flung by the steep gravity well, and orbit instead of vanishing on touch.
+BLACK_HOLE_EVENT_HORIZON_FACTOR = 0.4  # Consume radius as a fraction of the visual radius. Lower = more slingshots/orbits, less consumption.
+BLACK_HOLE_MIN_CAPTURE_RADIUS = 2      # Absolute floor (pixels) for the consume radius so small black holes still capture and fast entities can't tunnel through.
+# Frame-dragging swirl: near a hole, each cloud's velocity vector is gently rotated, curving
+# straight infall into a rotating accretion disk. Rotation conserves speed (no energy is added),
+# so the swirl can't blow up. Direction follows the hole's spin (angular_momentum).
+BLACK_HOLE_SWIRL_RATE = 5.0            # Relaxation rate (per second) at which disk clouds are driven toward circular-orbit speed; fades to 0 at the swirl radius. Higher = stronger/faster swirl.
+BLACK_HOLE_SWIRL_RADIUS = 110         # Disk radius (pixels) at the reference mass below. Scales with hole mass, so a massive hole organizes/swirls entities from much farther out than a small one.
+BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equals BLACK_HOLE_SWIRL_RADIUS. A 2x-mass hole reaches 2x as far.
+# Dynamical friction: a massive hole plowing through the cloud sea is gravitationally braked.
+# Modeled as strong extra velocity damping (per second) so holes act as near-stationary anchors
+# instead of being dragged along by accretion and bulk flows. 1.0 = no extra braking.
+BLACK_HOLE_VELOCITY_DAMPING = 0.15    # Per-second velocity retention for black holes. Strong anchor so a hole drifts SLOWER than its disk rotates — otherwise the disk smears into a comet instead of a visible swirl. Higher = roams more (smears the swirl).
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
 BLACK_HOLE_BORDER_COLOR = (100, 0, 0)  # RGB color of the event horizon ring (dark red).
 BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)  # RGBA color of the gravitational wave pulse from BH mergers.
@@ -324,18 +352,19 @@ class Barrier:
         return angle, dist, dx, dy
 
     def apply_gravity(self, state, delta_time):
+        # The barrier only pulls on black holes. Clouds and other matter are organized purely by
+        # black-hole gravity, so they clump into galaxies that get carried along as the barrier
+        # tugs each hole around. (Containment of clouds is still handled separately by enforce().)
         cx, cy = self.center
-        for mc in state.molecular_clouds:
-            angle, dist, dx, dy = self._entity_angle_and_dist(mc)
+        for bh in state.black_holes:
+            angle, dist, dx, dy = self._entity_angle_and_dist(bh)
             barrier_r = self.get_radius_at_angle(angle)
-            target_dx = cx + barrier_r * math.cos(angle) - mc.x
-            target_dy = cy + barrier_r * math.sin(angle) - mc.y
+            target_dx = cx + barrier_r * math.cos(angle) - bh.x
+            target_dy = cy + barrier_r * math.sin(angle) - bh.y
             target_dist = max(math.hypot(target_dx, target_dy), 1)
-            grav_factor = STAR_BARRIER_GRAVITY_FACTOR if mc.is_star else MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR
-            force = (BARRIER_GRAVITY_CONSTANT * math.sqrt(mc.mass) / (target_dist ** 2)) * grav_factor
-            if target_dist > mc.size / 2:
-                mc.vx += (target_dx / target_dist) * force * delta_time
-                mc.vy += (target_dy / target_dist) * force * delta_time
+            force = (BARRIER_GRAVITY_CONSTANT * math.sqrt(bh.mass) / (target_dist ** 2)) * BLACK_HOLE_BARRIER_GRAVITY_FACTOR
+            bh.vx += (target_dx / target_dist) * force * delta_time
+            bh.vy += (target_dy / target_dist) * force * delta_time
 
 
     def _accum_deformation(self, entity, mass_accum, step, proximity_threshold, factor):
@@ -378,6 +407,15 @@ class Barrier:
 
             if abs(self.radii[i] - old_radius) > BARRIER_DEFORM_THRESHOLD:
                 self.flash[i] = 1.0
+
+        # Membrane tension: relax each vertex toward its neighbours (Laplacian smoothing on the closed
+        # loop) so the barrier deforms as a smooth elastic curve instead of folding into a spiky web.
+        n = self.num_points
+        smooth = min(0.9, BARRIER_TENSION * delta_time)
+        base = self.radii[:]
+        for i in range(n):
+            neighbor_avg = 0.5 * (base[i - 1] + base[(i + 1) % n])
+            self.radii[i] = base[i] + (neighbor_avg - base[i]) * smooth
 
         decay = math.exp(-BARRIER_FLASH_DECAY * delta_time)
         for i in range(self.num_points):
@@ -745,13 +783,20 @@ class BlackHole:
         pygame.draw.circle(screen, BLACK_HOLE_DISK_COLOR, (int(tracer_x), int(tracer_y)), BLACK_HOLE_DISK_SIZE)
 
     def attract(self, state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove):
+        # Event horizon: the radius at which matter is actually consumed. Smaller than the
+        # drawn disk so clouds can skim the surface and slingshot away instead of being eaten.
+        capture_radius = max(BLACK_HOLE_MIN_CAPTURE_RADIUS, self.border_radius * BLACK_HOLE_EVENT_HORIZON_FACTOR)
+        # Disk/influence radius scales with mass, so massive holes organize entities from much farther out.
+        swirl_radius = BLACK_HOLE_SWIRL_RADIUS * (self.mass / BLACK_HOLE_SWIRL_REFERENCE_MASS)
         for black_hole in state.black_holes:
             if black_hole is not self and black_hole not in bh_to_remove:
                 dx = self.x - black_hole.x
                 dy = self.y - black_hole.y
                 distance = max(math.hypot(dx, dy), 1)
 
-                if self.mass >= black_hole.mass and distance < self.border_radius and (self.mass > black_hole.mass or self.id > black_hole.id):
+                other_capture = max(BLACK_HOLE_MIN_CAPTURE_RADIUS, black_hole.border_radius * BLACK_HOLE_EVENT_HORIZON_FACTOR)
+                merge_distance = capture_radius + other_capture
+                if self.mass >= black_hole.mass and distance < merge_distance and (self.mass > black_hole.mass or self.id > black_hole.id):
                     bh_to_remove.add(black_hole)
                     # Transfer angular momentum from merger
                     rel_vx = black_hole.vx - self.vx
@@ -778,7 +823,7 @@ class BlackHole:
             dy = self.y - entity.y
             distance = max(math.hypot(dx, dy), 1)
             # Check both current distance and swept trajectory for tunneling prevention
-            captured = distance < self.border_radius or check_swept_collision(entity, self.x, self.y, self.border_radius, delta_time)
+            captured = distance < capture_radius or check_swept_collision(entity, self.x, self.y, capture_radius, delta_time)
             if captured:
                 mc_to_remove.add(entity)
                 # Transfer angular momentum from off-center accretion: L = r x p
@@ -794,11 +839,30 @@ class BlackHole:
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
-                # Newton's 3rd law: MC pulled toward BH, BH pulled toward MC
-                entity.vx += (dx / soft_dist) * force * delta_time
-                entity.vy += (dy / soft_dist) * force * delta_time
-                self.vx -= (dx / soft_dist) * force * delta_time
-                self.vy -= (dy / soft_dist) * force * delta_time
+                # Newton's 3rd law with inertia: the cloud takes the full kick, but the
+                # BH's recoil is scaled by the mass ratio so a heavy hole barely budges.
+                ux, uy = dx / soft_dist, dy / soft_dist
+                kick = force * delta_time
+                entity.vx += ux * kick
+                entity.vy += uy * kick
+                # Frame-dragging: drive the cloud's tangential velocity (relative to the hole) toward
+                # the circular-orbit speed, building a real rotating disk. Relaxation, so it's bounded;
+                # the radial/shared drift is untouched, so the galaxy still translates as a unit.
+                if distance < swirl_radius:
+                    swirl_dir = 1.0 if self.angular_momentum >= 0 else -1.0
+                    tx, ty = -uy, ux                              # unit tangential direction
+                    rvx = entity.vx - self.vx
+                    rvy = entity.vy - self.vy
+                    cur_t = rvx * tx + rvy * ty                   # current tangential speed (signed)
+                    target_t = swirl_dir * math.sqrt(force * distance)  # circular-orbit speed at this radius
+                    falloff = 1.0 - distance / swirl_radius
+                    blend = min(1.0, BLACK_HOLE_SWIRL_RATE * falloff * delta_time)
+                    dvt = (target_t - cur_t) * blend
+                    entity.vx += dvt * tx
+                    entity.vy += dvt * ty
+                recoil = kick * (entity.mass / self.mass)
+                self.vx -= ux * recoil
+                self.vy -= uy * recoil
 
         for entity in state.neutron_stars:
             if entity in ns_to_remove:
@@ -806,7 +870,7 @@ class BlackHole:
             dx = self.x - entity.x
             dy = self.y - entity.y
             distance = max(math.hypot(dx, dy), 1)
-            captured = distance < self.border_radius or check_swept_collision(entity, self.x, self.y, self.border_radius, delta_time)
+            captured = distance < capture_radius or check_swept_collision(entity, self.x, self.y, capture_radius, delta_time)
             if captured:
                 ns_to_remove.add(entity)
                 # Transfer angular momentum from off-center accretion
@@ -822,11 +886,14 @@ class BlackHole:
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
-                # Newton's 3rd law: NS pulled toward BH, BH pulled toward NS
-                entity.vx += (dx / soft_dist) * force * delta_time
-                entity.vy += (dy / soft_dist) * force * delta_time
-                self.vx -= (dx / soft_dist) * force * delta_time
-                self.vy -= (dy / soft_dist) * force * delta_time
+                # Newton's 3rd law with inertia: NS takes the full kick, BH recoil scaled by mass ratio.
+                ux, uy = dx / soft_dist, dy / soft_dist
+                kick = force * delta_time
+                entity.vx += ux * kick
+                entity.vy += uy * kick
+                recoil = kick * (entity.mass / self.mass)
+                self.vx -= ux * recoil
+                self.vy -= uy * recoil
 
     def decay(self, delta_time):
         if self.accretion_mass > 0:
@@ -990,11 +1057,14 @@ class NeutronStar:
 
             force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
 
-            # Newton's 3rd law: equal and opposite forces
-            self.vx += (dx / distance) * force * delta_time
-            self.vy += (dy / distance) * force * delta_time
-            black_hole.vx -= (dx / distance) * force * delta_time
-            black_hole.vy -= (dy / distance) * force * delta_time
+            # Newton's 3rd law with inertia: NS takes the full kick, BH recoil scaled by mass ratio.
+            ux, uy = dx / distance, dy / distance
+            kick = force * delta_time
+            self.vx += ux * kick
+            self.vy += uy * kick
+            recoil = kick * (self.mass / black_hole.mass)
+            black_hole.vx -= ux * recoil
+            black_hole.vy -= uy * recoil
 
     def decay(self, delta_time):
         self.mass -= NEUTRON_STAR_DECAY_RATE * delta_time
@@ -1033,6 +1103,127 @@ def integrate_entity(entity, delta_time):
     entity.vy *= damping
     entity.x += entity.vx * delta_time
     entity.y += entity.vy * delta_time
+
+
+class _BHNode:
+    """A quadtree node for Barnes-Hut. Leaves hold a small list of bodies; internal
+    nodes hold four children plus the aggregate mass and center of mass of their subtree."""
+    __slots__ = ('x0', 'y0', 'size', 'cx', 'cy', 'mass', 'bodies', 'children', 'depth')
+
+    def __init__(self, x0, y0, size, depth):
+        self.x0 = x0
+        self.y0 = y0
+        self.size = size
+        self.depth = depth
+        self.cx = 0.0       # center-of-mass x of everything in this subtree
+        self.cy = 0.0       # center-of-mass y
+        self.mass = 0.0     # total mass in this subtree
+        self.bodies = None  # leaf: list of clouds (usually length 1)
+        self.children = None  # internal: [NW-ish, ...] of 4 quadrants (None where empty)
+
+    def insert(self, b):
+        # Fold this body into the running center of mass before structural changes.
+        if self.mass == 0.0:
+            self.cx, self.cy = b.x, b.y
+        else:
+            total = self.mass + b.mass
+            self.cx = (self.cx * self.mass + b.x * b.mass) / total
+            self.cy = (self.cy * self.mass + b.y * b.mass) / total
+        self.mass += b.mass
+
+        if self.children is not None:
+            self._place(b)
+            return
+        if self.bodies is None:
+            self.bodies = [b]
+            return
+        # Leaf already occupied. Either bucket (at max depth) or subdivide.
+        if self.depth >= BARNES_HUT_MAX_DEPTH:
+            self.bodies.append(b)
+            return
+        old = self.bodies
+        self.bodies = None
+        self.children = [None, None, None, None]
+        for ob in old:
+            self._place(ob)
+        self._place(b)
+
+    def _place(self, b):
+        half = self.size * 0.5
+        idx, nx, ny = 0, self.x0, self.y0
+        if b.x >= self.x0 + half:
+            idx += 1
+            nx = self.x0 + half
+        if b.y >= self.y0 + half:
+            idx += 2
+            ny = self.y0 + half
+        child = self.children[idx]
+        if child is None:
+            child = _BHNode(nx, ny, half, self.depth + 1)
+            self.children[idx] = child
+        child.insert(b)
+
+
+def _build_bh_tree(clouds):
+    if not clouds:
+        return None
+    minx = min(c.x for c in clouds)
+    maxx = max(c.x for c in clouds)
+    miny = min(c.y for c in clouds)
+    maxy = max(c.y for c in clouds)
+    # Square root cell that comfortably encloses every cloud.
+    size = max(maxx - minx, maxy - miny, 1.0) * 1.0001 + 1.0
+    root = _BHNode(minx, miny, size, 0)
+    for c in clouds:
+        root.insert(c)
+    return root
+
+
+def apply_mc_gravity_bh(state, delta_time):
+    """Long-range all-pairs cloud gravity via Barnes-Hut. Matches the force formula of
+    apply_mc_gravity (mass-weighted, constant MOLECULAR_CLOUD_GRAVITY_CONSTANT) but sums
+    over the whole field instead of only spatial-hash neighbors."""
+    clouds = state.molecular_clouds
+    root = _build_bh_tree(clouds)
+    if root is None:
+        return
+    theta_sq = BARNES_HUT_THETA * BARNES_HUT_THETA
+    soft_sq = BARNES_HUT_SOFTENING * BARNES_HUT_SOFTENING
+    G = MOLECULAR_CLOUD_GRAVITY_CONSTANT
+    for b in clouds:
+        bx, by, bmass = b.x, b.y, b.mass
+        fx = fy = 0.0
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            if node.children is None:
+                for other in node.bodies:
+                    if other is b:
+                        continue
+                    ddx = other.x - bx
+                    ddy = other.y - by
+                    d2 = ddx * ddx + ddy * ddy + soft_sq
+                    inv = 1.0 / math.sqrt(d2)
+                    f = G * bmass * other.mass / d2
+                    fx += ddx * inv * f
+                    fy += ddy * inv * f
+                continue
+            dx = node.cx - bx
+            dy = node.cy - by
+            dist_sq = dx * dx + dy * dy
+            # Opening criterion: treat the node as a single mass when size/dist < theta.
+            if node.size * node.size < theta_sq * dist_sq:
+                d2 = dist_sq + soft_sq
+                inv = 1.0 / math.sqrt(d2)
+                f = G * bmass * node.mass / d2
+                fx += dx * inv * f
+                fy += dy * inv * f
+            else:
+                for c in node.children:
+                    if c is not None:
+                        stack.append(c)
+        b.vx += fx * delta_time
+        b.vy += fy * delta_time
 
 
 def apply_mc_gravity(state, delta_time):
@@ -1093,7 +1284,7 @@ def update_entities(state):
     new_clouds = []
     for molecular_cloud in state.molecular_clouds:
         molecular_cloud.update()
-        if molecular_cloud.mass > BLACK_HOLE_THRESHOLD:
+        if molecular_cloud.mass > BLACK_HOLE_THRESHOLD and len(state.black_holes) < BLACK_HOLE_MAX_COUNT:
             bh_chance = PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE if molecular_cloud.element_index >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY else BLACK_HOLE_CHANCE
             if random.random() < bh_chance:
                 if random.random() < NEUTRON_STAR_CHANCE:
@@ -1226,7 +1417,10 @@ def update_simulation_state(state, ring, delta_time):
     state.spatial_hash.clear()
     state.spatial_hash.bulk_insert(state.molecular_clouds)
 
-    apply_mc_gravity(state, delta_time)
+    if BARNES_HUT_ENABLED:
+        apply_mc_gravity_bh(state, delta_time)
+    else:
+        apply_mc_gravity(state, delta_time)
     update_entities(state)
 
     ring.apply_gravity(state, delta_time)
@@ -1432,7 +1626,13 @@ def update_simulation_state(state, ring, delta_time):
 
     for mc in state.molecular_clouds:
         integrate_entity(mc, delta_time)
+    # Absolute anchoring: strong velocity damping toward rest so holes act as fixed galactic centers.
+    # Their gravity still binds and swirls a halo, but they don't get dragged around by the turbulent
+    # cloud medium. (Trades away co-moving galaxies and orbiting binaries — see the constant's note.)
+    bh_damping = BLACK_HOLE_VELOCITY_DAMPING ** delta_time
     for bh in state.black_holes:
+        bh.vx *= bh_damping
+        bh.vy *= bh_damping
         integrate_entity(bh, delta_time)
     for ns in state.neutron_stars:
         integrate_entity(ns, delta_time)
