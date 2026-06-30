@@ -88,7 +88,7 @@ MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 6     # How strongly massive clouds dent
 STAR_BARRIER_GRAVITY_FACTOR = 0.005    # Gravity multiplier for ignited stars vs barrier. Stronger than clouds.
 STAR_BARRIER_DEFORM_FACTOR = 10        # How strongly stars dent the barrier on approach.
 
-BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.08  # Gravity multiplier for black holes vs barrier (the only thing the barrier attracts). Kept gentle: a stronger pull flings holes around faster than their disks rotate, smearing the swirl.
+BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.025  # Gravity multiplier for black holes vs barrier (the only thing the barrier attracts). Gentle so holes stay central and their disks don't overhang the barrier edge (overhanging clouds get pinned to the edge by enforce()).
 BLACK_HOLE_BARRIER_DEFORM_FACTOR = 40    # How strongly black holes dent the barrier.
 BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.01  # How much nearby mass weakens containment for black holes. Higher = escapes more easily.
 BLACK_HOLE_BARRIER_PUSH_STRENGTH = 10    # Base push force applied to black holes hitting the barrier boundary.
@@ -190,7 +190,7 @@ BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a bl
 BLACK_HOLE_CHANCE = 0.0001      # Per-frame probability a qualifying star becomes a black hole. Very rare.
 BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead).
 BLACK_HOLE_RADIUS = 14           # Visual radius divisor — smaller value = larger drawn black hole (mass / this). Shrinks the drawn disk and event horizon without changing gravitational mass.
-BLACK_HOLE_MAX_MASS = 180       # Maximum mass a black hole can accumulate.
+BLACK_HOLE_MAX_MASS = 115       # Maximum mass a black hole can accumulate. Capped lower so no single hole grows into an overwhelming dominant one.
 BLACK_HOLE_GRAVITY_CONSTANT = 30 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds; raised so disk clouds orbit faster (more visible swirl) and bind tighter.
 BLACK_HOLE_GROWTH_RATE = 1      # Maximum mass gained per second from the accretion buffer. Must stay below minimum decay rate (~1.23/sec at max mass) so BHs always net-decay.
 BLACK_HOLE_DECAY_RATE = 50    # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
@@ -205,7 +205,7 @@ BLACK_HOLE_MIN_CAPTURE_RADIUS = 2      # Absolute floor (pixels) for the consume
 # straight infall into a rotating accretion disk. Rotation conserves speed (no energy is added),
 # so the swirl can't blow up. Direction follows the hole's spin (angular_momentum).
 BLACK_HOLE_SWIRL_RATE = 5.0            # Relaxation rate (per second) at which disk clouds are driven toward circular-orbit speed; fades to 0 at the swirl radius. Higher = stronger/faster swirl.
-BLACK_HOLE_SWIRL_RADIUS = 110         # Disk radius (pixels) at the reference mass below. Scales with hole mass, so a massive hole organizes/swirls entities from much farther out than a small one.
+BLACK_HOLE_SWIRL_RADIUS = 140         # Disk radius (pixels) at the reference mass below. Scales with hole mass, so a massive hole organizes/swirls entities from much farther out than a small one.
 BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equals BLACK_HOLE_SWIRL_RADIUS. A 2x-mass hole reaches 2x as far.
 # Dynamical friction: a massive hole plowing through the cloud sea is gravitationally braked.
 # Modeled as strong extra velocity damping (per second) so holes act as near-stationary anchors
@@ -219,7 +219,8 @@ BLACK_HOLE_DISK_SIZE = 1                   # Visual size in pixels of the accret
 BLACK_HOLE_DISK_ROTATION = 10            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
 BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION = 0.999  # Per-second dissipation rate for black hole angular momentum (spin-down).
 BLACK_HOLE_PULSE_SPEED_MULTIPLIER = 1.5  # Speed multiplier applied to BH merger pulses relative to NS ripple speed.
-BLACK_HOLE_PULSE_MASS_SCALE = 5        # Divisor for consumed mass when scaling BH merger pulse forces.
+BLACK_HOLE_PULSE_MASS_SCALE = 3.5      # Divisor for consumed mass when scaling merger pulse force on the BARRIER. Lower = stronger barrier ripple on a merger.
+BLACK_HOLE_PULSE_ENTITY_FACTOR = 0.3   # Extra multiplier applied to the pulse's push on ENTITIES (clouds/holes/neutron stars) only, not the barrier. <1 so the wave wobbles the barrier strongly but doesn't blast galaxies apart.
 
 # ── Black Hole Decay (when BH evaporates) ──
 BLACK_HOLE_DECAY_CLOUD_COUNT = 6       # Number of heavy clouds spawned when a BH evaporates.
@@ -1442,8 +1443,11 @@ def update_simulation_state(state, ring, delta_time):
         # Track energy budget from consumed mass
         energy_budget = consumed_mass
 
-        # BH merger pulse: force scales with consumed mass (heavier mergers = stronger waves)
+        # BH merger pulse: force scales with consumed mass (heavier mergers = stronger waves).
+        # mass_scale drives the barrier ripple; entity_mass_scale is weaker so the wave shakes the
+        # barrier hard without blasting clouds/holes/neutron stars out of their galaxies.
         mass_scale = consumed_mass / BLACK_HOLE_PULSE_MASS_SCALE
+        entity_mass_scale = mass_scale * BLACK_HOLE_PULSE_ENTITY_FACTOR
         bh_ew = NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3
         bh_r_inner = max(0, radius - bh_ew)
         bh_r_outer = radius + bh_ew
@@ -1462,7 +1466,7 @@ def update_simulation_state(state, ring, delta_time):
             ripple_dist = abs(distance - radius)
             if ripple_dist < bh_ew:
                 effect_factor = 1.0 - (ripple_dist / bh_ew)
-                force = NEUTRON_STAR_PULSE_STRENGTH * 3 * effect_factor * mass_scale / ((ripple_dist + 1) ** 1.5)
+                force = NEUTRON_STAR_PULSE_STRENGTH * 3 * effect_factor * entity_mass_scale / ((ripple_dist + 1) ** 1.5)
 
                 if distance > 0:
                     molecular_cloud.vx += (dx / distance) * force * delta_time
@@ -1479,7 +1483,7 @@ def update_simulation_state(state, ring, delta_time):
             ripple_dist = abs(distance - radius)
             if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4:
                 effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4))
-                force = NEUTRON_STAR_PULSE_STRENGTH * 2 * effect_factor * mass_scale / ((ripple_dist + 1) ** 2)
+                force = NEUTRON_STAR_PULSE_STRENGTH * 2 * effect_factor * entity_mass_scale / ((ripple_dist + 1) ** 2)
 
                 if distance > 0:
                     black_hole.vx += (dx / distance) * force * delta_time
@@ -1496,7 +1500,7 @@ def update_simulation_state(state, ring, delta_time):
             ripple_dist = abs(distance - radius)
             if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
                 effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3))
-                force = NEUTRON_STAR_PULSE_STRENGTH * 2.5 * effect_factor * mass_scale / ((ripple_dist + 1) ** 1.8)
+                force = NEUTRON_STAR_PULSE_STRENGTH * 2.5 * effect_factor * entity_mass_scale / ((ripple_dist + 1) ** 1.8)
 
                 if distance > 0:
                     neutron_star.vx += (dx / distance) * force * delta_time
