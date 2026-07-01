@@ -4,6 +4,12 @@ import math
 import random
 import bisect
 
+import numpy as _np
+try:
+    from sim import fastphysics as _fastphysics  # compiled hot loops (build: python setup_fastphysics.py build_ext --inplace)
+except Exception:
+    _fastphysics = None
+
 
 # ── Display ──
 BACKGROUND_COLOR = (0, 10, 20) # RGB background color (dark blue-black, like space).
@@ -32,7 +38,8 @@ SPATIAL_HASH_CELL_SIZE = 40     # Cell size (pixels) for the spatial hash grid. 
 # every other) approximated in O(N log N) via a quadtree, instead of the short-range
 # spatial-hash neighbor model. This enables emergent large-scale structure but changes
 # the tuned local-clumping behavior — expect to retune MOLECULAR_CLOUD_GRAVITY_CONSTANT.
-BARNES_HUT_ENABLED = False      # Toggle Barnes-Hut cloud gravity. False = cheap short-range spatial-hash model (~3x faster; cloud-cloud gravity is negligible now that black holes are the organizers).
+GPU_GRAVITY_ENABLED = True      # Use the Taichi GPU kernel for cloud/star gravity when available (exact all-pairs). Falls back to Barnes-Hut/spatial-hash on CPU if Taichi/GPU is unavailable.
+BARNES_HUT_ENABLED = True       # Toggle Barnes-Hut cloud/star gravity (long-range). Gravity is the organizing force; False = cheap short-range spatial-hash model.
 BARNES_HUT_THETA = 0.7          # Opening angle. Lower = more accurate & slower (0 = brute force O(N^2)).
 BARNES_HUT_SOFTENING = 2.0      # Softening length (pixels) added to the force denominator to prevent close-range spikes.
 BARNES_HUT_MAX_DEPTH = 28       # Max quadtree depth. Caps recursion when many clouds share near-identical positions.
@@ -62,7 +69,9 @@ CMB_DENSITY_CONTRAST = 0.8     # How strongly barrier shape biases initial cloud
                                 # clustering in dented regions (can leave large voids elsewhere).
 
 # ── Barrier (cosmic boundary ring) ──
-BARRIER_POINT_COUNT = 640       # Number of vertices defining the barrier ring. More = smoother circle, but slower.
+BARRIER_POINT_COUNT = 240       # Number of vertices defining the barrier ring. More = smoother circle, but slower (drawing + deformation + contact all scale with this, per universe).
+MOLECULAR_CLOUD_MAX_PER_UNIVERSE = 500  # Hard cap on clouds in a single universe. Bounds per-frame physics AND rendering cost so the sim doesn't degrade as matter regenerates. Excess (lowest-mass) clouds are trimmed.
+MULTIVERSE_MAX_CLOUDS = 2000    # Hard cap on total clouds across ALL universes — bounds the whole frame regardless of how many universes spawn. Lowest-mass clouds are trimmed globally.
 BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
 BARRIER_GRAVITY_CONSTANT = 70 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Reduced so it contains without out-competing black holes for nearby clumping.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
@@ -106,7 +115,8 @@ MOLECULAR_CLOUD_START_SIZE = 20 # Initial visual size of clouds in pixels.
 MOLECULAR_CLOUD_MIN_SIZE = 6    # Smallest a cloud can shrink to as it gains mass.
 MOLECULAR_CLOUD_GROWTH_RATE = 0.06  # How fast clouds visually shrink as they gain mass. Higher = shrinks faster.
 MOLECULAR_CLOUD_START_MASS = 1  # Initial mass of each cloud.
-MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0004 * GRAVITY_SCALE  # Gravitational attraction between clouds/stars. Kept weak so entities don't clump on their own — black holes are the organizers, not entity-entity gravity.
+MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0015 * GRAVITY_SCALE  # Base gravitational attraction for the diffuse cloud/star field. Weak: clouds barely self-organize — they condense onto denser objects (stars, black holes).
+STAR_GRAVITY_MULTIPLIER = 5.0   # Extra gravitational "charge" a star carries beyond its raw mass, making it a moderate condensation seed (a distinct tier between weak clouds and strong black holes).
 MOLECULAR_CLOUD_MERGE_CHANCE = 0.12  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging.
 MOLECULAR_CLOUD_MAX_MASS = 48   # Maximum mass a cloud/star can reach. Caps growth.
 MOLECULAR_CLOUD_START_COLORS = [
@@ -191,7 +201,7 @@ BLACK_HOLE_CHANCE = 0.0001      # Per-frame probability a qualifying star become
 BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead).
 
 # ── Multiverse (each black-hole birth opens a new universe outside the current ones) ──
-UNIVERSE_MAX_COUNT = 10         # Hard cap on coexisting universes. New ones stop spawning at this many.
+UNIVERSE_MAX_COUNT = max(2, os.cpu_count() or 4)  # Cap coexisting universes at the machine's core count — one core per universe when stepped in parallel.
 BLACK_HOLE_RIP_MASS_FACTOR = 0.9  # Fraction of max mass a hole must reach to "rip" open a new universe. <1 because decay keeps holes hovering just under the hard cap.
 UNIVERSE_RIP_TRANSFER_FRACTION = 0.4  # Fraction of the source universe's clouds pulled through into a newly ripped universe (instead of spawning fresh matter). Keeps total entity count bounded.
 UNIVERSE_STREAM_FRACTION = 0.6  # After ripping, chance each cloud the hole accretes is streamed into its child universe (wormhole) instead of being consumed. 0 = one-time transfer only; 1 = everything it eats flows through.
@@ -225,7 +235,7 @@ BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equa
 BLACK_HOLE_VELOCITY_DAMPING = 0.15    # Per-second velocity retention for black holes. Strong anchor so a hole drifts SLOWER than its disk rotates — otherwise the disk smears into a comet instead of a visible swirl. Higher = roams more (smears the swirl).
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
 BLACK_HOLE_BORDER_COLOR = (100, 0, 0)  # RGB color of the event horizon ring (dark red).
-BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 100)  # RGBA color of the gravitational wave pulse from BH mergers.
+BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 200)  # RGBA color of the gravitational wave pulse from BH mergers.
 BLACK_HOLE_DISK_COLOR = (255, 100, 100)    # RGB color of the accretion disk tracer dot (light red).
 BLACK_HOLE_DISK_SIZE = 1                   # Visual size in pixels of the accretion disk tracer.
 BLACK_HOLE_DISK_ROTATION = 10            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
@@ -249,7 +259,7 @@ NEUTRON_STAR_DECAY_THRESHOLD = 0.8  # Mass at which a neutron star dissipates in
 NEUTRON_STAR_COLOR = (0, 120, 255)  # RGB color of the neutron star (cyan-blue).
 NEUTRON_STAR_PULSE_RATE = 0.015  # Seconds between pulsar pulses. Lower = faster pulsing.
 NEUTRON_STAR_PULSE_STRENGTH = 7 # Force magnitude of each pulse ripple. Higher = stronger push on nearby entities.
-NEUTRON_STAR_PULSE_COLOR = (0, 140, 255, 210)  # RGBA color of the expanding pulse ring.
+NEUTRON_STAR_PULSE_COLOR = (0, 140, 255, 245)  # RGBA color of the expanding pulse ring.
 NEUTRON_STAR_PULSE_WIDTH = 2    # Line width (pixels) for drawing pulse rings.
 NEUTRON_STAR_RIPPLE_SPEED = 64  # How fast (pixels/sec) pulse ripples expand outward.
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripples exert force on entities.
@@ -738,21 +748,21 @@ class MolecularCloud:
         if self.is_star:
             pygame.draw.rect(screen, self.color, (draw_x, draw_y, self.size, self.size))
             return
-        # Non-star cloud: draw as a cluster of small circles.
-        # Count grows linearly from 3 as the cloud shrinks (gains mass).
-        num_circles = 3 + (MOLECULAR_CLOUD_START_SIZE - self.size) // 4
-        circle_r = max(1, int(self.size * 0.3))
+        # Non-star cloud: original translucent rendering (per-cloud alpha surface + blit for the
+        # correct colour/opacity), but the cluster elements are square blocks, not circles.
+        num_blocks = 3 + (MOLECULAR_CLOUD_START_SIZE - self.size) // 4
+        block_r = max(1, int(self.size * 0.3))
         center_x = int(self.x + self.size / 2 + offset_x)
         center_y = int(self.y + self.size / 2 + offset_y)
         s = _get_molecular_cloud_surface(self.size)  # size*2 x size*2
         s.fill((0, 0, 0, 0))
         rgba = self.color + (self.opacity,)
         half = self.size  # surface width // 2 == size
-        for i in range(min(num_circles, len(self._circle_offsets))):
+        for i in range(min(num_blocks, len(self._circle_offsets))):
             ox, oy = self._circle_offsets[i]
             cx = int(half + ox * self.size)
             cy = int(half + oy * self.size)
-            pygame.draw.circle(s, rgba, (cx, cy), circle_r)
+            pygame.draw.rect(s, rgba, (cx - block_r, cy - block_r, block_r * 2, block_r * 2))
         screen.blit(s, (center_x - half, center_y - half))
 
     def update(self):
@@ -1174,13 +1184,15 @@ class _BHNode:
 
     def insert(self, b):
         # Fold this body into the running center of mass before structural changes.
+        # Uses grav_mass (mass tiered by type) so stars pull as a stronger tier than clouds.
+        bm = b.grav_mass
         if self.mass == 0.0:
             self.cx, self.cy = b.x, b.y
         else:
-            total = self.mass + b.mass
-            self.cx = (self.cx * self.mass + b.x * b.mass) / total
-            self.cy = (self.cy * self.mass + b.y * b.mass) / total
-        self.mass += b.mass
+            total = self.mass + bm
+            self.cx = (self.cx * self.mass + b.x * bm) / total
+            self.cy = (self.cy * self.mass + b.y * bm) / total
+        self.mass += bm
 
         if self.children is not None:
             self._place(b)
@@ -1230,11 +1242,82 @@ def _build_bh_tree(clouds):
     return root
 
 
+# ── GPU gravity (Taichi) ─────────────────────────────────────────────────────────────────────
+# Exact all-pairs cloud/star gravity on the GPU. Universes are gravitationally independent, so we
+# run one kernel launch per universe over its own clouds. Matches the CPU force formula (tiered
+# grav_mass, softening) but computes every pair exactly — a GPU does this far faster than a CPU tree.
+_ti_state = {"ready": False, "ok": False, "kernel": None, "np": None}
+
+
+def _init_gpu_gravity():
+    if _ti_state["ready"]:
+        return _ti_state["ok"]
+    _ti_state["ready"] = True
+    try:
+        import numpy as np
+        import taichi as ti
+        ti.init(arch=ti.gpu)
+
+        @ti.kernel
+        def grav_kernel(pos: ti.types.ndarray(dtype=ti.f32, ndim=2),
+                        gm: ti.types.ndarray(dtype=ti.f32, ndim=1),
+                        force: ti.types.ndarray(dtype=ti.f32, ndim=2),
+                        n: ti.i32, G: ti.f32, soft2: ti.f32):
+            for i in range(n):
+                fx = 0.0
+                fy = 0.0
+                xi = pos[i, 0]
+                yi = pos[i, 1]
+                mi = gm[i]
+                for j in range(n):
+                    if j != i:
+                        dx = pos[j, 0] - xi
+                        dy = pos[j, 1] - yi
+                        d2 = dx * dx + dy * dy + soft2
+                        inv = 1.0 / ti.sqrt(d2)
+                        f = G * mi * gm[j] / d2
+                        fx += dx * inv * f
+                        fy += dy * inv * f
+                force[i, 0] = fx
+                force[i, 1] = fy
+
+        _ti_state["kernel"] = grav_kernel
+        _ti_state["np"] = np
+        _ti_state["ok"] = True
+    except Exception as e:
+        print("GPU gravity unavailable, falling back to CPU:", e)
+        _ti_state["ok"] = False
+    return _ti_state["ok"]
+
+
+def apply_mc_gravity_gpu(state, delta_time):
+    """Exact all-pairs cloud/star gravity for one universe on the GPU (drop-in for apply_mc_gravity_bh)."""
+    clouds = state.molecular_clouds
+    n = len(clouds)
+    if n < 2:
+        return
+    np = _ti_state["np"]
+    pos = np.empty((n, 2), np.float32)
+    gm = np.empty(n, np.float32)
+    for k, c in enumerate(clouds):
+        pos[k, 0] = c.x
+        pos[k, 1] = c.y
+        gm[k] = c.mass * (STAR_GRAVITY_MULTIPLIER if c.mass >= PROTOSTAR_THRESHOLD else 1.0)
+    force = np.zeros((n, 2), np.float32)
+    _ti_state["kernel"](pos, gm, force, n, float(MOLECULAR_CLOUD_GRAVITY_CONSTANT), float(BARNES_HUT_SOFTENING ** 2))
+    for k, c in enumerate(clouds):
+        c.vx += float(force[k, 0]) * delta_time
+        c.vy += float(force[k, 1]) * delta_time
+
+
 def apply_mc_gravity_bh(state, delta_time):
     """Long-range all-pairs cloud gravity via Barnes-Hut. Matches the force formula of
     apply_mc_gravity (mass-weighted, constant MOLECULAR_CLOUD_GRAVITY_CONSTANT) but sums
     over the whole field instead of only spatial-hash neighbors."""
     clouds = state.molecular_clouds
+    # Tiered gravitational charge: stars carry more pull than clouds (a moderate condensation tier).
+    for c in clouds:
+        c.grav_mass = c.mass * (STAR_GRAVITY_MULTIPLIER if c.mass >= PROTOSTAR_THRESHOLD else 1.0)
     root = _build_bh_tree(clouds)
     if root is None:
         return
@@ -1242,7 +1325,7 @@ def apply_mc_gravity_bh(state, delta_time):
     soft_sq = BARNES_HUT_SOFTENING * BARNES_HUT_SOFTENING
     G = MOLECULAR_CLOUD_GRAVITY_CONSTANT
     for b in clouds:
-        bx, by, bmass = b.x, b.y, b.mass
+        bx, by, bmass = b.x, b.y, b.grav_mass
         fx = fy = 0.0
         stack = [root]
         while stack:
@@ -1255,7 +1338,7 @@ def apply_mc_gravity_bh(state, delta_time):
                     ddy = other.y - by
                     d2 = ddx * ddx + ddy * ddy + soft_sq
                     inv = 1.0 / math.sqrt(d2)
-                    f = G * bmass * other.mass / d2
+                    f = G * bmass * other.grav_mass / d2
                     fx += ddx * inv * f
                     fy += ddy * inv * f
                 continue
@@ -1278,6 +1361,8 @@ def apply_mc_gravity_bh(state, delta_time):
 
 
 def apply_mc_gravity(state, delta_time):
+    for c in state.molecular_clouds:
+        c.grav_mass = c.mass * (STAR_GRAVITY_MULTIPLIER if c.mass >= PROTOSTAR_THRESHOLD else 1.0)
     for mc in state.molecular_clouds:
         neighbors = state.spatial_hash.query_neighbors(mc)
         ax, ay = 0.0, 0.0
@@ -1290,7 +1375,7 @@ def apply_mc_gravity(state, delta_time):
             if dist_sq < 1:
                 continue
             dist = math.sqrt(dist_sq)
-            force = MOLECULAR_CLOUD_GRAVITY_CONSTANT * (mc.mass * other.mass) / dist_sq
+            force = MOLECULAR_CLOUD_GRAVITY_CONSTANT * (mc.grav_mass * other.grav_mass) / dist_sq
             ax += (dx / dist) * force
             ay += (dy / dist) * force
         mc.vx += ax * delta_time
@@ -1298,6 +1383,29 @@ def apply_mc_gravity(state, delta_time):
 
 
 def handle_collisions(state):
+    clouds = state.molecular_clouds
+    n = len(clouds)
+    if _fastphysics is not None and n > 1:
+        # Compiled path: gather into arrays once, detect+merge in C, scatter velocities/mass back.
+        x = _np.empty(n); y = _np.empty(n); size = _np.empty(n); mass = _np.empty(n)
+        vx = _np.empty(n); vy = _np.empty(n); elem = _np.empty(n, dtype=_np.int64)
+        removed = _np.zeros(n, dtype=_np.uint8)
+        for k, c in enumerate(clouds):
+            x[k] = c.x; y[k] = c.y; size[k] = c.size; mass[k] = c.mass
+            vx[k] = c.vx; vy[k] = c.vy; elem[k] = c.element_index
+        _fastphysics.collide(x, y, size, mass, vx, vy, elem, removed, n,
+                             MOLECULAR_CLOUD_MERGE_CHANCE, PROTOSTAR_THRESHOLD, MOLECULAR_CLOUD_MAX_MASS,
+                             MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_MIN_SIZE,
+                             MOLECULAR_CLOUD_START_MASS, MOLECULAR_CLOUD_GROWTH_RATE)
+        survivors = []
+        for k, c in enumerate(clouds):
+            if removed[k]:
+                continue
+            c.mass = mass[k]; c.vx = vx[k]; c.vy = vy[k]  # size/color refreshed by update_entities' update()
+            survivors.append(c)
+        state.molecular_clouds = survivors
+        return
+
     to_remove = set()
     for mc in state.molecular_clouds:
         if mc in to_remove:
@@ -1387,6 +1495,12 @@ def update_entities(state):
         state.molecular_clouds = [mc for mc in state.molecular_clouds if mc not in to_remove]
     state.molecular_clouds.extend(new_clouds)
 
+    # Hard cap on clouds per universe: bounds per-frame physics + rendering cost. Trim the
+    # lowest-mass (least significant) clouds when over the cap.
+    if len(state.molecular_clouds) > MOLECULAR_CLOUD_MAX_PER_UNIVERSE:
+        state.molecular_clouds.sort(key=lambda c: c.mass, reverse=True)
+        del state.molecular_clouds[MOLECULAR_CLOUD_MAX_PER_UNIVERSE:]
+
 
 def draw_static_key(screen, font, zoom):
     snapshot_pos = (UI_LABEL_X, SCREEN_HEIGHT - UI_ZOOM_Y_OFFSET)
@@ -1468,7 +1582,9 @@ def update_simulation_state(state, ring, delta_time):
     state.spatial_hash.clear()
     state.spatial_hash.bulk_insert(state.molecular_clouds)
 
-    if BARNES_HUT_ENABLED:
+    if GPU_GRAVITY_ENABLED and _init_gpu_gravity():
+        apply_mc_gravity_gpu(state, delta_time)
+    elif BARNES_HUT_ENABLED:
         apply_mc_gravity_bh(state, delta_time)
     else:
         apply_mc_gravity(state, delta_time)
@@ -1790,6 +1906,19 @@ def _universe_alive(universe):
     return bool(universe.molecular_clouds or universe.black_holes or universe.neutron_stars)
 
 
+def enforce_total_cloud_cap(state):
+    """Trim the lowest-mass clouds across the whole multiverse when over the global cap, so total
+    per-frame cost stays bounded no matter how many universes exist."""
+    total = sum(len(u.molecular_clouds) for u in state.universes)
+    if total <= MULTIVERSE_MAX_CLOUDS:
+        return
+    all_clouds = [c for u in state.universes for c in u.molecular_clouds]
+    all_clouds.sort(key=lambda c: c.mass, reverse=True)
+    keep = set(id(c) for c in all_clouds[:MULTIVERSE_MAX_CLOUDS])
+    for u in state.universes:
+        u.molecular_clouds = [c for c in u.molecular_clouds if id(c) in keep]
+
+
 def prune_child_links(state):
     """Close a hole's wormhole if its child universe no longer exists (fizzled and was removed),
     freeing the hole to rip a new one later."""
@@ -1832,6 +1961,7 @@ def run_simulation(screen, font, state):
 
             # Each black-hole birth this step opens a new universe (capped) outside the existing ones.
             process_universe_spawns(state)
+            enforce_total_cloud_cap(state)
 
             # Keep universes from overlapping (larger shoves smaller aside).
             resolve_barrier_overlaps(state, delta_time)
