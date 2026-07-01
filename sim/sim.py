@@ -32,7 +32,7 @@ SPATIAL_HASH_CELL_SIZE = 40     # Cell size (pixels) for the spatial hash grid. 
 # every other) approximated in O(N log N) via a quadtree, instead of the short-range
 # spatial-hash neighbor model. This enables emergent large-scale structure but changes
 # the tuned local-clumping behavior — expect to retune MOLECULAR_CLOUD_GRAVITY_CONSTANT.
-BARNES_HUT_ENABLED = True       # Toggle Barnes-Hut cloud gravity. False = original short-range spatial-hash model.
+BARNES_HUT_ENABLED = False      # Toggle Barnes-Hut cloud gravity. False = cheap short-range spatial-hash model (~3x faster; cloud-cloud gravity is negligible now that black holes are the organizers).
 BARNES_HUT_THETA = 0.7          # Opening angle. Lower = more accurate & slower (0 = brute force O(N^2)).
 BARNES_HUT_SOFTENING = 2.0      # Softening length (pixels) added to the force denominator to prevent close-range spikes.
 BARNES_HUT_MAX_DEPTH = 28       # Max quadtree depth. Caps recursion when many clouds share near-identical positions.
@@ -72,7 +72,7 @@ BARRIER_FLASH_OPACITY = 255     # Peak opacity during a barrier flash (0-255).
 BARRIER_FLASH_DECAY = 4      # How fast barrier flashes fade per second. Higher = faster fade.
 BARRIER_WAVE_PUSH = 400      # Force magnitude when pulses hit the barrier. Higher = more barrier wobble.
 BARRIER_DAMPING = 0.04          # Damping factor for barrier deformation velocity. Lower = more oscillation.
-BARRIER_TENSION = 4.0           # Membrane tension: per second, each barrier vertex relaxes this strongly toward its neighbours' average radius. Keeps the ring a smooth closed curve under load instead of folding into spikes / a self-crossing web. 0 = no smoothing.
+BARRIER_TENSION = 2.5           # Membrane tension: per second, each barrier vertex relaxes this strongly toward its neighbours' average radius. Keeps the ring smooth (no spikes/web) — but too high erases contact dents, so kept moderate. 0 = no smoothing.
 BARRIER_DEFORM_THRESHOLD = 0.1  # Minimum radius change (pixels) to trigger a flash effect.
 BARRIER_HEAVY_MASS_THRESHOLD = 100  # Combined mass near a barrier section that weakens containment. Higher = harder to break out.
 BARRIER_SMOOTHING_PASSES = 3    # Number of smoothing iterations when drawing the barrier. More = smoother shape.
@@ -189,6 +189,18 @@ PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.001
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
 BLACK_HOLE_CHANCE = 0.0001      # Per-frame probability a qualifying star becomes a black hole. Very rare.
 BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead).
+
+# ── Multiverse (each black-hole birth opens a new universe outside the current ones) ──
+UNIVERSE_MAX_COUNT = 10         # Hard cap on coexisting universes. New ones stop spawning at this many.
+BLACK_HOLE_RIP_MASS_FACTOR = 0.9  # Fraction of max mass a hole must reach to "rip" open a new universe. <1 because decay keeps holes hovering just under the hard cap.
+UNIVERSE_RIP_TRANSFER_FRACTION = 0.4  # Fraction of the source universe's clouds pulled through into a newly ripped universe (instead of spawning fresh matter). Keeps total entity count bounded.
+UNIVERSE_STREAM_FRACTION = 0.6  # After ripping, chance each cloud the hole accretes is streamed into its child universe (wormhole) instead of being consumed. 0 = one-time transfer only; 1 = everything it eats flows through.
+UNIVERSE_SPAWN_GAP = 20         # Minimum gap (pixels) between a newly spawned barrier and existing ones; also the clearance kept between barriers by repulsion. Small = universes cluster close together.
+BARRIER_REPULSION_RATE = 15.0   # Per-second rate at which overlapping universes are separated/flattened. Higher = firmer (less overlap).
+BARRIER_RESOLVE_ITERATIONS = 4  # Relaxation passes per frame for barrier contact. More = better convergence when many universes are packed together (prevents residual overlap).
+BARRIER_CONTACT_DEFORM = 1.0    # How strongly barriers flatten each other where they press together — the primary no-overlap mechanism at contact. Higher = deeper flattening.
+BARRIER_SEPARATION_SHARE = 0.15  # Of the penetration when two barriers press, this fraction is resolved by pushing them apart; the rest by flattening (denting) the contact faces. Low = balloon-like (they stay in contact and visibly flatten rather than shoving apart).
+MULTIVERSE_RENDER_MAX = 5000    # Max pixels per side of the off-screen surface used to draw the whole multiverse before scaling to the window.
 BLACK_HOLE_RADIUS = 14           # Visual radius divisor — smaller value = larger drawn black hole (mass / this). Shrinks the drawn disk and event horizon without changing gravitational mass.
 BLACK_HOLE_MAX_MASS = 115       # Maximum mass a black hole can accumulate. Capped lower so no single hole grows into an overwhelming dominant one.
 BLACK_HOLE_GRAVITY_CONSTANT = 30 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds; raised so disk clouds orbit faster (more visible swirl) and bind tighter.
@@ -305,13 +317,38 @@ class SpatialHash:
         return neighbors
 
 
-class SimulationState:
-    def __init__(self):
+class Universe:
+    """One self-contained world: a barrier plus the entities inside it. All per-universe physics
+    (gravity, collisions, deformation, enforce) operates on a Universe — it has the same entity
+    field names the physics functions expect, so they work unchanged when passed a Universe."""
+    def __init__(self, barrier):
+        self.barrier = barrier
         self.molecular_clouds = []
         self.black_holes = []
         self.neutron_stars = []
         self.black_hole_pulses = []
         self.spatial_hash = SpatialHash(SPATIAL_HASH_CELL_SIZE)
+        self.pending_rip_bhs = []  # black holes in this universe that reached rip mass this step
+
+
+class SimulationState:
+    """The multiverse: a list of Universes. Universes never interact gravitationally — only their
+    barriers push/deform each other. The molecular_clouds/black_holes/neutron_stars properties are
+    read-only flattened views across all universes, used only by RNG serialization and heat-death checks."""
+    def __init__(self):
+        self.universes = []
+
+    @property
+    def molecular_clouds(self):
+        return [c for u in self.universes for c in u.molecular_clouds]
+
+    @property
+    def black_holes(self):
+        return [b for u in self.universes for b in u.black_holes]
+
+    @property
+    def neutron_stars(self):
+        return [n for u in self.universes for n in u.neutron_stars]
 
 
 class Barrier:
@@ -770,6 +807,7 @@ class BlackHole:
         self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
         self.tracer_angle = random.uniform(0, 2 * math.pi)
         self.angular_momentum = 0.0  # Spin from off-center accretion
+        self.child_universe = None  # the universe this hole ripped open and streams matter into (None until it rips)
 
     def draw(self, screen, offset_x=0, offset_y=0):
         draw_x = int(self.x + offset_x)
@@ -827,16 +865,28 @@ class BlackHole:
             captured = distance < capture_radius or check_swept_collision(entity, self.x, self.y, capture_radius, delta_time)
             if captured:
                 mc_to_remove.add(entity)
-                # Transfer angular momentum from off-center accretion: L = r x p
-                rel_vx = entity.vx - self.vx
-                rel_vy = entity.vy - self.vy
-                self.angular_momentum += (dx * rel_vy - dy * rel_vx) * entity.mass
-                # Conserve momentum during accretion
-                total_mass = self.mass + entity.mass
-                if total_mass > 0:
-                    self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
-                    self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
-                self.accretion_mass += entity.mass
+                if self.child_universe is not None and random.random() < UNIVERSE_STREAM_FRACTION:
+                    # Wormhole: matter falling in emerges in the child universe instead of being consumed.
+                    ccx, ccy = self.child_universe.barrier.center
+                    rr = self.child_universe.barrier.rest_radius
+                    ang = random.uniform(0, 2 * math.pi)
+                    rad = math.sqrt(random.random()) * rr
+                    entity.x = ccx + rad * math.cos(ang)
+                    entity.y = ccy + rad * math.sin(ang)
+                    entity.vx = 0.0
+                    entity.vy = 0.0
+                    self.child_universe.molecular_clouds.append(entity)
+                else:
+                    # Transfer angular momentum from off-center accretion: L = r x p
+                    rel_vx = entity.vx - self.vx
+                    rel_vy = entity.vy - self.vy
+                    self.angular_momentum += (dx * rel_vy - dy * rel_vx) * entity.mass
+                    # Conserve momentum during accretion
+                    total_mass = self.mass + entity.mass
+                    if total_mass > 0:
+                        self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
+                        self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
+                    self.accretion_mass += entity.mass
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
@@ -1537,6 +1587,11 @@ def update_simulation_state(state, ring, delta_time):
             continue
         black_hole.attract(state, delta_time, mc_to_remove, ns_to_remove, bh_to_remove)
         black_hole.decay(delta_time)
+        # A hole that grows to near-max "rips" open a new universe and then streams matter into it.
+        # It only rips once (while it has a child); if that child later dies, it can rip again.
+        rip_mass = BLACK_HOLE_RIP_MASS_FACTOR * BLACK_HOLE_MAX_MASS
+        if black_hole.child_universe is None and black_hole.mass >= rip_mass:
+            state.pending_rip_bhs.append(black_hole)
         if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
             bh_to_remove.add(black_hole)
             for _ in range(BLACK_HOLE_DECAY_CLOUD_COUNT):
@@ -1731,7 +1786,21 @@ def draw_ui(screen, font, current_year, zoom=1.0):
     screen.blit(year_text, (UI_LABEL_X, SCREEN_HEIGHT - UI_TEXT_Y_OFFSET))
 
 
-def run_simulation(screen, font, state, ring):
+def _universe_alive(universe):
+    return bool(universe.molecular_clouds or universe.black_holes or universe.neutron_stars)
+
+
+def prune_child_links(state):
+    """Close a hole's wormhole if its child universe no longer exists (fizzled and was removed),
+    freeing the hole to rip a new one later."""
+    live = set(state.universes)
+    for u in state.universes:
+        for bh in u.black_holes:
+            if bh.child_universe is not None and bh.child_universe not in live:
+                bh.child_universe = None
+
+
+def run_simulation(screen, font, state):
     try:
         running = True
         clock = pygame.time.Clock()
@@ -1757,9 +1826,21 @@ def run_simulation(screen, font, state, ring):
             if not running:
                 break
 
-            ring.update_deformation(state, delta_time)
+            for universe in state.universes:
+                universe.barrier.update_deformation(universe, delta_time)
+                update_simulation_state(universe, universe.barrier, delta_time)
 
-            update_simulation_state(state, ring, delta_time)
+            # Each black-hole birth this step opens a new universe (capped) outside the existing ones.
+            process_universe_spawns(state)
+
+            # Keep universes from overlapping (larger shoves smaller aside).
+            resolve_barrier_overlaps(state, delta_time)
+
+            # A universe that runs out of matter is removed, freeing a slot for a future spawn.
+            # The last surviving universe is kept so heat death can linger/reset as before.
+            if len(state.universes) > 1:
+                state.universes = [u for u in state.universes if _universe_alive(u)]
+            prune_child_links(state)
 
             entity_count = len(state.molecular_clouds) + len(state.black_holes) + len(state.neutron_stars)
             total_mass = (
@@ -1767,11 +1848,12 @@ def run_simulation(screen, font, state, ring):
                 + sum(bh.mass for bh in state.black_holes)
                 + sum(ns.mass for ns in state.neutron_stars)
             )
-            if entity_count == 0 or total_mass <= 0:
+            # Heat death of the whole multiverse: every universe is gone. Start fresh.
+            if not state.universes or entity_count == 0 or total_mass <= 0:
                 heat_death_timer += delta_time
                 if heat_death_timer >= HEAT_DEATH_LINGER_DURATION:
                     print(f"Reset at year {current_year}: entities={entity_count}, mass={total_mass}")
-                    state, ring = initialize_state()
+                    state = initialize_state()
                     current_year = 0.0
                     zoom = 1.0
                     view_center_x = SCREEN_WIDTH / 2.0
@@ -1780,9 +1862,14 @@ def run_simulation(screen, font, state, ring):
             else:
                 heat_death_timer = 0.0
 
+            # Fixed 1:1 view (default zoom 1.0): universes grow at natural scale; zoom out to see neighbors.
             view_w = int(SCREEN_WIDTH / zoom)
             view_h = int(SCREEN_HEIGHT / zoom)
-            max_barrier_r = max(ring.radii)
+            sc_x, sc_y = SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0
+            max_barrier_r = 1.0
+            for u in state.universes:
+                bcx, bcy = u.barrier.center
+                max_barrier_r = max(max_barrier_r, math.hypot(bcx - sc_x, bcy - sc_y) + max(u.barrier.radii))
             barrier_diam = int(max_barrier_r * 2)
             needed_w = max(view_w + SCREEN_WIDTH, barrier_diam + SCREEN_WIDTH)
             needed_h = max(view_h + SCREEN_HEIGHT, barrier_diam + SCREEN_HEIGHT)
@@ -1795,7 +1882,8 @@ def run_simulation(screen, font, state, ring):
             world_offset_y = (world_surface_h - SCREEN_HEIGHT) // 2
 
             world_surface.fill(BACKGROUND_COLOR)
-            draw_simulation(world_surface, ring, state, world_offset_x, world_offset_y)
+            for universe in state.universes:
+                draw_simulation(world_surface, universe.barrier, universe, world_offset_x, world_offset_y)
 
             ws_cx = world_offset_x + view_center_x
             ws_cy = world_offset_y + view_center_y
@@ -1866,9 +1954,12 @@ def run_simulation(screen, font, state, ring):
         pygame.quit()
 
 
-def initialize_state():
-    state = SimulationState()
-    ring = Barrier((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), (BARRIER_INITIAL_SIZE, BARRIER_INITIAL_SIZE), BARRIER_POINT_COUNT)
+def spawn_universe(center):
+    """Create a fresh universe: a tiny barrier at `center` seeded with a Big-Bang of clouds,
+    exactly like the original. Returns the Universe."""
+    cx, cy = center
+    ring = Barrier(center, (BARRIER_INITIAL_SIZE, BARRIER_INITIAL_SIZE), BARRIER_POINT_COUNT)
+    universe = Universe(ring)
 
     density_weights = [max(0.0, 1.0 - CMB_DENSITY_CONTRAST * ring.perturbation[i]) for i in range(ring.num_points)]
     total_weight = sum(density_weights)
@@ -1887,12 +1978,169 @@ def initialize_state():
         angle = ring.angles[idx] + random.uniform(0, step)
         local_radius = ring.get_radius_at_angle(angle)
         radius = math.sqrt(random.uniform(0, 1)) * local_radius
-        x = SCREEN_WIDTH // 2 + radius * math.cos(angle)
-        y = SCREEN_HEIGHT // 2 + radius * math.sin(angle)
-        molecular_cloud = MolecularCloud(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS, SEED_ELEMENTAL_ABUNDANCE)
-        state.molecular_clouds.append(molecular_cloud)
+        x = cx + radius * math.cos(angle)
+        y = cy + radius * math.sin(angle)
+        universe.molecular_clouds.append(
+            MolecularCloud(x, y, MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_START_MASS, SEED_ELEMENTAL_ABUNDANCE))
 
-    return state, ring
+    return universe
+
+
+def _clear_of_all(state, x, y, new_radius):
+    return all(math.hypot(x - u.barrier.center[0], y - u.barrier.center[1])
+               > max(u.barrier.radii) + new_radius + UNIVERSE_SPAWN_GAP
+               for u in state.universes)
+
+
+def _find_spawn_center(state, new_radius, source=None, bh=None):
+    """Find a point for a new barrier that doesn't overlap any existing one. Preferred spot: just
+    outside the SOURCE barrier in the direction of the ripping black hole, so the new universe
+    emerges right next to the hole rather than at a random far location."""
+    if source is not None and bh is not None:
+        scx, scy = source.barrier.center
+        angle = math.atan2(bh.y - scy, bh.x - scx)
+        edge = source.barrier.get_radius_at_angle(angle % (2 * math.pi))
+        for extra in range(0, 800, 10):
+            dist = edge + new_radius + UNIVERSE_SPAWN_GAP + extra
+            x = scx + dist * math.cos(angle)
+            y = scy + dist * math.sin(angle)
+            if _clear_of_all(state, x, y, new_radius):
+                return (x, y)
+    # Fallback: search outward from the centroid at random angles.
+    if state.universes:
+        cx = sum(u.barrier.center[0] for u in state.universes) / len(state.universes)
+        cy = sum(u.barrier.center[1] for u in state.universes) / len(state.universes)
+    else:
+        cx, cy = SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0
+    for attempt in range(400):
+        angle = random.uniform(0, 2 * math.pi)
+        dist = 40 + attempt * 8
+        x = cx + dist * math.cos(angle)
+        y = cy + dist * math.sin(angle)
+        if _clear_of_all(state, x, y, new_radius):
+            return (x, y)
+    return (x, y)  # fallback: accept the last candidate even if tight
+
+
+def _rip_universe(source, center):
+    """Rip open a new universe by pulling a chunk of the SOURCE universe's clouds through into it,
+    rather than spawning fresh matter. This keeps the multiverse's total entity count bounded — the
+    performance win — and reads as the black hole pouring its universe's matter into a new one."""
+    cx, cy = center
+    ring = Barrier(center, (BARRIER_INITIAL_SIZE, BARRIER_INITIAL_SIZE), BARRIER_POINT_COUNT)
+    new_u = Universe(ring)
+    clouds = source.molecular_clouds
+    move_count = int(len(clouds) * UNIVERSE_RIP_TRANSFER_FRACTION)
+    if move_count <= 0:
+        return new_u
+    random.shuffle(clouds)
+    moved = clouds[:move_count]
+    source.molecular_clouds = clouds[move_count:]
+    rr = ring.rest_radius
+    for c in moved:
+        ang = random.uniform(0, 2 * math.pi)
+        rad = math.sqrt(random.random()) * rr
+        c.x = cx + rad * math.cos(ang)
+        c.y = cy + rad * math.sin(ang)
+        c.vx = 0.0
+        c.vy = 0.0
+        new_u.molecular_clouds.append(c)
+    return new_u
+
+
+def process_universe_spawns(state):
+    """For each hole that reached rip mass this step, open a new universe (up to the cap) by pulling
+    matter from its source universe, and link the hole to that child so it keeps streaming into it."""
+    new_radius = BARRIER_INITIAL_SIZE / 2.0
+    for src in list(state.universes):
+        ripping = src.pending_rip_bhs
+        src.pending_rip_bhs = []
+        for bh in ripping:
+            if bh.child_universe is not None:
+                continue
+            if len(state.universes) >= UNIVERSE_MAX_COUNT:
+                break
+            child = _rip_universe(src, _find_spawn_center(state, new_radius, src, bh))
+            bh.child_universe = child
+            state.universes.append(child)
+
+
+def _translate_universe(u, dx, dy):
+    """Move a whole universe rigidly — its barrier center and every entity/pulse — so its internal
+    state is preserved while it slides as a unit."""
+    bx, by = u.barrier.center
+    u.barrier.center = (bx + dx, by + dy)
+    for e in u.molecular_clouds:
+        e.x += dx
+        e.y += dy
+    for e in u.black_holes:
+        e.x += dx
+        e.y += dy
+    for e in u.neutron_stars:
+        e.x += dx
+        e.y += dy
+    for p in u.black_hole_pulses:
+        p[0] += dx
+        p[1] += dy
+
+
+def _dent_barrier_toward(barrier, tx, ty, amount):
+    """Push the barrier's vertices that face point (tx,ty) inward, flattening that side."""
+    contact_angle = math.atan2(ty - barrier.center[1], tx - barrier.center[0])
+    for k in range(barrier.num_points):
+        align = math.cos(barrier.angles[k] - contact_angle)
+        if align > 0:
+            barrier.radii[k] = max(2.0, barrier.radii[k] - amount * align)
+
+
+def resolve_barrier_overlaps(state, delta_time):
+    """Soft-body contact between universes: where two barriers press together they FLATTEN (both
+    faces dent, the smaller one more) and get pushed apart, so they touch and deform but never
+    overlap. Runs several relaxation passes per frame so many packed barriers fully separate, and
+    re-measures penetration at the real (deformed) boundaries each pass so it self-limits."""
+    universes = state.universes
+    if len(universes) < 2:
+        return
+    means = [sum(u.barrier.radii) / len(u.barrier.radii) for u in universes]
+    relax = min(0.9, BARRIER_REPULSION_RATE * delta_time)
+    for _ in range(BARRIER_RESOLVE_ITERATIONS):
+        for i in range(len(universes)):
+            A = universes[i]
+            ax, ay = A.barrier.center
+            wA = means[i]
+            for j in range(i + 1, len(universes)):
+                B = universes[j]
+                bx, by = B.barrier.center
+                wB = means[j]
+                dx = bx - ax
+                dy = by - ay
+                dist = math.hypot(dx, dy)
+                if dist < 0.01:
+                    dx, dy, dist = random.uniform(-1, 1), random.uniform(-1, 1), 1.0  # unstick coincident
+                ang = math.atan2(dy, dx)
+                rA_c = A.barrier.get_radius_at_angle(ang % (2 * math.pi))
+                rB_c = B.barrier.get_radius_at_angle((ang + math.pi) % (2 * math.pi))
+                penetration = (rA_c + rB_c) - dist
+                if penetration <= 0:
+                    continue
+                ux, uy = dx / dist, dy / dist
+                total = wA + wB
+                # Push apart (smaller universe moves more) resolves part of the penetration...
+                push = penetration * BARRIER_SEPARATION_SHARE * relax
+                _translate_universe(A, -ux * push * (wB / total), -uy * push * (wB / total))
+                _translate_universe(B, ux * push * (wA / total), uy * push * (wA / total))
+                ax -= ux * push * (wB / total)
+                ay -= uy * push * (wB / total)
+                # ...the rest flattens both contact faces (smaller deforms more).
+                d = penetration * BARRIER_CONTACT_DEFORM * relax
+                _dent_barrier_toward(A.barrier, bx, by, d * (wB / total))
+                _dent_barrier_toward(B.barrier, ax, ay, d * (wA / total))
+
+
+def initialize_state():
+    state = SimulationState()
+    state.universes.append(spawn_universe((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+    return state
 
 
 def main():
@@ -1901,10 +2149,10 @@ def main():
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     font = pygame.font.SysFont('Monospace', 14)
     print("Populating space with molecular clouds")
-    state, ring = initialize_state()
+    state = initialize_state()
 
     print("Starting simulation")
-    run_simulation(screen, font, state, ring)
+    run_simulation(screen, font, state)
 
 if __name__ == "__main__":
     main()
