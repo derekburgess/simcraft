@@ -36,18 +36,23 @@ def serialize_state(state_obj):
 
     Returns (state_bytes, entity_count).
     """
-    mc_count = len(state_obj.molecular_clouds)
-    bh_count = len(state_obj.black_holes)
-    ns_count = len(state_obj.neutron_stars)
+    universes = state_obj.universes
+    mc_count = sum(u.clouds.n for u in universes)
+    bh_count = sum(len(u.black_holes) for u in universes)
+    ns_count = sum(len(u.neutron_stars) for u in universes)
 
     parts = [struct.pack('<3I', mc_count, bh_count, ns_count)]
 
-    for entity in state_obj.molecular_clouds:
-        parts.append(struct.pack('<5d', entity.x, entity.y, entity.vx, entity.vy, entity.mass))
-    for entity in state_obj.black_holes:
-        parts.append(struct.pack('<5d', entity.x, entity.y, entity.vx, entity.vy, entity.mass))
-    for entity in state_obj.neutron_stars:
-        parts.append(struct.pack('<5d', entity.x, entity.y, entity.vx, entity.vy, entity.mass))
+    for u in universes:
+        c = u.clouds
+        for k in range(c.n):
+            parts.append(struct.pack('<5d', c.x[k], c.y[k], c.vx[k], c.vy[k], c.mass[k]))
+    for u in universes:
+        for entity in u.black_holes:
+            parts.append(struct.pack('<5d', entity.x, entity.y, entity.vx, entity.vy, entity.mass))
+    for u in universes:
+        for entity in u.neutron_stars:
+            parts.append(struct.pack('<5d', entity.x, entity.y, entity.vx, entity.vy, entity.mass))
 
     entity_count = mc_count + bh_count + ns_count
     return b''.join(parts), entity_count

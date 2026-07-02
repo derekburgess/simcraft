@@ -1,0 +1,658 @@
+"""Per-frame simulation step and multiverse mechanics.
+
+Frame order per universe (matches the historical update_simulation_state exactly):
+  barrier deformation → cloud gravity → collisions/entity updates/events → barrier
+  gravity+containment → tracer spin → merger pulses → black-hole pass (attract/decay/rip/
+  evaporate) → neutron-star pass (gravity/pulses/decay/kilonova) → pulse collisions →
+  removals & spawns → integration.
+Captured clouds stay in the arrays until the end-of-step removal (the neutron-star pass sees
+them, as it always did); streamed clouds get their position rewritten at capture and the row
+moves to the child universe at the end of the step — visible before the child steps.
+"""
+import math
+import random
+
+import numpy as np
+
+from sim.config import *
+from sim.fields import CloudField, pick_element, _random_offsets
+from sim.barrier import Barrier
+from sim.entities import BlackHole, NeutronStar
+from sim import gravity
+
+try:
+    from sim import fastphysics as _fastphysics  # compiled hot loops (build: python setup_fastphysics.py build_ext --inplace)
+except Exception:
+    _fastphysics = None
+
+
+class Universe:
+    """One self-contained world: a barrier plus the matter inside it."""
+    def __init__(self, barrier):
+        self.barrier = barrier
+        self.clouds = CloudField()
+        self.black_holes = []
+        self.neutron_stars = []
+        self.black_hole_pulses = []
+        self.pending_rip_bhs = []  # black holes in this universe that reached rip mass this step
+
+
+class SimulationState:
+    """The multiverse: a list of Universes. Universes never interact gravitationally — only
+    their barriers push/deform each other."""
+    def __init__(self):
+        self.universes = []
+
+    def entity_count(self):
+        return sum(u.clouds.n + len(u.black_holes) + len(u.neutron_stars) for u in self.universes)
+
+    def total_mass(self):
+        return sum(float(u.clouds.M.sum())
+                   + sum(bh.mass for bh in u.black_holes)
+                   + sum(ns.mass for ns in u.neutron_stars)
+                   for u in self.universes)
+
+
+def _spawn_size(mass):
+    return max(MOLECULAR_CLOUD_MIN_SIZE,
+               MOLECULAR_CLOUD_START_SIZE - int((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE))
+
+
+def handle_collisions(universe):
+    """Cloud-cloud merge pass. The compiled path reads/writes the field arrays directly."""
+    clouds = universe.clouds
+    n = clouds.n
+    if n < 2:
+        return
+    removed = np.zeros(n, dtype=np.uint8)
+    if _fastphysics is not None:
+        _fastphysics.collide(clouds.X, clouds.Y, clouds.SIZE, clouds.M, clouds.VX, clouds.VY,
+                             clouds.ELEM, removed, n,
+                             MOLECULAR_CLOUD_MERGE_CHANCE, PROTOSTAR_THRESHOLD, MOLECULAR_CLOUD_MAX_MASS,
+                             MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_MIN_SIZE,
+                             MOLECULAR_CLOUD_START_MASS, MOLECULAR_CLOUD_GROWTH_RATE)
+    else:
+        _collide_python(clouds, removed, n)
+    if removed.any():
+        clouds.keep(removed == 0)
+
+
+def _collide_python(clouds, removed, n):
+    """Pure-Python port of fastphysics.collide (fallback when the extension isn't built)."""
+    x, y, size, mass = clouds.X, clouds.Y, clouds.SIZE, clouds.M
+    vx, vy, elem = clouds.VX, clouds.VY, clouds.ELEM
+    for i in range(n):
+        if removed[i]:
+            continue
+        for j in range(n):
+            if j == i or removed[j]:
+                continue
+            is_proto = mass[i] >= PROTOSTAR_THRESHOLD or mass[j] >= PROTOSTAR_THRESHOLD
+            if not (is_proto or abs(int(elem[i]) - int(elem[j])) <= 1):
+                continue
+            if not (x[i] < x[j] + size[j] and x[i] + size[i] > x[j]
+                    and y[i] < y[j] + size[j] and y[i] + size[i] > y[j]):
+                continue
+            if random.random() >= MOLECULAR_CLOUD_MERGE_CHANCE:
+                continue
+            surv, cons = (j, i) if elem[j] > elem[i] else (i, j)
+            merged = mass[surv] + mass[cons]
+            if merged > 0:
+                vx[surv] = (mass[surv] * vx[surv] + mass[cons] * vx[cons]) / merged
+                vy[surv] = (mass[surv] * vy[surv] + mass[cons] * vy[cons]) / merged
+            mass[surv] = min(merged, MOLECULAR_CLOUD_MAX_MASS)
+            size[surv] = _spawn_size(mass[surv])
+            removed[cons] = 1
+            if cons == i:
+                break
+
+
+def update_entities(universe):
+    """Collisions, star transitions, and the per-cloud random events (collapse to BH/NS,
+    supernova, emission). The event loop is scalar on purpose: it draws the same RNG stream
+    per cloud in row order that the object version drew in list order."""
+    handle_collisions(universe)
+    clouds = universe.clouds
+    clouds.refresh()
+
+    to_remove = np.zeros(clouds.n, dtype=bool)
+    spawns = []  # (x, y, mass, abundance, elem_or_None, vx, vy)
+    n = clouds.n
+    mass = clouds.mass
+    elem = clouds.elem
+    for k in range(n):
+        if mass[k] > BLACK_HOLE_THRESHOLD and len(universe.black_holes) < BLACK_HOLE_MAX_COUNT:
+            bh_chance = PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE if elem[k] >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY else BLACK_HOLE_CHANCE
+            if random.random() < bh_chance:
+                if random.random() < NEUTRON_STAR_CHANCE:
+                    universe.neutron_stars.append(NeutronStar(clouds.x[k], clouds.y[k], mass[k]))
+                else:
+                    universe.black_holes.append(BlackHole(clouds.x[k], clouds.y[k], mass[k]))
+                to_remove[k] = True
+            elif random.random() < MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE:
+                # Supernova: the star resets to a light gas cloud and ejects material.
+                if elem[k] >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY:
+                    ejecta_count, ejecta_spread = SUPERNOVA_EJECTA_COUNT_HIGH, SUPERNOVA_EJECTA_SPREAD_HIGH
+                elif elem[k] >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM:
+                    ejecta_count, ejecta_spread = SUPERNOVA_EJECTA_COUNT_MEDIUM, SUPERNOVA_EJECTA_SPREAD_MEDIUM
+                else:
+                    ejecta_count, ejecta_spread = SUPERNOVA_EJECTA_COUNT_LOW, SUPERNOVA_EJECTA_SPREAD_LOW
+                for _ in range(ejecta_count):
+                    offset_angle = random.uniform(0, 2 * math.pi)
+                    offset_dist = random.uniform(5, ejecta_spread)
+                    ex = clouds.x[k] + offset_dist * math.cos(offset_angle)
+                    ey = clouds.y[k] + offset_dist * math.sin(offset_angle)
+                    emass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
+                    offs = _random_offsets()
+                    child_elem = pick_element(EJECTA_ELEMENTAL_ABUNDANCE)
+                    spawns.append((ex, ey, emass, offs, child_elem,
+                                   math.cos(offset_angle) * offset_dist * 0.5,
+                                   math.sin(offset_angle) * offset_dist * 0.5))
+                mass[k] = MOLECULAR_CLOUD_START_MASS
+                clouds.is_star[k] = False
+                clouds.size[k] = MOLECULAR_CLOUD_START_SIZE
+        elif (mass[k] >= MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS
+              and clouds.emission_count[k] < MOLECULAR_CLOUD_EMISSION_COUNT and not to_remove[k]):
+            # Emission: clouds shed small daughter clouds carrying the parent's element.
+            if random.random() < MOLECULAR_CLOUD_EMISSION_CHANCE:
+                emit_mass = random.uniform(MOLECULAR_CLOUD_EMISSION_MASS_MIN, MOLECULAR_CLOUD_EMISSION_MASS_MAX)
+                offset_angle = random.uniform(0, 2 * math.pi)
+                offset_dist = random.uniform(2, MOLECULAR_CLOUD_EMISSION_SPREAD)
+                offs = _random_offsets()
+                pick_element(None)  # discarded draw: the old code constructed with a random element, then overwrote it with the parent's
+                spawns.append((clouds.x[k] + offset_dist * math.cos(offset_angle),
+                               clouds.y[k] + offset_dist * math.sin(offset_angle),
+                               emit_mass, offs, int(elem[k]),
+                               clouds.vx[k] + math.cos(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY,
+                               clouds.vy[k] + math.sin(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY))
+                clouds.emission_count[k] += 1
+    if to_remove.any():
+        clouds.keep(~to_remove)
+    for (sx, sy, smass, soffs, selem, svx, svy) in spawns:
+        clouds.spawn(sx, sy, smass, elem=selem, vx=svx, vy=svy, offsets=soffs)
+
+    # Hard cap on clouds per universe: bounds per-frame physics + rendering cost. Trim the
+    # lowest-mass clouds when over the cap (rows end up mass-sorted, as the old list.sort did).
+    if clouds.n > MOLECULAR_CLOUD_MAX_PER_UNIVERSE:
+        order = np.argsort(-clouds.M, kind='stable')[:MOLECULAR_CLOUD_MAX_PER_UNIVERSE]
+        clouds.select(order)
+
+
+def _update_bh_pulses(universe, ring, delta_time):
+    """Expanding gravitational-wave pulses from BH mergers / kilonovae: push matter in the
+    wavefront band, draining a shared per-pulse energy budget in row order (prefix-sum
+    reproduces the sequential drain exactly), then ripple the barrier."""
+    clouds = universe.clouds
+    pulses_to_remove = []
+    for i, pulse in enumerate(universe.black_hole_pulses):
+        x, y, radius, consumed_mass = pulse
+        new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time * BLACK_HOLE_PULSE_SPEED_MULTIPLIER)
+        universe.black_hole_pulses[i] = [x, y, new_radius, consumed_mass]
+
+        energy_budget = consumed_mass
+        mass_scale = consumed_mass / BLACK_HOLE_PULSE_MASS_SCALE
+        entity_mass_scale = mass_scale * BLACK_HOLE_PULSE_ENTITY_FACTOR
+        bh_ew = NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3
+
+        if clouds.n and energy_budget > 0:
+            dx = clouds.X - x
+            dy = clouds.Y - y
+            dist_sq = dx * dx + dy * dy
+            r_inner = max(0, radius - bh_ew)
+            r_outer = radius + bh_ew
+            in_annulus = (dist_sq >= r_inner * r_inner) & (dist_sq <= r_outer * r_outer)
+            distance = np.sqrt(np.where(in_annulus, dist_sq, 1.0))
+            ripple = np.abs(distance - radius)
+            band = in_annulus & (ripple < bh_ew) & (distance > 0)
+            force = np.where(band,
+                             NEUTRON_STAR_PULSE_STRENGTH * 3 * (1.0 - ripple / bh_ew) * entity_mass_scale
+                             / ((ripple + 1) ** 1.5), 0.0)
+            spent = force * delta_time * 0.01
+            budget_before = energy_budget - (np.cumsum(spent) - spent)
+            apply = band & (budget_before > 0)
+            if apply.any():
+                push = np.where(apply, force * delta_time, 0.0)
+                clouds.VX += (dx / distance) * push
+                clouds.VY += (dy / distance) * push
+                energy_budget -= float(spent[apply].sum())
+
+        for black_hole in universe.black_holes:
+            if energy_budget <= 0:
+                break
+            dx = black_hole.x - x
+            dy = black_hole.y - y
+            distance = math.hypot(dx, dy)
+            ripple_dist = abs(distance - radius)
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4:
+                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4))
+                force = NEUTRON_STAR_PULSE_STRENGTH * 2 * effect_factor * entity_mass_scale / ((ripple_dist + 1) ** 2)
+                if distance > 0:
+                    black_hole.vx += (dx / distance) * force * delta_time
+                    black_hole.vy += (dy / distance) * force * delta_time
+                    energy_budget -= force * delta_time * 0.01
+
+        for neutron_star in universe.neutron_stars:
+            if energy_budget <= 0:
+                break
+            dx = neutron_star.x - x
+            dy = neutron_star.y - y
+            distance = math.hypot(dx, dy)
+            ripple_dist = abs(distance - radius)
+            if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
+                effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3))
+                force = NEUTRON_STAR_PULSE_STRENGTH * 2.5 * effect_factor * entity_mass_scale / ((ripple_dist + 1) ** 1.8)
+                if distance > 0:
+                    neutron_star.vx += (dx / distance) * force * delta_time
+                    neutron_star.vy += (dy / distance) * force * delta_time
+                    energy_budget -= force * delta_time * 0.01
+
+        universe.black_hole_pulses[i][3] = max(0, energy_budget)
+
+        # Barrier ripple where the wavefront crosses the ring.
+        cx, cy = ring.center
+        pulse_fade = max(0.0, 1.0 - new_radius / ring.rest_radius)
+        bx = cx + ring.radii * ring.cos_a
+        by = cy + ring.radii * ring.sin_a
+        hit = np.abs(np.hypot(bx - x, by - y) - new_radius) < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4
+        if hit.any():
+            ring.flash[hit] = np.maximum(ring.flash[hit], pulse_fade * 0.9)
+            ring.radii_vel[hit] += BARRIER_WAVE_PUSH * 2.0 * mass_scale * pulse_fade * delta_time
+
+        if new_radius > float(ring.radii.max()):
+            pulses_to_remove.append(i)
+
+    for i in sorted(pulses_to_remove, reverse=True):
+        if i < len(universe.black_hole_pulses):
+            universe.black_hole_pulses.pop(i)
+
+
+def resolve_pulse_collisions(universe, delta_time):
+    all_pulses = []
+    for ns in universe.neutron_stars:
+        for i, pulse in enumerate(ns.active_pulses):
+            all_pulses.append((ns, i))
+
+    for a in range(len(all_pulses)):
+        ns_a, idx_a = all_pulses[a]
+        pulse_a = ns_a.active_pulses[idx_a]
+        r_a = pulse_a[0]
+        for b in range(a + 1, len(all_pulses)):
+            ns_b, idx_b = all_pulses[b]
+            pulse_b = ns_b.active_pulses[idx_b]
+            r_b = pulse_b[0]
+            d = math.hypot(ns_a.x - ns_b.x, ns_a.y - ns_b.y)
+            wavefront_gap = d - r_a - r_b
+            if wavefront_gap < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
+                overlap = 1.0 - max(wavefront_gap, 0) / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2)
+                fade_rate = PULSE_COLLISION_FADE_RATE * overlap
+                pulse_a[2] -= fade_rate * delta_time
+                pulse_b[2] -= fade_rate * delta_time
+
+
+def step(universe, ring, delta_time):
+    """One physics step for one universe (the old update_simulation_state)."""
+    clouds = universe.clouds
+
+    # Cloud/star mutual gravity (backend-dispatched: GPU / Barnes-Hut / brute / local).
+    if clouds.n >= 2:
+        fx, fy = gravity.cloud_forces(clouds.X, clouds.Y, clouds.M, clouds.IS_STAR)
+        clouds.VX += fx * delta_time
+        clouds.VY += fy * delta_time
+
+    update_entities(universe)
+
+    ring.apply_gravity(universe, delta_time)
+    ring.enforce(universe, delta_time)
+
+    for black_hole in universe.black_holes:
+        # Tracer rotation driven by angular momentum (with base rotation)
+        spin_rate = BLACK_HOLE_DISK_ROTATION + black_hole.angular_momentum / max(black_hole.mass, 1.0)
+        black_hole.tracer_angle += spin_rate * delta_time
+        # Gradually dissipate angular momentum
+        black_hole.angular_momentum *= BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION ** delta_time
+
+    _update_bh_pulses(universe, ring, delta_time)
+
+    # ── Black-hole pass ──
+    alive = np.ones(clouds.n, dtype=bool)
+    stream_moves = []
+    ns_to_remove = set()
+    bh_to_remove = set()
+    spawns = []
+
+    for black_hole in universe.black_holes:
+        if black_hole in bh_to_remove:
+            continue
+        black_hole.attract(universe, delta_time, alive, stream_moves, ns_to_remove, bh_to_remove)
+        black_hole.decay(delta_time)
+        # A hole that grows to near-max "rips" open a new universe and then streams matter into it.
+        # It only rips once (while it has a child); if that child later dies, it can rip again.
+        rip_mass = BLACK_HOLE_RIP_MASS_FACTOR * BLACK_HOLE_MAX_MASS
+        if black_hole.child_universe is None and black_hole.mass >= rip_mass:
+            universe.pending_rip_bhs.append(black_hole)
+        if black_hole.mass <= BLACK_HOLE_DECAY_THRESHOLD:
+            bh_to_remove.add(black_hole)
+            for _ in range(BLACK_HOLE_DECAY_CLOUD_COUNT):
+                offset_angle = random.uniform(0, 2 * math.pi)
+                offset_dist = random.uniform(5, BLACK_HOLE_DECAY_EJECTA_SPREAD)
+                ex = black_hole.x + offset_dist * math.cos(offset_angle)
+                ey = black_hole.y + offset_dist * math.sin(offset_angle)
+                emass = random.uniform(BLACK_HOLE_DECAY_CLOUD_MASS_MIN, BLACK_HOLE_DECAY_CLOUD_MASS_MAX)
+                offs = _random_offsets()
+                child_elem = pick_element(BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE)
+                spawns.append((ex, ey, emass, offs, child_elem,
+                               math.cos(offset_angle) * offset_dist * 0.5,
+                               math.sin(offset_angle) * offset_dist * 0.5))
+
+    # ── Neutron-star pass (sees captured clouds, as the object version did) ──
+    for neutron_star in universe.neutron_stars:
+        if neutron_star in ns_to_remove:
+            continue
+        neutron_star.apply_gravity(universe, delta_time)
+        neutron_star.update_pulse(universe, ring, delta_time)
+        neutron_star.decay(delta_time)
+        if neutron_star.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
+            ns_to_remove.add(neutron_star)
+            for _ in range(KILONOVA_EJECTA_COUNT):
+                offset_angle = random.uniform(0, 2 * math.pi)
+                offset_dist = random.uniform(5, KILONOVA_EJECTA_SPREAD)
+                ex = neutron_star.x + offset_dist * math.cos(offset_angle)
+                ey = neutron_star.y + offset_dist * math.sin(offset_angle)
+                emass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
+                offs = _random_offsets()
+                child_elem = pick_element(KILONOVA_ELEMENTAL_ABUNDANCE)
+                spawns.append((ex, ey, emass, offs, child_elem,
+                               math.cos(offset_angle) * offset_dist * 0.5,
+                               math.sin(offset_angle) * offset_dist * 0.5))
+            universe.black_hole_pulses.append([neutron_star.x, neutron_star.y, 0, neutron_star.mass])
+
+    # NS-NS Kilonova mergers
+    alive_ns = [ns for ns in universe.neutron_stars if ns not in ns_to_remove]
+    merged_ns = set()
+    for i in range(len(alive_ns)):
+        if alive_ns[i] in merged_ns:
+            continue
+        for j in range(i + 1, len(alive_ns)):
+            if alive_ns[j] in merged_ns:
+                continue
+            dx = alive_ns[i].x - alive_ns[j].x
+            dy = alive_ns[i].y - alive_ns[j].y
+            if math.hypot(dx, dy) < KILONOVA_COLLISION_DISTANCE:
+                ns_a, ns_b = alive_ns[i], alive_ns[j]
+                merged_ns.add(ns_a)
+                merged_ns.add(ns_b)
+                ns_to_remove.add(ns_a)
+                ns_to_remove.add(ns_b)
+                cx = (ns_a.x + ns_b.x) / 2
+                cy = (ns_a.y + ns_b.y) / 2
+                combined_mass = ns_a.mass + ns_b.mass
+                for _ in range(KILONOVA_EJECTA_COUNT):
+                    offset_angle = random.uniform(0, 2 * math.pi)
+                    offset_dist = random.uniform(5, KILONOVA_EJECTA_SPREAD)
+                    ex = cx + offset_dist * math.cos(offset_angle)
+                    ey = cy + offset_dist * math.sin(offset_angle)
+                    emass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
+                    offs = _random_offsets()
+                    child_elem = pick_element(KILONOVA_ELEMENTAL_ABUNDANCE)
+                    spawns.append((ex, ey, emass, offs, child_elem,
+                                   math.cos(offset_angle) * offset_dist * 0.5,
+                                   math.sin(offset_angle) * offset_dist * 0.5))
+                universe.black_hole_pulses.append([cx, cy, 0, combined_mass])
+                new_bh = BlackHole(cx, cy, combined_mass)
+                new_bh.vx = (ns_a.mass * ns_a.vx + ns_b.mass * ns_b.vx) / combined_mass
+                new_bh.vy = (ns_a.mass * ns_a.vy + ns_b.mass * ns_b.vy) / combined_mass
+                universe.black_holes.append(new_bh)
+                break
+
+    resolve_pulse_collisions(universe, delta_time)
+
+    # ── Removals, wormhole streams, event spawns ──
+    if stream_moves:
+        # Streamed rows already carry their child-universe position: copy them to their
+        # destinations first (indices still valid), then one compaction drops all captured
+        # rows — accreted and streamed alike (alive is False for both).
+        by_dst = {}
+        for row, dst in stream_moves:
+            by_dst.setdefault(id(dst), (dst, []))[1].append(row)
+        for _, (dst, rows) in by_dst.items():
+            clouds.copy_rows(dst.clouds, rows)
+    if not alive.all():
+        clouds.keep(alive)
+    if bh_to_remove:
+        universe.black_holes = [bh for bh in universe.black_holes if bh not in bh_to_remove]
+    if ns_to_remove:
+        universe.neutron_stars = [ns for ns in universe.neutron_stars if ns not in ns_to_remove]
+    for (sx, sy, smass, soffs, selem, svx, svy) in spawns:
+        clouds.spawn(sx, sy, smass, elem=selem, vx=svx, vy=svy, offsets=soffs)
+
+    # ── Integration (symplectic Euler: damp velocity, then move with the new velocity) ──
+    damping = VELOCITY_DAMPING ** delta_time
+    clouds.VX *= damping
+    clouds.VY *= damping
+    clouds.X += clouds.VX * delta_time
+    clouds.Y += clouds.VY * delta_time
+    # Absolute anchoring: strong velocity damping so holes act as fixed galactic centers.
+    bh_damping = BLACK_HOLE_VELOCITY_DAMPING ** delta_time
+    for bh in universe.black_holes:
+        bh.vx *= bh_damping * damping
+        bh.vy *= bh_damping * damping
+        bh.x += bh.vx * delta_time
+        bh.y += bh.vy * delta_time
+    for ns in universe.neutron_stars:
+        ns.vx *= damping
+        ns.vy *= damping
+        ns.x += ns.vx * delta_time
+        ns.y += ns.vy * delta_time
+
+
+# ── Multiverse mechanics ────────────────────────────────────────────────────────────────────
+
+def spawn_universe(center):
+    """Create a fresh universe: a tiny barrier at `center` seeded with a Big-Bang of clouds."""
+    cx, cy = center
+    ring = Barrier(center, (BARRIER_INITIAL_SIZE, BARRIER_INITIAL_SIZE), BARRIER_POINT_COUNT)
+    universe = Universe(ring)
+
+    # Scalar running sums on purpose: bit-identical to the historical init (np.sum's pairwise
+    # accumulation differs in the last ulp, enough to flip which weight bucket a draw lands in).
+    density_weights = [max(0.0, 1.0 - CMB_DENSITY_CONTRAST * float(p)) for p in ring.perturbation]
+    total_weight = sum(density_weights)
+    density_weights = [w / total_weight for w in density_weights]
+    cumulative = []
+    running_sum = 0.0
+    for w in density_weights:
+        running_sum += w
+        cumulative.append(running_sum)
+    cumulative = np.array(cumulative)
+
+    step_a = 2 * math.pi / ring.num_points
+    for _ in range(MOLECULAR_CLOUD_COUNT):
+        r = random.random()
+        idx = min(int(np.searchsorted(cumulative, r, side='left')), ring.num_points - 1)
+        angle = ring.angles[idx] + random.uniform(0, step_a)
+        local_radius = ring.get_radius_at_angle(angle)
+        radius = math.sqrt(random.uniform(0, 1)) * local_radius
+        universe.clouds.spawn(cx + radius * math.cos(angle), cy + radius * math.sin(angle),
+                              MOLECULAR_CLOUD_START_MASS, abundance=SEED_ELEMENTAL_ABUNDANCE)
+    return universe
+
+
+def _clear_of_all(state, x, y, new_radius):
+    return all(math.hypot(x - u.barrier.center[0], y - u.barrier.center[1])
+               > float(u.barrier.radii.max()) + new_radius + UNIVERSE_SPAWN_GAP
+               for u in state.universes)
+
+
+def _find_spawn_center(state, new_radius, source=None, bh=None):
+    """Find a point for a new barrier that doesn't overlap any existing one. Preferred spot: just
+    outside the SOURCE barrier in the direction of the ripping black hole."""
+    if source is not None and bh is not None:
+        scx, scy = source.barrier.center
+        angle = math.atan2(bh.y - scy, bh.x - scx)
+        edge = source.barrier.get_radius_at_angle(angle % (2 * math.pi))
+        for extra in range(0, 800, 10):
+            dist = edge + new_radius + UNIVERSE_SPAWN_GAP + extra
+            x = scx + dist * math.cos(angle)
+            y = scy + dist * math.sin(angle)
+            if _clear_of_all(state, x, y, new_radius):
+                return (x, y)
+    if state.universes:
+        cx = sum(u.barrier.center[0] for u in state.universes) / len(state.universes)
+        cy = sum(u.barrier.center[1] for u in state.universes) / len(state.universes)
+    else:
+        cx, cy = SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0
+    for attempt in range(400):
+        angle = random.uniform(0, 2 * math.pi)
+        dist = 40 + attempt * 8
+        x = cx + dist * math.cos(angle)
+        y = cy + dist * math.sin(angle)
+        if _clear_of_all(state, x, y, new_radius):
+            return (x, y)
+    return (x, y)  # fallback: accept the last candidate even if tight
+
+
+def _rip_universe(source, center):
+    """Rip open a new universe by pulling a chunk of the SOURCE universe's clouds through into
+    it, keeping the multiverse's total entity count bounded."""
+    cx, cy = center
+    ring = Barrier(center, (BARRIER_INITIAL_SIZE, BARRIER_INITIAL_SIZE), BARRIER_POINT_COUNT)
+    new_u = Universe(ring)
+    clouds = source.clouds
+    move_count = int(clouds.n * UNIVERSE_RIP_TRANSFER_FRACTION)
+    if move_count <= 0:
+        return new_u
+    order = list(range(clouds.n))
+    random.shuffle(order)  # same draw count as shuffling the old object list
+    clouds.select(np.asarray(order))
+    moved_rows = list(range(move_count))
+    rr = ring.rest_radius
+    dst_rows = clouds.move_rows(new_u.clouds, moved_rows)
+    for k in dst_rows:
+        ang = random.uniform(0, 2 * math.pi)
+        rad = math.sqrt(random.random()) * rr
+        new_u.clouds.x[k] = cx + rad * math.cos(ang)
+        new_u.clouds.y[k] = cy + rad * math.sin(ang)
+        new_u.clouds.vx[k] = 0.0
+        new_u.clouds.vy[k] = 0.0
+    return new_u
+
+
+def process_universe_spawns(state):
+    """For each hole that reached rip mass this step, open a new universe (up to the cap) by
+    pulling matter from its source universe, and link the hole to that child."""
+    new_radius = BARRIER_INITIAL_SIZE / 2.0
+    for src in list(state.universes):
+        ripping = src.pending_rip_bhs
+        src.pending_rip_bhs = []
+        for bh in ripping:
+            if bh.child_universe is not None:
+                continue
+            if len(state.universes) >= UNIVERSE_MAX_COUNT:
+                break
+            child = _rip_universe(src, _find_spawn_center(state, new_radius, src, bh))
+            bh.child_universe = child
+            state.universes.append(child)
+
+
+def _translate_universe(u, dx, dy):
+    """Move a whole universe rigidly — barrier center and every entity/pulse."""
+    bx, by = u.barrier.center
+    u.barrier.center = (bx + dx, by + dy)
+    u.clouds.X += dx
+    u.clouds.Y += dy
+    for e in u.black_holes:
+        e.x += dx
+        e.y += dy
+    for e in u.neutron_stars:
+        e.x += dx
+        e.y += dy
+    for p in u.black_hole_pulses:
+        p[0] += dx
+        p[1] += dy
+
+
+def _dent_barrier_toward(barrier, tx, ty, amount):
+    """Push the barrier's vertices that face point (tx,ty) inward, flattening that side."""
+    contact_angle = math.atan2(ty - barrier.center[1], tx - barrier.center[0])
+    align = np.cos(barrier.angles - contact_angle)
+    facing = align > 0
+    barrier.radii[facing] = np.maximum(2.0, barrier.radii[facing] - amount * align[facing])
+
+
+def resolve_barrier_overlaps(state, delta_time):
+    """Soft-body contact between universes: where two barriers press together they FLATTEN and
+    get pushed apart, so they touch and deform but never overlap."""
+    universes = state.universes
+    if len(universes) < 2:
+        return
+    means = [float(u.barrier.radii.mean()) for u in universes]
+    relax = min(0.9, BARRIER_REPULSION_RATE * delta_time)
+    for _ in range(BARRIER_RESOLVE_ITERATIONS):
+        for i in range(len(universes)):
+            A = universes[i]
+            ax, ay = A.barrier.center
+            wA = means[i]
+            for j in range(i + 1, len(universes)):
+                B = universes[j]
+                bx, by = B.barrier.center
+                wB = means[j]
+                dx = bx - ax
+                dy = by - ay
+                dist = math.hypot(dx, dy)
+                if dist < 0.01:
+                    dx, dy, dist = random.uniform(-1, 1), random.uniform(-1, 1), 1.0  # unstick coincident
+                ang = math.atan2(dy, dx)
+                rA_c = A.barrier.get_radius_at_angle(ang % (2 * math.pi))
+                rB_c = B.barrier.get_radius_at_angle((ang + math.pi) % (2 * math.pi))
+                penetration = (rA_c + rB_c) - dist
+                if penetration <= 0:
+                    continue
+                ux, uy = dx / dist, dy / dist
+                total = wA + wB
+                # Push apart (smaller universe moves more) resolves part of the penetration...
+                push = penetration * BARRIER_SEPARATION_SHARE * relax
+                _translate_universe(A, -ux * push * (wB / total), -uy * push * (wB / total))
+                _translate_universe(B, ux * push * (wA / total), uy * push * (wA / total))
+                ax -= ux * push * (wB / total)
+                ay -= uy * push * (wB / total)
+                # ...the rest flattens both contact faces (smaller deforms more).
+                d = penetration * BARRIER_CONTACT_DEFORM * relax
+                _dent_barrier_toward(A.barrier, bx, by, d * (wB / total))
+                _dent_barrier_toward(B.barrier, ax, ay, d * (wA / total))
+
+
+def _universe_alive(universe):
+    return bool(universe.clouds.n or universe.black_holes or universe.neutron_stars)
+
+
+def enforce_total_cloud_cap(state):
+    """Trim the lowest-mass clouds across the whole multiverse when over the global cap
+    (within-universe row order is preserved, as the old identity-filter did)."""
+    total = sum(u.clouds.n for u in state.universes)
+    if total <= MULTIVERSE_MAX_CLOUDS:
+        return
+    all_mass = np.concatenate([u.clouds.M for u in state.universes])
+    order = np.argsort(-all_mass, kind='stable')
+    keep_flat = np.zeros(total, dtype=bool)
+    keep_flat[order[:MULTIVERSE_MAX_CLOUDS]] = True
+    pos = 0
+    for u in state.universes:
+        n0 = u.clouds.n
+        u.clouds.keep(keep_flat[pos:pos + n0])
+        pos += n0
+
+
+def prune_child_links(state):
+    """Close a hole's wormhole if its child universe no longer exists, freeing the hole to rip
+    a new one later."""
+    live = set(id(u) for u in state.universes)
+    for u in state.universes:
+        for bh in u.black_holes:
+            if bh.child_universe is not None and id(bh.child_universe) not in live:
+                bh.child_universe = None
+
+
+def initialize_state():
+    state = SimulationState()
+    state.universes.append(spawn_universe((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+    return state
