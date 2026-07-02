@@ -60,7 +60,14 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=[],
+    install_requires=[
+        'pygame',
+        'numpy',
+        'taichi',      # GPU gravity backend (sim falls back to CPU without a GPU)
+        'cython',      # builds sim/fastphysics (collide + Barnes-Hut); prebuilt .so also ships
+        'pandas',      # rng.py batch mode
+        'matplotlib',  # rng.py randomness plots
+    ],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,

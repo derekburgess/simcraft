@@ -34,8 +34,6 @@ https://www.bbc.com/news/science-environment-67950749
 
 ## Usage
 
-`pip install -r requirements.txt`
-
 `pip install .`
 
 Run `simcraft` for the main game.
