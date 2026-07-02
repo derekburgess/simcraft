@@ -2,3 +2,5 @@ pygame
 pandas
 numpy
 matplotlib
+taichi
+cython
