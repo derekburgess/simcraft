@@ -3,6 +3,8 @@
 
 2026 CE //
 
+Full performance refactor using `Claude Fable 5`. Split the sim into modules around a numpy structure-of-arrays core; cloud gravity now has swappable backends (Taichi GPU, a new Cython Barnes-Hut quadtree, numpy brute-force) computing identical physics. Much faster.
+
 Huge refactor using `Claude Code Opus 4.6`
 The "Ring" concept has been changed to a dynamic manifold barrier that is manipulated by gravity and gravitational events.
 Many other little improvements and bug fixes. Improved RNG and now output number on quit.
