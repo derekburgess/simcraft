@@ -5,10 +5,13 @@ Captures live simulation state at quit time and combines it with OS entropy
 using HMAC-SHA256 (NIST SP 800-90A approved) to produce unbiased random numbers.
 
 Entropy analysis:
-  - Per entity: 5 IEEE 754 doubles (x, y, vx, vy, mass). After chaotic n-body
-    evolution, conservatively ~64 bits min-entropy per entity.
-  - At quit time: ~10,000+ molecular clouds = 640,000+ bits of simulation entropy.
-    SHA-256 compresses to 256 bits — the hash is the bottleneck, not the source.
+  - Per cloud: 5 IEEE 754 doubles (x, y, vx, vy, mass) plus its element index; black holes
+    add spin/accretion, neutron stars their pulse phase. After chaotic n-body evolution,
+    conservatively ~64 bits min-entropy per entity.
+  - Per universe: the barrier membrane (240 radii + velocities) — a dense integrated record
+    of every gravitational event in that universe's history.
+  - At quit time: up to 10,000 clouds (MULTIVERSE_MAX_CLOUDS) = 640,000+ bits of simulation
+    entropy. SHA-256 compresses to 256 bits — the hash is the bottleneck, not the source.
   - os.urandom(32): 256 bits from OS CSPRNG.
   - HMAC-SHA256 combination: even if simulation state contributes 0 bits (attacker
     reads memory), os.urandom alone provides full 256-bit security. The simulation
@@ -24,6 +27,8 @@ import struct
 import sys
 from datetime import datetime
 
+import numpy as np
+
 MIN = 10000000000000000000  # Lower bound of RNG output range (20-digit minimum)
 MAX = 99999999999999999999  # Upper bound of RNG output range (20-digit maximum)
 
@@ -32,7 +37,15 @@ def serialize_state(state_obj):
     """Pack live SimulationState into bytes for hashing.
 
     Header: 12 bytes — struct.pack('<3I', mc_count, bh_count, ns_count)
-    Per entity: 40 bytes — struct.pack('<5d', x, y, vx, vy, mass)
+    Then, per universe, little-endian raw array blocks:
+      clouds   — (n, 5) float64 [x, y, vx, vy, mass] + (n,) int64 element indices
+      holes    — per hole '<7d' x, y, vx, vy, mass, angular_momentum, accretion_mass
+      stars    — per star '<6d' x, y, vx, vy, mass, time_since_last_pulse
+      barrier  — '<2d' center + (num_points,) float64 radii + radii velocities
+
+    The cloud field serializes straight from the SoA arrays (no per-row packing), and the
+    barrier membrane state is included: its deformation integrates every gravitational event
+    in the universe's history, so it is a dense chaotic record the hash gets for free.
 
     Returns (state_bytes, entity_count).
     """
@@ -45,14 +58,25 @@ def serialize_state(state_obj):
 
     for u in universes:
         c = u.clouds
-        for k in range(c.n):
-            parts.append(struct.pack('<5d', c.x[k], c.y[k], c.vx[k], c.vy[k], c.mass[k]))
-    for u in universes:
-        for entity in u.black_holes:
-            parts.append(struct.pack('<5d', entity.x, entity.y, entity.vx, entity.vy, entity.mass))
-    for u in universes:
-        for entity in u.neutron_stars:
-            parts.append(struct.pack('<5d', entity.x, entity.y, entity.vx, entity.vy, entity.mass))
+        if c.n:
+            block = np.empty((c.n, 5))
+            block[:, 0] = c.X
+            block[:, 1] = c.Y
+            block[:, 2] = c.VX
+            block[:, 3] = c.VY
+            block[:, 4] = c.M
+            parts.append(block.astype('<f8', copy=False).tobytes())
+            parts.append(c.ELEM.astype('<i8', copy=False).tobytes())
+        for e in u.black_holes:
+            parts.append(struct.pack('<7d', e.x, e.y, e.vx, e.vy, e.mass,
+                                     e.angular_momentum, e.accretion_mass))
+        for e in u.neutron_stars:
+            parts.append(struct.pack('<6d', e.x, e.y, e.vx, e.vy, e.mass,
+                                     e.time_since_last_pulse))
+        b = u.barrier
+        parts.append(struct.pack('<2d', b.center[0], b.center[1]))
+        parts.append(b.radii.astype('<f8', copy=False).tobytes())
+        parts.append(b.radii_vel.astype('<f8', copy=False).tobytes())
 
     entity_count = mc_count + bh_count + ns_count
     return b''.join(parts), entity_count
@@ -84,7 +108,12 @@ def generate(state_bytes, min_val, max_val):
 
     random_number = min_val + (raw_int % range_size)
 
-    entity_count = (len(state_bytes) - 12) // 40 if len(state_bytes) > 12 else 0
+    # Entity count comes from the serialized header (byte length is no longer a fixed
+    # multiple of an entity: the payload also carries elements and barrier membrane state).
+    if len(state_bytes) >= 12:
+        entity_count = sum(struct.unpack('<3I', state_bytes[:12]))
+    else:
+        entity_count = 0
     state_entropy_bits = entity_count * 64
 
     return {
