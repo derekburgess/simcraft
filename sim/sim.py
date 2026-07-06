@@ -7,7 +7,8 @@ import pygame
 
 from sim.config import *
 from sim import physics
-from sim.render import WorldRenderer, draw_ui
+from sim.render import WorldRenderer, draw_ui, draw_stats
+from sim.rng import serialize_state, generate, MIN as RNG_MIN, MAX as RNG_MAX
 
 
 def screen_to_world(screen_x, screen_y, zoom, view_center_x, view_center_y):
@@ -91,6 +92,8 @@ def run_simulation(screen, font, state):
         view_center_x = SCREEN_WIDTH / 2.0
         view_center_y = SCREEN_HEIGHT / 2.0
         renderer = WorldRenderer()
+        rng_number = None
+        last_rng_update = 0
 
         while running:
             current_time = pygame.time.get_ticks()
@@ -137,6 +140,18 @@ def run_simulation(screen, font, state):
 
             renderer.render(screen, state, zoom, view_center_x, view_center_y)
 
+            # Fresh RNG output once a second, hashed from the live simulation state.
+            if current_time - last_rng_update >= 1000:
+                try:
+                    state_bytes, _ = serialize_state(state)
+                    rng_number = generate(state_bytes, RNG_MIN, RNG_MAX)['random_number']
+                except Exception as rng_err:
+                    print(f"HUD RNG failed: {rng_err}")
+                    rng_number = None
+                last_rng_update = current_time
+
+            draw_stats(screen, clock.get_fps(), len(state.universes), state.entity_count(), rng_number)
+
             #draw_ui(screen, font, current_year, zoom)
 
             current_year += delta_time * YEAR_RATE
@@ -150,9 +165,8 @@ def run_simulation(screen, font, state):
         print("Exited simulation")
 
         try:
-            from sim.rng import serialize_state, generate
             state_bytes, entity_count = serialize_state(state)
-            result = generate(state_bytes, 10000000000000000000, 99999999999999999999)
+            result = generate(state_bytes, RNG_MIN, RNG_MAX)
             print(f"RANDOM: {result['random_number']}")
         except Exception as rng_err:
             print(f"RNG FAILED: {rng_err}")

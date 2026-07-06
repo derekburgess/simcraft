@@ -316,6 +316,28 @@ def draw_static_key(screen, font, zoom):
     screen.blit(font.render('[F11] FULLSCREEN', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
 
 
+_stats_font = None
+
+def _get_stats_font():
+    global _stats_font
+    if _stats_font is None:
+        _stats_font = pygame.font.SysFont(UI_STATS_FONT, UI_STATS_FONT_SIZE)
+    return _stats_font
+
+
+def draw_stats(screen, fps, universe_count, entity_count, rng_number):
+    font = _get_stats_font()
+    lines = [
+        f"FPS: {fps:.0f}",
+        f"UNIVERSES: {universe_count}",
+        f"ENTITIES: {entity_count}",
+        f"{rng_number}" if rng_number is not None else "...",
+    ]
+    for i, line in enumerate(lines):
+        screen.blit(font.render(line, True, UI_STATS_COLOR),
+                    (UI_LABEL_X, UI_STATS_Y + i * UI_STATS_LINE_SPACING))
+
+
 def draw_ui(screen, font, current_year, zoom=1.0):
     draw_static_key(screen, font, zoom)
     year_text = font.render(format_year_display(current_year), True, LABEL_COLOR)
