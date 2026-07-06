@@ -3,3 +3,4 @@
 /sim/__pycache__
 /analysis/__pycache__
 .claude
+*.so
