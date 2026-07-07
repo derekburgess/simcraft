@@ -1,21 +1,28 @@
 """
-SimCraft RNG — HMAC-SHA256 with rejection sampling.
+SimCraft RNG — HKDF (extract-then-expand) salted by a running entropy pool.
 
-Captures live simulation state at quit time and combines it with OS entropy
-using HMAC-SHA256 (NIST SP 800-90A approved) to produce unbiased random numbers.
+The simulation is the salt. An EntropyPool accumulates a record of the whole
+trajectory — cheap chaotic observables every frame (frame-time jitter, tick count,
+per-universe counts/masses, barrier membrane sums, sample cloud positions) plus a
+periodic fold of the fully serialized multiverse — so the salt reflects how the
+universe got here, not just where it ended up. Draws ratchet the pool forward, so
+consecutive outputs never see the same salt.
+
+Each output is HKDF-SHA256 (RFC 5869): PRK = HMAC(salt, os.urandom(32)), then
+expand with a domain-separation info string. Rejection sampling removes modulo bias.
 
 Entropy analysis:
   - Per cloud: 5 IEEE 754 doubles (x, y, vx, vy, mass) plus its element index; black holes
     add spin/accretion, neutron stars their pulse phase. After chaotic n-body evolution,
     conservatively ~64 bits min-entropy per entity.
-  - Per universe: the barrier membrane (240 radii + velocities) — a dense integrated record
-    of every gravitational event in that universe's history.
-  - At quit time: up to 10,000 clouds (MULTIVERSE_MAX_CLOUDS) = 640,000+ bits of simulation
-    entropy. SHA-256 compresses to 256 bits — the hash is the bottleneck, not the source.
-  - os.urandom(32): 256 bits from OS CSPRNG.
-  - HMAC-SHA256 combination: even if simulation state contributes 0 bits (attacker
-    reads memory), os.urandom alone provides full 256-bit security. The simulation
-    state provides defense-in-depth.
+  - Per universe: the barrier membrane (radii + velocities) — a dense integrated record
+    of every gravitational event in that universe's history; ~16 bits/point conservative.
+  - The pool folds this state repeatedly over the run and never forgets: entropy only
+    accumulates. SHA-256/BLAKE2b compress to 256 bits — the hash is the bottleneck,
+    not the source.
+  - os.urandom(32) is the IKM every draw: even if simulation state contributes 0 bits
+    (attacker reads memory), the OS CSPRNG alone provides full 256-bit security. The
+    simulation state is defense-in-depth.
   - Rejection sampling bias: for range ~9x10^19, rejection probability is ~10^-57
     per attempt — effectively zero. The loop exists for formal correctness.
 """
@@ -32,12 +39,19 @@ import numpy as np
 MIN = 10000000000000000000  # Lower bound of RNG output range (20-digit minimum)
 MAX = 99999999999999999999  # Upper bound of RNG output range (20-digit maximum)
 
+SERIALIZE_VERSION = 2
+_HKDF_INFO = b'simcraft-rng-v1'       # domain separation for output derivation
+_POOL_PERSON = b'simcraft-pool-v1'    # blake2b personalization (16-byte max)
+_HEADER = struct.Struct('<B5I')       # version, n_universes, mc, bh, ns, barrier_pts
+
 
 def serialize_state(state_obj):
-    """Pack live SimulationState into bytes for hashing.
+    """Pack live SimulationState into bytes for hashing. The encoding is framed and
+    versioned so it is injective: no two distinct states produce the same bytes.
 
-    Header: 12 bytes — struct.pack('<3I', mc_count, bh_count, ns_count)
-    Then, per universe, little-endian raw array blocks:
+    Global header: _HEADER — version, universe count, total clouds/holes/stars,
+    total barrier points. Then per universe:
+      frame    — struct.pack('<4I', n_clouds, n_holes, n_stars, n_barrier_points)
       clouds   — (n, 5) float64 [x, y, vx, vy, mass] + (n,) int64 element indices
       holes    — per hole '<7d' x, y, vx, vy, mass, angular_momentum, accretion_mass
       stars    — per star '<6d' x, y, vx, vy, mass, time_since_last_pulse
@@ -53,11 +67,15 @@ def serialize_state(state_obj):
     mc_count = sum(u.clouds.n for u in universes)
     bh_count = sum(len(u.black_holes) for u in universes)
     ns_count = sum(len(u.neutron_stars) for u in universes)
+    barrier_points = sum(len(u.barrier.radii) for u in universes)
 
-    parts = [struct.pack('<3I', mc_count, bh_count, ns_count)]
+    parts = [_HEADER.pack(SERIALIZE_VERSION, len(universes),
+                          mc_count, bh_count, ns_count, barrier_points)]
 
     for u in universes:
         c = u.clouds
+        parts.append(struct.pack('<4I', c.n, len(u.black_holes), len(u.neutron_stars),
+                                 len(u.barrier.radii)))
         if c.n:
             block = np.empty((c.n, 5))
             block[:, 0] = c.X
@@ -82,70 +100,148 @@ def serialize_state(state_obj):
     return b''.join(parts), entity_count
 
 
-def generate(state_bytes, min_val, max_val):
-    """Generate a single random number using HMAC-SHA256 with rejection sampling.
+def _parse_header(state_bytes):
+    """Return (entity_count, entropy_bits_estimate) from serialized state bytes."""
+    if len(state_bytes) < _HEADER.size:
+        return 0, 0
+    version, _, mc, bh, ns, barrier_points = _HEADER.unpack_from(state_bytes)
+    if version != SERIALIZE_VERSION:
+        return 0, 0
+    entity_count = mc + bh + ns
+    # ~64 bits/entity (5+ chaotic doubles), ~16 bits/barrier point (radius + velocity).
+    return entity_count, entity_count * 64 + barrier_points * 16
 
-    key   = SHA-256(state_bytes)
-    msg   = os.urandom(32)
-    combined = HMAC-SHA256(key, msg)
+
+class EntropyPool:
+    """Running 256-bit record of the simulation trajectory.
+
+    fold_frame() mixes cheap per-frame observables in continuously and folds the full
+    serialized state every FULL_FOLD_INTERVAL frames; generate() ratchets the pool
+    forward after every draw, so no two draws share a salt and past pool states are
+    unrecoverable from the current one.
+    """
+
+    FULL_FOLD_INTERVAL = 120  # frames between full-state folds (~2 s at 60 fps)
+    SAMPLE_CLOUDS = 4         # leading cloud positions folded each frame
+
+    def __init__(self):
+        self.pool = os.urandom(32)
+        self.folds = 0
+        self.entity_count = 0    # from the most recent full-state fold
+        self.entropy_bits = 0    # conservative estimate for that snapshot
+
+    def fold(self, data):
+        self.pool = hashlib.blake2b(data, key=self.pool, digest_size=32,
+                                    person=_POOL_PERSON).digest()
+        self.folds += 1
+
+    def fold_state(self, state_obj):
+        state_bytes, self.entity_count = serialize_state(state_obj)
+        _, self.entropy_bits = _parse_header(state_bytes)
+        self.fold(state_bytes)
+
+    def fold_frame(self, state_obj, tick_ms, raw_frame_ms):
+        """Cheap per-frame fold: OS-scheduling jitter (raw frame ms), tick count, and
+        per-universe chaotic observables. Full state every FULL_FOLD_INTERVAL frames."""
+        parts = [struct.pack('<QIi', self.folds, tick_ms & 0xFFFFFFFF, raw_frame_ms)]
+        for u in state_obj.universes:
+            c = u.clouds
+            parts.append(struct.pack('<4I3d',
+                                     c.n, len(u.black_holes), len(u.neutron_stars),
+                                     len(u.black_hole_pulses),
+                                     float(u.barrier.radii.sum()),
+                                     float(u.barrier.radii_vel.sum()),
+                                     float(c.M.sum()) if c.n else 0.0))
+            k = min(c.n, self.SAMPLE_CLOUDS)
+            if k:
+                parts.append(np.ascontiguousarray(c.X[:k], dtype='<f8').tobytes())
+                parts.append(np.ascontiguousarray(c.Y[:k], dtype='<f8').tobytes())
+        self.fold(b''.join(parts))
+        if self.folds % self.FULL_FOLD_INTERVAL == 0:
+            self.fold_state(state_obj)
+
+
+def _hkdf_extract(salt, ikm):
+    return hmac.new(salt, ikm, hashlib.sha256).digest()
+
+
+def _hkdf_expand(prk, info, length):
+    okm = b''
+    block = b''
+    counter = 1
+    while len(okm) < length:
+        block = hmac.new(prk, block + info + bytes([counter]), hashlib.sha256).digest()
+        okm += block
+        counter += 1
+    return okm[:length]
+
+
+def generate(salt, min_val, max_val):
+    """Generate one random number via HKDF-SHA256 with rejection sampling.
+
+    salt: an EntropyPool (live sim — pool is ratcheted forward after the draw) or raw
+    serialized state bytes (one-shot).
+
+      PRK = HKDF-Extract(salt, os.urandom(32))
+      OKM = HKDF-Expand(PRK, 'simcraft-rng-v1', 32)
 
     Rejection sampling eliminates modulo bias:
       threshold = 2^256 - (2^256 % range_size)
       if raw_int >= threshold: resample with fresh os.urandom
     """
-    state_hash = hashlib.sha256(state_bytes).digest()
+    pool = salt if isinstance(salt, EntropyPool) else None
+    if pool is not None:
+        salt_bytes = pool.pool
+        entity_count, entropy_bits = pool.entity_count, pool.entropy_bits
+    else:
+        salt_bytes = hashlib.sha256(salt).digest()
+        entity_count, entropy_bits = _parse_header(salt)
+
     range_size = max_val - min_val + 1
     threshold = (1 << 256) - ((1 << 256) % range_size)
 
     attempts = 0
     while True:
         attempts += 1
-        os_random = os.urandom(32)
-        combined = hmac.new(key=state_hash, msg=os_random, digestmod=hashlib.sha256).digest()
-        raw_int = int.from_bytes(combined, 'big')
+        prk = _hkdf_extract(salt_bytes, os.urandom(32))
+        okm = _hkdf_expand(prk, _HKDF_INFO, 32)
+        raw_int = int.from_bytes(okm, 'big')
         if raw_int < threshold:
             break
 
-    random_number = min_val + (raw_int % range_size)
-
-    # Entity count comes from the serialized header (byte length is no longer a fixed
-    # multiple of an entity: the payload also carries elements and barrier membrane state).
-    if len(state_bytes) >= 12:
-        entity_count = sum(struct.unpack('<3I', state_bytes[:12]))
-    else:
-        entity_count = 0
-    state_entropy_bits = entity_count * 64
+    if pool is not None:
+        pool.fold(okm)  # ratchet: the next draw sees a different salt
 
     return {
-        'random_number': random_number,
+        'random_number': min_val + (raw_int % range_size),
         'generation_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'entity_count': entity_count,
-        'state_entropy_bits': state_entropy_bits,
+        'state_entropy_bits': entropy_bits,
+        'pool_folds': pool.folds if pool is not None else 0,
         'attempts': attempts,
     }
 
 
 def rng(min_val, max_val, state_bytes=None, generations=1):
     """Generate random numbers. Uses os.urandom(256) as synthetic state when
-    state_bytes is None (standalone/batch mode)."""
+    state_bytes is None (standalone/batch mode). Batch draws share one pool and
+    ratchet between draws instead of re-hashing the state every time."""
+    pool = EntropyPool()
     if state_bytes is None:
-        state_bytes = os.urandom(256)
+        pool.fold(os.urandom(256))
+    else:
+        pool.entity_count, pool.entropy_bits = _parse_header(state_bytes)
+        pool.fold(state_bytes)
 
     results = []
     for _ in range(generations):
-        result = generate(state_bytes, min_val, max_val)
+        result = generate(pool, min_val, max_val)
         print(f"{result['random_number']}")
 
         if generations == 1:
             return result
 
-        results.append({
-            'random_number': result['random_number'],
-            'generation_time': result['generation_time'],
-            'entity_count': result['entity_count'],
-            'state_entropy_bits': result['state_entropy_bits'],
-            'attempts': result['attempts'],
-        })
+        results.append(result)
 
     import pandas as pd
     return pd.DataFrame(results)

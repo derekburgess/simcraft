@@ -294,13 +294,18 @@ class WorldRenderer:
 
 # ── HUD ─────────────────────────────────────────────────────────────────────────────────────
 
+def format_years(years):
+    """Humanize a literal year count: 950 → '950', 1.2e3 → '1.2K', 3.4e6 → '3.4M',
+    5.6e9 → '5.6B', 7.8e12 → '7.8T'."""
+    for divisor, suffix in ((1e12, 'T'), (1e9, 'B'), (1e6, 'M'), (1e3, 'K')):
+        value = round(years / divisor, 1)
+        if value >= 1:
+            return f"{value:.1f}{suffix}"
+    return f"{int(years)}"
+
+
 def format_year_display(current_year):
-    if current_year >= 1_000_000:
-        return "TIME(YEARS): ∞"
-    elif current_year >= 1_000:
-        return f"TIME(YEARS): {current_year / 1_000:.1f}B"
-    else:
-        return f"TIME(YEARS): {int(current_year)}M"
+    return f"TIME(YEARS): {format_years(current_year)}"
 
 
 def draw_static_key(screen, font, zoom):
@@ -317,25 +322,52 @@ def draw_static_key(screen, font, zoom):
 
 
 _stats_font = None
+_stats_rng_font = None
 
-def _get_stats_font():
-    global _stats_font
+def _get_stats_fonts():
+    global _stats_font, _stats_rng_font
     if _stats_font is None:
         _stats_font = pygame.font.SysFont(UI_STATS_FONT, UI_STATS_FONT_SIZE)
-    return _stats_font
+        _stats_rng_font = pygame.font.SysFont(UI_STATS_FONT, UI_STATS_RNG_FONT_SIZE)
+    return _stats_font, _stats_rng_font
 
 
-def draw_stats(screen, fps, universe_count, entity_count, rng_number):
-    font = _get_stats_font()
-    lines = [
+def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_folds, rng_number):
+    """Full-width single-row table along the bottom of the screen, bordered, with
+    UI_LABEL_X margins at the sides. The RNG output is the final cell in a larger
+    font, sized to its 20-digit content; the leftover width is split evenly among
+    the stat cells so the columns don't jitter as values change. SALT is the
+    entropy-pool fold count feeding the RNG output beside it."""
+    font, rng_font = _get_stats_fonts()
+    stat_cells = [
         f"FPS: {fps:.0f}",
+        f"YEAR: {format_years(current_year)}",
         f"UNIVERSES: {universe_count}",
         f"ENTITIES: {entity_count}",
-        f"{rng_number}" if rng_number is not None else "...",
+        f"SALT: {salt_folds:,}",
     ]
-    for i, line in enumerate(lines):
-        screen.blit(font.render(line, True, UI_STATS_COLOR),
-                    (UI_LABEL_X, UI_STATS_Y + i * UI_STATS_LINE_SPACING))
+    rng_text = f"{rng_number}" if rng_number is not None else "..."
+
+    row_h = rng_font.get_height() + 2 * UI_STATS_CELL_PAD_Y
+    row_top = SCREEN_HEIGHT - UI_STATS_BOTTOM_MARGIN - row_h
+    row_bottom = row_top + row_h
+    table_left = UI_LABEL_X
+    table_w = SCREEN_WIDTH - 2 * UI_LABEL_X
+
+    rng_w = rng_font.size("0" * 20)[0] + 2 * UI_STATS_CELL_PAD_X
+    stat_w = (table_w - rng_w) // len(stat_cells)
+
+    x = table_left
+    for text in stat_cells:
+        surf = font.render(text, True, UI_STATS_COLOR)
+        screen.blit(surf, (x + UI_STATS_CELL_PAD_X,
+                           row_top + (row_h - surf.get_height()) // 2))
+        x += stat_w
+        pygame.draw.line(screen, UI_STATS_GRID_COLOR, (x, row_top), (x, row_bottom))
+    surf = rng_font.render(rng_text, True, UI_STATS_COLOR)
+    screen.blit(surf, (x + UI_STATS_CELL_PAD_X,
+                       row_top + (row_h - surf.get_height()) // 2))
+    pygame.draw.rect(screen, UI_STATS_GRID_COLOR, (table_left, row_top, table_w, row_h), 1)
 
 
 def draw_ui(screen, font, current_year, zoom=1.0):

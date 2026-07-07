@@ -12,11 +12,14 @@ SCREEN_HEIGHT = 1080             # Display height in pixels. Change to match you
 LABEL_COLOR = (60, 60, 200)    # RGB color for UI text labels.
 
 UI_LABEL_X = 30                 # X position (pixels from left) for all HUD text labels.
-UI_STATS_Y = 30                 # Y position (pixels from top) for the stats readout (FPS/universes/entities/RNG).
-UI_STATS_LINE_SPACING = 22      # Vertical spacing between stats readout lines.
 UI_STATS_FONT = 'notosans'      # Sans-serif font for the stats readout.
-UI_STATS_FONT_SIZE = 14         # Point size for the stats readout font.
+UI_STATS_FONT_SIZE = 14         # Point size for the stats readout table cells.
+UI_STATS_RNG_FONT_SIZE = 24     # Point size for the RNG output cell — larger than the rest of the row.
 UI_STATS_COLOR = (110, 110, 245)  # Stats readout text color — brighter than LABEL_COLOR for contrast on the dark background.
+UI_STATS_GRID_COLOR = (60, 60, 140)  # Stats table cell-separator color — dimmer than the text.
+UI_STATS_BOTTOM_MARGIN = 24     # Gap (pixels) between the stats table row and the bottom of the screen.
+UI_STATS_CELL_PAD_X = 14        # Horizontal padding inside each stats table cell.
+UI_STATS_CELL_PAD_Y = 6         # Vertical padding inside the stats table row.
 UI_ZOOM_Y_OFFSET = 140          # Y offset from bottom of screen for the zoom label.
 UI_EXIT_Y_OFFSET = 110          # Y offset from bottom of screen for the exit/quit label.
 UI_TEXT_Y_OFFSET = 40           # Y offset from bottom of screen for the year counter display.

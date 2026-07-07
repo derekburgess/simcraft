@@ -18,6 +18,7 @@ from sim.config import *
 from sim.fields import CloudField, pick_element, _random_offsets
 from sim.barrier import Barrier
 from sim.entities import BlackHole, NeutronStar
+from sim.rng import EntropyPool
 from sim import gravity
 
 try:
@@ -42,6 +43,7 @@ class SimulationState:
     their barriers push/deform each other."""
     def __init__(self):
         self.universes = []
+        self.entropy_pool = EntropyPool()
 
     def entity_count(self):
         return sum(u.clouds.n + len(u.black_holes) + len(u.neutron_stars) for u in self.universes)
