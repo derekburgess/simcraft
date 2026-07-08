@@ -3,8 +3,9 @@
 Frame order per universe (matches the historical update_simulation_state exactly):
   barrier deformation → cloud gravity → collisions/entity updates/events → barrier
   gravity+containment → tracer spin → merger pulses → black-hole pass (attract/decay/rip/
-  evaporate) → neutron-star pass (gravity/pulses/decay/kilonova) → pulse collisions →
-  removals & spawns → integration.
+  evaporate) → neutron-star pass (gravity/pulses/decay/kilonova) → magnetar pass (gravity/
+  magnetism/flares/field decay→settle into NS) → pulse collisions → removals & spawns →
+  integration.
 Captured clouds stay in the arrays until the end-of-step removal (the neutron-star pass sees
 them, as it always did); streamed clouds get their position rewritten at capture and the row
 moves to the child universe at the end of the step — visible before the child steps.
@@ -17,7 +18,7 @@ import numpy as np
 from sim.config import *
 from sim.fields import CloudField, pick_element, _random_offsets
 from sim.barrier import Barrier
-from sim.entities import BlackHole, NeutronStar
+from sim.entities import BlackHole, NeutronStar, Magnetar
 from sim.rng import EntropyPool
 from sim import gravity
 
@@ -34,6 +35,7 @@ class Universe:
         self.clouds = CloudField()
         self.black_holes = []
         self.neutron_stars = []
+        self.magnetars = []
         self.black_hole_pulses = []
         self.pending_rip_bhs = []  # black holes in this universe that reached rip mass this step
 
@@ -46,12 +48,14 @@ class SimulationState:
         self.entropy_pool = EntropyPool()
 
     def entity_count(self):
-        return sum(u.clouds.n + len(u.black_holes) + len(u.neutron_stars) for u in self.universes)
+        return sum(u.clouds.n + len(u.black_holes) + len(u.neutron_stars) + len(u.magnetars)
+                   for u in self.universes)
 
     def total_mass(self):
         return sum(float(u.clouds.M.sum())
                    + sum(bh.mass for bh in u.black_holes)
                    + sum(ns.mass for ns in u.neutron_stars)
+                   + sum(m.mass for m in u.magnetars)
                    for u in self.universes)
 
 
@@ -127,7 +131,12 @@ def update_entities(universe):
             bh_chance = PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE if elem[k] >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY else BLACK_HOLE_CHANCE
             if random.random() < bh_chance:
                 if random.random() < NEUTRON_STAR_CHANCE:
-                    universe.neutron_stars.append(NeutronStar(clouds.x[k], clouds.y[k], mass[k]))
+                    # A small fraction of neutron-star births come out as magnetars, so the
+                    # black-hole formation rate (which drives the matter cycle) is untouched.
+                    if random.random() < MAGNETAR_CHANCE:
+                        universe.magnetars.append(Magnetar(clouds.x[k], clouds.y[k], mass[k]))
+                    else:
+                        universe.neutron_stars.append(NeutronStar(clouds.x[k], clouds.y[k], mass[k]))
                 else:
                     universe.black_holes.append(BlackHole(clouds.x[k], clouds.y[k], mass[k]))
                 to_remove[k] = True
@@ -233,7 +242,7 @@ def _update_bh_pulses(universe, ring, delta_time):
                     black_hole.vy += (dy / distance) * force * delta_time
                     energy_budget -= force * delta_time * 0.01
 
-        for neutron_star in universe.neutron_stars:
+        for neutron_star in (*universe.neutron_stars, *universe.magnetars):
             if energy_budget <= 0:
                 break
             dx = neutron_star.x - x
@@ -368,8 +377,25 @@ def step(universe, ring, delta_time):
                                math.sin(offset_angle) * offset_dist * 0.5))
             universe.black_hole_pulses.append([neutron_star.x, neutron_star.y, 0, neutron_star.mass])
 
-    # NS-NS Kilonova mergers
-    alive_ns = [ns for ns in universe.neutron_stars if ns not in ns_to_remove]
+    # ── Magnetar pass ──
+    for magnetar in universe.magnetars:
+        if magnetar in ns_to_remove:
+            continue
+        magnetar.apply_gravity(universe, delta_time)
+        magnetar.apply_magnetism(universe, delta_time)
+        magnetar.update_field(universe, delta_time)
+        magnetar.decay(delta_time)
+        if magnetar.field_time <= 0 or magnetar.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
+            # The field dies: the magnetar settles into a plain neutron star. (If mass is
+            # already below the NS decay threshold, the NS pass turns it into a kilonova
+            # next frame — no duplicated ejecta path here.)
+            ns_to_remove.add(magnetar)
+            settled = NeutronStar(magnetar.x, magnetar.y, magnetar.mass)
+            settled.vx, settled.vy = magnetar.vx, magnetar.vy
+            universe.neutron_stars.append(settled)
+
+    # NS-NS Kilonova mergers (magnetars merge like any neutron star)
+    alive_ns = [ns for ns in (*universe.neutron_stars, *universe.magnetars) if ns not in ns_to_remove]
     merged_ns = set()
     for i in range(len(alive_ns)):
         if alive_ns[i] in merged_ns:
@@ -424,6 +450,7 @@ def step(universe, ring, delta_time):
         universe.black_holes = [bh for bh in universe.black_holes if bh not in bh_to_remove]
     if ns_to_remove:
         universe.neutron_stars = [ns for ns in universe.neutron_stars if ns not in ns_to_remove]
+        universe.magnetars = [m for m in universe.magnetars if m not in ns_to_remove]
     for (sx, sy, smass, soffs, selem, svx, svy) in spawns:
         clouds.spawn(sx, sy, smass, elem=selem, vx=svx, vy=svy, offsets=soffs)
 
@@ -440,9 +467,12 @@ def step(universe, ring, delta_time):
         bh.vy *= bh_damping * damping
         bh.x += bh.vx * delta_time
         bh.y += bh.vy * delta_time
-    for ns in universe.neutron_stars:
-        ns.vx *= damping
-        ns.vy *= damping
+    # Dense compact objects get heavy dynamical friction too — anchored like black holes,
+    # just less strongly — so BH kicks and cloud-pull recoil don't fling them across the ring.
+    ns_damping = NEUTRON_STAR_VELOCITY_DAMPING ** delta_time
+    for ns in (*universe.neutron_stars, *universe.magnetars):
+        ns.vx *= ns_damping * damping
+        ns.vy *= ns_damping * damping
         ns.x += ns.vx * delta_time
         ns.y += ns.vy * delta_time
 
@@ -480,9 +510,18 @@ def spawn_universe(center):
 
 
 def _clear_of_all(state, x, y, new_radius):
-    return all(math.hypot(x - u.barrier.center[0], y - u.barrier.center[1])
-               > float(u.barrier.radii.max()) + new_radius + UNIVERSE_SPAWN_GAP
-               for u in state.universes)
+    """Clear if the new barrier keeps UNIVERSE_SPAWN_GAP to each existing barrier's LOCAL
+    edge (its radius toward the candidate point, not the global max — a bulge on the far
+    side of a deformed neighbour shouldn't push spawns away from this side), so newborn
+    universes can nestle into the contours of the cluster."""
+    for u in state.universes:
+        ucx, ucy = u.barrier.center
+        dx, dy = x - ucx, y - ucy
+        dist = math.hypot(dx, dy)
+        local_r = u.barrier.get_radius_at_angle(math.atan2(dy, dx) % (2 * math.pi))
+        if dist <= local_r + new_radius + UNIVERSE_SPAWN_GAP:
+            return False
+    return True
 
 
 def _find_spawn_center(state, new_radius, source=None, bh=None):
@@ -565,7 +604,7 @@ def _translate_universe(u, dx, dy):
     for e in u.black_holes:
         e.x += dx
         e.y += dy
-    for e in u.neutron_stars:
+    for e in (*u.neutron_stars, *u.magnetars):
         e.x += dx
         e.y += dy
     for p in u.black_hole_pulses:
@@ -624,7 +663,8 @@ def resolve_barrier_overlaps(state, delta_time):
 
 
 def _universe_alive(universe):
-    return bool(universe.clouds.n or universe.black_holes or universe.neutron_stars)
+    return bool(universe.clouds.n or universe.black_holes or universe.neutron_stars
+                or universe.magnetars)
 
 
 def enforce_total_cloud_cap(state):

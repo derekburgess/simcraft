@@ -202,7 +202,7 @@ UNIVERSE_MAX_COUNT = max(2, os.cpu_count() or 4)  # Cap coexisting universes at 
 BLACK_HOLE_RIP_MASS_FACTOR = 0.9  # Fraction of max mass a hole must reach to "rip" open a new universe. <1 because decay keeps holes hovering just under the hard cap.
 UNIVERSE_RIP_TRANSFER_FRACTION = 0.4  # Fraction of the source universe's clouds pulled through into a newly ripped universe (instead of spawning fresh matter). Keeps total entity count bounded.
 UNIVERSE_STREAM_FRACTION = 0.6  # After ripping, chance each cloud the hole accretes is streamed into its child universe (wormhole) instead of being consumed. 0 = one-time transfer only; 1 = everything it eats flows through.
-UNIVERSE_SPAWN_GAP = 20         # Minimum gap (pixels) between a newly spawned barrier and existing ones; also the clearance kept between barriers by repulsion. Small = universes cluster close together.
+UNIVERSE_SPAWN_GAP = 4          # Minimum gap (pixels) between a newly spawned barrier and existing ones (measured to each barrier's local edge). Small = newborn universes bud right off their parent and the multiverse grows as a touching cluster.
 BARRIER_REPULSION_RATE = 15.0   # Per-second rate at which overlapping universes are separated/flattened. Higher = firmer (less overlap).
 BARRIER_RESOLVE_ITERATIONS = 4  # Relaxation passes per frame for barrier contact. More = better convergence when many universes are packed together (prevents residual overlap).
 BARRIER_CONTACT_DEFORM = 1.0    # How strongly barriers flatten each other where they press together — the primary no-overlap mechanism at contact. Higher = deeper flattening.
@@ -250,6 +250,7 @@ BLACK_HOLE_DECAY_EJECTA_SPREAD = 20    # Max spawn distance (pixels) of decay ej
 
 # ── Neutron Stars ──
 NEUTRON_STAR_CHANCE = 0.6      # Probability of becoming a neutron star instead of a black hole on collapse.
+NEUTRON_STAR_VELOCITY_DAMPING = 0.35  # Per-second velocity retention for neutron stars AND magnetars. Dense compact objects plow through the cloud sea with heavy dynamical friction, anchoring them like black holes (0.15) but less strongly. 1.0 = no extra braking.
 NEUTRON_STAR_RADIUS = 1         # Visual radius in pixels (tiny, as expected).
 NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE  # Gravitational pull strength. Moderate — between clouds and BHs.
 NEUTRON_STAR_DECAY_RATE = 2   # Mass lost per second. Higher = shorter lifespan.
@@ -264,6 +265,26 @@ NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripple
 NEUTRON_STAR_PULSE_MASS_BOOST = 0.02      # Mass cost per unit of pulse force. Pulsing drains the neutron star.
 NEUTRON_STAR_PULSE_COLOR_DURATION = 0.1  # Seconds the neutron star flashes white after each pulse.
 NEUTRON_STAR_PULSE_FADE_RATE = 1.5  # Rate multiplier for pulse fade once the wavefront reaches the barrier.
+
+# ── Magnetars (rare neutron-star births with an extreme magnetic field) ──
+MAGNETAR_CHANCE = 0.15          # Probability a neutron-star birth is a magnetar instead of a plain NS.
+FERROMAGNETIC_ELEMENTS = (6, 14, 17)  # Element indices the field grips: Iron, Cobalt, Nickel.
+MAGNETAR_MAGNETIC_CONSTANT = 5 * GRAVITY_SCALE  # Magnetic pull on ferromagnetic clouds. Falls off as 1/d (not 1/d^2), so the grip stays near-constant across the whole field radius — but only ~7% of clouds respond, so it never competes with black holes for organizing matter.
+MAGNETAR_FIELD_RADIUS = 120     # Reach (pixels) of the magnetic pull.
+MAGNETAR_FIELD_LIFETIME = 15.0  # Seconds before the field dies and the magnetar settles into a plain neutron star.
+MAGNETAR_DECAY_RATE = 1         # Mass lost per second. Slower than NS decay so it survives long enough to settle.
+MAGNETAR_FLARE_CHANCE = 0.003   # Per-frame chance of a giant flare (outward pulse via the BH-merger pulse machinery).
+MAGNETAR_FLARE_ENERGY = 25      # Flare pulse energy budget (same units as BH-merger consumed mass).
+MAGNETAR_FLARE_MASS_COST = 2    # Mass the magnetar loses per giant flare.
+MAGNETAR_RADIUS = 3             # Visual core radius in pixels (larger than a plain neutron star).
+MAGNETAR_COLOR_A = (235, 60, 200)  # Magenta pole of the color oscillation.
+MAGNETAR_COLOR_B = (60, 130, 255)  # Blue pole of the color oscillation.
+MAGNETAR_COLOR_CYCLE_RATE = 3.0    # Color oscillation phase speed (radians/sec).
+MAGNETAR_GLOW_RADIUS = 9        # Radius (pixels) of the translucent aura drawn around the core.
+MAGNETAR_GLOW_ALPHA = 80        # Aura opacity (0-255).
+MAGNETAR_BARRIER_CONTRACT_FACTOR = 2  # Whole-ring inward acceleration (sqrt(mass)-scaled) while a magnetar is latched onto the wall — the contraction counterpart to pulse-driven expansion. Barrier damping bounds the resulting contraction speed to a few px/s (at 2, a mass-40 magnetar reels the ring in at ~4 px/s). Higher = faster squeeze but risks out-pulling flare/pulse expansion entirely. Soft-floored at the natal (Big-Bang) radius.
+MAGNETAR_WALL_STICK = 12        # Pull (px/s^2) drawing an in-field magnetar to the wall, ramping to full strength at contact. Must beat the NS containment push (6) or the magnetar gets shoved off before it can reel the wall in; the stick is what turns a one-dent pinch into sustained contraction.
+MAGNETAR_BARRIER_ATTRACT_RATE = 1.2  # Per-second relaxation of in-field wall vertices toward the magnetar's radial distance — the visible "wall bows toward the magnet" attraction. Target-based (bounded), so it cannot run away like a constant pull would.
 
 # ── Kilonova (neutron star merger) ──
 KILONOVA_EJECTA_COUNT = 20      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements.

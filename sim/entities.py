@@ -84,7 +84,7 @@ class BlackHole:
 
         self._attract_clouds(universe, delta_time, alive, stream_moves, capture_radius, swirl_radius)
 
-        for entity in universe.neutron_stars:
+        for entity in (*universe.neutron_stars, *universe.magnetars):
             if entity in ns_to_remove:
                 continue
             dx = self.x - entity.x
@@ -236,8 +236,10 @@ class NeutronStar:
                 fy = (dy / distance) * force * delta_time
                 clouds.VX -= fx
                 clouds.VY -= fy
-                self.vx += float(fx.sum())
-                self.vy += float(fy.sum())
+                # Newton's 3rd law with inertia (same convention as BlackHole._attract_clouds):
+                # recoil scaled by mass ratio, so the dense star anchors while clouds fall in.
+                self.vx += float((fx * clouds.M).sum()) / self.mass
+                self.vy += float((fy * clouds.M).sum()) / self.mass
 
         for black_hole in universe.black_holes:
             dx = black_hole.x - self.x
@@ -333,3 +335,68 @@ class NeutronStar:
 
     def decay(self, delta_time):
         self.mass -= NEUTRON_STAR_DECAY_RATE * delta_time
+
+
+class Magnetar(NeutronStar):
+    """A neutron star born with an extreme magnetic field. Gravity is ordinary NS gravity
+    (inherited), but ferromagnetic clouds (iron/cobalt/nickel) inside the field radius are
+    pulled in hard — a selective attractor, so it never competes with black holes for
+    organizing the bulk (hydrogen/helium) matter. Instead of the steady pulsar pulses it
+    erupts in rare giant flares, and when the field dies it settles into a plain NeutronStar."""
+
+    def __init__(self, x, y, mass):
+        super().__init__(x, y, mass)
+        self.radius = MAGNETAR_RADIUS
+        self.field_time = MAGNETAR_FIELD_LIFETIME
+        self.color_phase = random.uniform(0, 2 * math.pi)
+        self.latched = False  # gripping the barrier (set each frame by Barrier.update_deformation)
+
+    def apply_magnetism(self, universe, delta_time):
+        clouds = universe.clouds
+        if clouds.n == 0:
+            return
+        ferro = np.isin(clouds.ELEM, FERROMAGNETIC_ELEMENTS)
+        if not ferro.any():
+            return
+        dx = clouds.X - self.x
+        dy = clouds.Y - self.y
+        dist_sq = dx * dx + dy * dy
+        near = ferro & (dist_sq < MAGNETAR_FIELD_RADIUS ** 2) & (dist_sq >= 1.0)
+        if not near.any():
+            return
+        d2 = np.where(near, dist_sq, 1.0)
+        distance = np.sqrt(d2)
+        # 1/d falloff (not 1/d^2): a magnet-like grip that stays strong out to the field edge.
+        force = np.where(near, MAGNETAR_MAGNETIC_CONSTANT * (self.mass * clouds.M) / distance, 0.0)
+        fx = (dx / distance) * force * delta_time
+        fy = (dy / distance) * force * delta_time
+        clouds.VX -= fx
+        clouds.VY -= fy
+        # Newton's 3rd law with inertia: mass-scaled recoil — the magnet holds its ground
+        # and reels the iron in, rather than lunging at it.
+        self.vx += float((fx * clouds.M).sum()) / self.mass
+        self.vy += float((fy * clouds.M).sum()) / self.mass
+
+    def update_field(self, universe, delta_time):
+        """Advance the color oscillation, tick down the field lifetime, and roll for a
+        giant flare: an outward pulse on the shared BH-merger pulse list, paid for in mass."""
+        self.color_phase += MAGNETAR_COLOR_CYCLE_RATE * delta_time
+        self.field_time -= delta_time
+
+        if self.pulse_color_state == 1:
+            self.pulse_color_duration -= delta_time
+            if self.pulse_color_duration <= 0:
+                self.pulse_color_state = 0
+                self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION
+
+        # No flares while latched onto the barrier: the field's energy goes into the grip.
+        # (A point-blank flare's barrier wave-push would blow the ring outward far faster
+        # than the grip reels it in.)
+        if not self.latched and random.random() < MAGNETAR_FLARE_CHANCE:
+            universe.black_hole_pulses.append([self.x, self.y, 0, MAGNETAR_FLARE_ENERGY])
+            self.mass -= MAGNETAR_FLARE_MASS_COST
+            self.pulse_color_state = 1
+            self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION
+
+    def decay(self, delta_time):
+        self.mass -= MAGNETAR_DECAY_RATE * delta_time

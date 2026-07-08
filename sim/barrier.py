@@ -120,8 +120,43 @@ class Barrier:
 
         for bh in universe.black_holes:
             self._accum_deformation_scalar(bh, mass_accum, step, proximity_threshold, BLACK_HOLE_BARRIER_DEFORM_FACTOR)
-        for ns in universe.neutron_stars:
+        for ns in (*universe.neutron_stars, *universe.magnetars):
             self._accum_deformation_scalar(ns, mass_accum, step, proximity_threshold, NEUTRON_STAR_BARRIER_DEFORM_FACTOR)
+
+        # Magnetic grip, two ranges. IN-FIELD (field radius): wall and magnetar attract each
+        # other — vertices bow toward the magnetar (bounded relaxation toward its radial
+        # distance, which can't run away like a constant pull) and the magnetar is drawn to
+        # the wall, ramping to full stick at contact so it slides in and stays. LATCHED
+        # (denting proximity band): the field reels the WHOLE ring in evenly — the
+        # contraction counterpart to pulse-driven expansion. Even pull + tension keeps the
+        # ring round; reeling only the facing vertices digs a runaway trench that slings the
+        # magnetar to the center. Barrier damping bounds the speeds, and the natal-radius
+        # soft floor means a magnetar can squeeze a universe back toward Big-Bang size but
+        # not crush it.
+        natal_radius = BARRIER_INITIAL_SIZE / 2
+        for m in universe.magnetars:
+            bx = self.center[0] + self.radii * self.cos_a
+            by = self.center[1] + self.radii * self.sin_a
+            vdist = np.hypot(bx - m.x, by - m.y)
+            infield = vdist < MAGNETAR_FIELD_RADIUS
+            if infield.any():
+                m_dist = math.hypot(m.x - self.center[0], m.y - self.center[1])
+                target = max(m_dist, natal_radius)
+                falloff = 1.0 - vdist[infield] / MAGNETAR_FIELD_RADIUS
+                self.radii_vel[infield] += ((target - self.radii[infield])
+                                            * MAGNETAR_BARRIER_ATTRACT_RATE * falloff * delta_time)
+                near_i = int(np.argmin(vdist))
+                sx = float(bx[near_i]) - m.x
+                sy = float(by[near_i]) - m.y
+                sd = max(math.hypot(sx, sy), 1e-9)
+                ramp = 1.0 - sd / MAGNETAR_FIELD_RADIUS
+                m.vx += (sx / sd) * MAGNETAR_WALL_STICK * ramp * delta_time
+                m.vy += (sy / sd) * MAGNETAR_WALL_STICK * ramp * delta_time
+            latched = vdist < proximity_threshold
+            m.latched = bool(latched.any())  # read by Magnetar.update_field (suppresses flares)
+            if m.latched:
+                above_floor = self.radii > natal_radius
+                self.radii_vel[above_floor] -= math.sqrt(m.mass) * MAGNETAR_BARRIER_CONTRACT_FACTOR * delta_time
 
         damping = BARRIER_DAMPING ** delta_time
         self.radii_vel -= mass_accum * 2.0 * delta_time
@@ -172,7 +207,7 @@ class Barrier:
         for bh in universe.black_holes:
             a, _, _, _ = self._entity_angle_and_dist(bh)
             compact_angles_masses.append((a, bh.mass))
-        for ns in universe.neutron_stars:
+        for ns in (*universe.neutron_stars, *universe.magnetars):
             a, _, _, _ = self._entity_angle_and_dist(ns)
             compact_angles_masses.append((a, ns.mass))
 
@@ -180,7 +215,8 @@ class Barrier:
             return sum(m for a, m in compact_angles_masses
                        if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * BARRIER_SECTION_SEARCH_RANGE)
 
-        for ns in universe.neutron_stars:
+        # Magnetars are neutron stars: same containment physics.
+        for ns in (*universe.neutron_stars, *universe.magnetars):
             angle, dist, dx, dy = self._entity_angle_and_dist(ns)
             barrier_r = self.get_radius_at_angle(angle)
             if dist >= barrier_r:

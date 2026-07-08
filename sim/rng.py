@@ -39,23 +39,24 @@ import numpy as np
 MIN = 10000000000000000000  # Lower bound of RNG output range (20-digit minimum)
 MAX = 99999999999999999999  # Upper bound of RNG output range (20-digit maximum)
 
-SERIALIZE_VERSION = 2
+SERIALIZE_VERSION = 3
 _HKDF_INFO = b'simcraft-rng-v1'       # domain separation for output derivation
 _POOL_PERSON = b'simcraft-pool-v1'    # blake2b personalization (16-byte max)
-_HEADER = struct.Struct('<B5I')       # version, n_universes, mc, bh, ns, barrier_pts
+_HEADER = struct.Struct('<B6I')       # version, n_universes, mc, bh, ns, mag, barrier_pts
 
 
 def serialize_state(state_obj):
     """Pack live SimulationState into bytes for hashing. The encoding is framed and
     versioned so it is injective: no two distinct states produce the same bytes.
 
-    Global header: _HEADER — version, universe count, total clouds/holes/stars,
+    Global header: _HEADER — version, universe count, total clouds/holes/stars/magnetars,
     total barrier points. Then per universe:
-      frame    — struct.pack('<4I', n_clouds, n_holes, n_stars, n_barrier_points)
-      clouds   — (n, 5) float64 [x, y, vx, vy, mass] + (n,) int64 element indices
-      holes    — per hole '<7d' x, y, vx, vy, mass, angular_momentum, accretion_mass
-      stars    — per star '<6d' x, y, vx, vy, mass, time_since_last_pulse
-      barrier  — '<2d' center + (num_points,) float64 radii + radii velocities
+      frame     — struct.pack('<5I', n_clouds, n_holes, n_stars, n_magnetars, n_barrier_points)
+      clouds    — (n, 5) float64 [x, y, vx, vy, mass] + (n,) int64 element indices
+      holes     — per hole '<7d' x, y, vx, vy, mass, angular_momentum, accretion_mass
+      stars     — per star '<6d' x, y, vx, vy, mass, time_since_last_pulse
+      magnetars — per magnetar '<7d' x, y, vx, vy, mass, field_time, color_phase
+      barrier   — '<2d' center + (num_points,) float64 radii + radii velocities
 
     The cloud field serializes straight from the SoA arrays (no per-row packing), and the
     barrier membrane state is included: its deformation integrates every gravitational event
@@ -67,15 +68,16 @@ def serialize_state(state_obj):
     mc_count = sum(u.clouds.n for u in universes)
     bh_count = sum(len(u.black_holes) for u in universes)
     ns_count = sum(len(u.neutron_stars) for u in universes)
+    mag_count = sum(len(u.magnetars) for u in universes)
     barrier_points = sum(len(u.barrier.radii) for u in universes)
 
     parts = [_HEADER.pack(SERIALIZE_VERSION, len(universes),
-                          mc_count, bh_count, ns_count, barrier_points)]
+                          mc_count, bh_count, ns_count, mag_count, barrier_points)]
 
     for u in universes:
         c = u.clouds
-        parts.append(struct.pack('<4I', c.n, len(u.black_holes), len(u.neutron_stars),
-                                 len(u.barrier.radii)))
+        parts.append(struct.pack('<5I', c.n, len(u.black_holes), len(u.neutron_stars),
+                                 len(u.magnetars), len(u.barrier.radii)))
         if c.n:
             block = np.empty((c.n, 5))
             block[:, 0] = c.X
@@ -91,12 +93,15 @@ def serialize_state(state_obj):
         for e in u.neutron_stars:
             parts.append(struct.pack('<6d', e.x, e.y, e.vx, e.vy, e.mass,
                                      e.time_since_last_pulse))
+        for e in u.magnetars:
+            parts.append(struct.pack('<7d', e.x, e.y, e.vx, e.vy, e.mass,
+                                     e.field_time, e.color_phase))
         b = u.barrier
         parts.append(struct.pack('<2d', b.center[0], b.center[1]))
         parts.append(b.radii.astype('<f8', copy=False).tobytes())
         parts.append(b.radii_vel.astype('<f8', copy=False).tobytes())
 
-    entity_count = mc_count + bh_count + ns_count
+    entity_count = mc_count + bh_count + ns_count + mag_count
     return b''.join(parts), entity_count
 
 
@@ -104,10 +109,10 @@ def _parse_header(state_bytes):
     """Return (entity_count, entropy_bits_estimate) from serialized state bytes."""
     if len(state_bytes) < _HEADER.size:
         return 0, 0
-    version, _, mc, bh, ns, barrier_points = _HEADER.unpack_from(state_bytes)
+    version, _, mc, bh, ns, mag, barrier_points = _HEADER.unpack_from(state_bytes)
     if version != SERIALIZE_VERSION:
         return 0, 0
-    entity_count = mc + bh + ns
+    entity_count = mc + bh + ns + mag
     # ~64 bits/entity (5+ chaotic doubles), ~16 bits/barrier point (radius + velocity).
     return entity_count, entity_count * 64 + barrier_points * 16
 
@@ -146,9 +151,9 @@ class EntropyPool:
         parts = [struct.pack('<QIi', self.folds, tick_ms & 0xFFFFFFFF, raw_frame_ms)]
         for u in state_obj.universes:
             c = u.clouds
-            parts.append(struct.pack('<4I3d',
+            parts.append(struct.pack('<5I3d',
                                      c.n, len(u.black_holes), len(u.neutron_stars),
-                                     len(u.black_hole_pulses),
+                                     len(u.magnetars), len(u.black_hole_pulses),
                                      float(u.barrier.radii.sum()),
                                      float(u.barrier.radii_vel.sum()),
                                      float(c.M.sum()) if c.n else 0.0))

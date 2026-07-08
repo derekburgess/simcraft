@@ -208,6 +208,22 @@ def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0):
             screen.blit(pulse_surface, (min_x, min_y))
 
 
+def draw_magnetar(screen, mag, offset_x=0, offset_y=0):
+    draw_x = int(mag.x + offset_x)
+    draw_y = int(mag.y + offset_y)
+    t = 0.5 * (1.0 + math.sin(mag.color_phase))
+    color = interpolate_color(MAGNETAR_COLOR_A, MAGNETAR_COLOR_B, t)
+    if mag.pulse_color_state == 1:  # white flash during a giant flare
+        color = (255, 255, 255)
+    # Translucent aura that breathes with the color phase, then the solid core on top.
+    glow_r = MAGNETAR_GLOW_RADIUS + int(2 * math.sin(mag.color_phase * 0.5))
+    surf_size = glow_r * 2 + 2
+    glow = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
+    pygame.draw.circle(glow, color + (MAGNETAR_GLOW_ALPHA,), (surf_size // 2, surf_size // 2), glow_r)
+    screen.blit(glow, (draw_x - surf_size // 2, draw_y - surf_size // 2))
+    pygame.draw.circle(screen, color, (draw_x, draw_y), mag.radius)
+
+
 def draw_universe(screen, universe, offset_x=0, offset_y=0):
     ring = universe.barrier
     draw_barrier(screen, ring, offset_x, offset_y)
@@ -243,6 +259,8 @@ def draw_universe(screen, universe, offset_x=0, offset_y=0):
         draw_black_hole(screen, black_hole, offset_x, offset_y)
     for neutron_star in universe.neutron_stars:
         draw_neutron_star(screen, neutron_star, ring, all_pulses, offset_x, offset_y)
+    for magnetar in universe.magnetars:
+        draw_magnetar(screen, magnetar, offset_x, offset_y)
 
 
 # ── World renderer (bounded surface + culling + visible-rect blit) ──────────────────────────
