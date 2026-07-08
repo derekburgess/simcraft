@@ -30,9 +30,14 @@ def _random_offsets():
             for _ in range(7)]
 
 
-# Per-element-tier protostar constants as arrays, indexed by element tier masks.
-_TIER_BOOSTS = (PROTOSTAR_LOW_MASS_BOOST, PROTOSTAR_MEDIUM_MASS_BOOST, PROTOSTAR_HIGH_MASS_BOOST)
-_TIER_SIZES = (PROTOSTAR_LOW_SIZE, PROTOSTAR_MEDIUM_SIZE, PROTOSTAR_HIGH_SIZE)
+def blend_abundance(base, enriched, z):
+    """Interpolate two cumulative abundance tables (same element order) by metallicity z in
+    [0, 1] — how a universe's ejecta composition drifts metal-rich as it chemically ages."""
+    if z <= 0.0:
+        return base
+    z = min(z, 1.0)
+    return [(b0 + z * (e0 - b0), b1 + z * (e1 - b1))
+            for (b0, b1), (e0, e1) in zip(base, enriched)]
 
 
 class CloudField:
@@ -41,7 +46,7 @@ class CloudField:
     object version had."""
 
     __slots__ = ('n', 'cap', 'x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count',
-                 'is_star', 'size', 'offsets', 'sprites', 'sprite_keys')
+                 'is_star', 'size', 'shock', 'offsets', 'sprites', 'sprite_keys')
 
     def __init__(self, cap=256):
         self.n = 0
@@ -55,6 +60,7 @@ class CloudField:
         self.emission_count = np.zeros(cap, dtype=np.int64)
         self.is_star = np.zeros(cap, dtype=bool)
         self.size = np.zeros(cap)
+        self.shock = np.zeros(cap)   # seconds of "compressed by a wavefront" remaining (triggered star formation)
         self.offsets = np.zeros((cap, 7, 2))
         self.sprites = [None] * cap      # cached pygame sprites, draw-only
         self.sprite_keys = [None] * cap
@@ -84,6 +90,10 @@ class CloudField:
     def SIZE(self): return self.size[:self.n]
     @property
     def IS_STAR(self): return self.is_star[:self.n]
+    @property
+    def SHOCK(self): return self.shock[:self.n]
+    @SHOCK.setter
+    def SHOCK(self, v): self.shock[:self.n] = v
 
     def _ensure(self, extra):
         need = self.n + extra
@@ -92,7 +102,7 @@ class CloudField:
         new_cap = self.cap
         while new_cap < need:
             new_cap *= 2
-        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'size'):
+        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'size', 'shock'):
             old = getattr(self, name)
             grown = np.zeros(new_cap, dtype=old.dtype)
             grown[:self.n] = old[:self.n]
@@ -130,18 +140,20 @@ class CloudField:
         self.elem[k] = el
         self.emission_count[k] = 0
         self.is_star[k] = mass >= PROTOSTAR_THRESHOLD
-        self.size[k] = self._size_for(mass, self.is_star[k], self.elem[k])
+        self.size[k] = self._size_for(mass, self.is_star[k])
+        self.shock[k] = 0.0
         self.offsets[k] = offs
         self.sprites[k] = None
         self.sprite_keys[k] = None
         return k
 
     @staticmethod
-    def _size_for(mass, is_star, elem):
+    def _size_for(mass, is_star):
+        # Star tier (and so size) is set by mass, the real determinant of a star's nature.
         if is_star:
-            if elem >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY:
+            if mass >= STAR_TIER_HIGH_MASS:
                 return PROTOSTAR_HIGH_SIZE
-            if elem >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM:
+            if mass >= STAR_TIER_MEDIUM_MASS:
                 return PROTOSTAR_MEDIUM_SIZE
             return PROTOSTAR_LOW_SIZE
         return max(MOLECULAR_CLOUD_MIN_SIZE,
@@ -158,17 +170,18 @@ class CloudField:
         np.minimum(mass, MOLECULAR_CLOUD_MAX_MASS, out=mass)
         newly = (mass >= PROTOSTAR_THRESHOLD) & ~self.is_star[:n]
         if newly.any():
-            boost = np.select(
-                [elem >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY, elem >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM],
-                [PROTOSTAR_HIGH_MASS_BOOST, PROTOSTAR_MEDIUM_MASS_BOOST],
-                PROTOSTAR_LOW_MASS_BOOST)
+            # Ignition boost by the cloud's own metallicity: pristine H/He gas fragments less
+            # and ignites as giants (Population III); enriched gas ignites smaller stars.
+            boost = np.where(elem < STAR_ENRICHED_ELEMENT_MIN,
+                             PROTOSTAR_PRISTINE_MASS_BOOST, PROTOSTAR_ENRICHED_MASS_BOOST)
             mass[newly] = np.minimum(mass[newly] + boost[newly], MOLECULAR_CLOUD_MAX_MASS)
         self.is_star[:n] = mass >= PROTOSTAR_THRESHOLD
         # Non-star size: START - trunc((mass-START_MASS)*GROWTH), floored at MIN (same int() trunc)
         shrink = ((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE).astype(np.int64)
         size = np.maximum(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - shrink).astype(float)
+        # Star tier by MASS (temperature/size/fate all follow mass in reality).
         star_size = np.select(
-            [elem >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY, elem >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM],
+            [mass >= STAR_TIER_HIGH_MASS, mass >= STAR_TIER_MEDIUM_MASS],
             [PROTOSTAR_HIGH_SIZE, PROTOSTAR_MEDIUM_SIZE], PROTOSTAR_LOW_SIZE)
         self.size[:n] = np.where(self.is_star[:n], star_size, size)
 
@@ -184,7 +197,7 @@ class CloudField:
         n = self.n
         idx = np.asarray(idx, dtype=np.int64)
         m = len(idx)
-        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'size'):
+        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'size', 'shock'):
             arr = getattr(self, name)
             arr[:m] = arr[:n][idx]
         self.offsets[:m] = self.offsets[:n][idx]
@@ -225,6 +238,7 @@ class CloudField:
             dst.emission_count[k] = self.emission_count[r]
             dst.is_star[k] = self.is_star[r]
             dst.size[k] = self.size[r]
+            dst.shock[k] = self.shock[r]
             dst.offsets[k] = self.offsets[r]
             dst.sprites[k] = self.sprites[r]
             dst.sprite_keys[k] = self.sprite_keys[r]

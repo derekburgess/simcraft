@@ -1,14 +1,35 @@
-"""Simcraft main loop: input, timing, heat death, screenshots. All physics lives in
+"""Simcraft main loop: input, timing, heat death. All physics lives in
 sim.physics (stepping), sim.entities / sim.barrier / sim.fields (state), sim.gravity
 (cloud gravity backends); all drawing in sim.render.
 """
-import os
+import math
+import subprocess
 import pygame
 
 from sim.config import *
 from sim import physics
-from sim.render import WorldRenderer, draw_ui, draw_stats
+from sim import render
+from sim.render import WorldRenderer, draw_ui, draw_stats, draw_ticker, draw_legend
 from sim.rng import generate, MIN as RNG_MIN, MAX as RNG_MAX
+
+
+def copy_to_clipboard(text):
+    """Best-effort clipboard copy: SDL's clipboard first (works on X11/Wayland/etc. when a
+    window exists), then the common CLI tools."""
+    try:
+        pygame.scrap.init()
+        pygame.scrap.put_text(text)
+        return True
+    except Exception:
+        pass
+    for cmd in (["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "-ib"]):
+        try:
+            subprocess.run(cmd, input=text.encode(), check=True, timeout=2,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception:
+            continue
+    return False
 
 
 def screen_to_world(screen_x, screen_y, zoom, view_center_x, view_center_y):
@@ -21,63 +42,44 @@ def screen_to_world(screen_x, screen_y, zoom, view_center_x, view_center_y):
     return world_x, world_y
 
 
-def handle_input(zoom, view_center_x, view_center_y):
+def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_x, target_center_y):
+    """Wheel input adjusts the zoom/center TARGETS; the loop eases the displayed view toward
+    them each frame, so rapid ticks accumulate into one continuous glide instead of hard
+    cuts. The cursor's world point is computed against the CURRENT (displayed) view — the
+    thing the user is actually pointing at."""
     running = True
-    take_screenshot = False
+    toggle_legend = False
+    ticker_scroll = 0
+    copy_rng = False
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
             running = False
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            take_screenshot = True
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_l:
+            toggle_legend = True
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
             pygame.display.toggle_fullscreen()
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if render.RNG_CELL_RECT is not None and render.RNG_CELL_RECT.collidepoint(event.pos):
+                copy_rng = True
         if event.type == pygame.MOUSEWHEEL:
             mouse_sx, mouse_sy = pygame.mouse.get_pos()
+            # Over the event readout, the wheel scrolls the log; anywhere else it zooms.
+            if render.TICKER_PANEL_RECT is not None and render.TICKER_PANEL_RECT.collidepoint((mouse_sx, mouse_sy)):
+                ticker_scroll += event.y
+                continue
             world_x, world_y = screen_to_world(mouse_sx, mouse_sy, zoom, view_center_x, view_center_y)
-            old_zoom = zoom
-            zoom += event.y * ZOOM_STEP
-            zoom = max(ZOOM_MIN, min(ZOOM_MAX, zoom))
-            if zoom != old_zoom:
-                if zoom <= 1.0:
-                    view_center_x = SCREEN_WIDTH / 2.0
-                    view_center_y = SCREEN_HEIGHT / 2.0
-                else:
-                    view_center_x = world_x - (mouse_sx - SCREEN_WIDTH / 2) / zoom
-                    view_center_y = world_y - (mouse_sy - SCREEN_HEIGHT / 2) / zoom
+            old_target = target_zoom
+            target_zoom = max(ZOOM_MIN, min(ZOOM_MAX, target_zoom * ZOOM_STEP_FACTOR ** event.y))
+            if target_zoom != old_target:
+                # The world point under the cursor becomes the new view center, zooming in
+                # OR out — no forced recentering (the renderer clamps the view at the wide
+                # end, so zoomed way out you see the whole scene regardless of center).
+                target_center_x = world_x
+                target_center_y = world_y
 
-    return running, zoom, view_center_x, view_center_y, take_screenshot
-
-
-def _save_screenshot(screen, state):
-    try:
-        state.entropy_pool.fold_state(state)
-        result = generate(state.entropy_pool, RNG_MIN, RNG_MAX)
-        rng_number = result['random_number']
-    except Exception:
-        rng_number = None
-
-    # Crop to centered square using window height
-    crop_size = SCREEN_HEIGHT
-    crop_x = (SCREEN_WIDTH - crop_size) // 2
-    crop_rect = pygame.Rect(crop_x, 0, crop_size, crop_size)
-    shot = screen.subsurface(crop_rect).copy()
-
-    # Full-width white bar at bottom with centered number
-    label = str(rng_number) if rng_number is not None else "RNG ERROR"
-    shot_font = pygame.font.SysFont('notosansmono', 80, bold=True)
-    text_surf = shot_font.render(label, True, (0, 0, 0))
-    padding = 8
-    box_h = text_surf.get_height() + padding * 2
-    box_y = crop_size - box_h
-    pygame.draw.rect(shot, (255, 255, 255), (0, box_y, crop_size, box_h))
-    text_x = (crop_size - text_surf.get_width()) // 2
-    shot.blit(text_surf, (text_x, box_y + padding))
-
-    mnemonic_dir = os.path.join(os.path.dirname(__file__), 'mnemonic')
-    filename = os.path.join(mnemonic_dir, f"{rng_number}.png")
-    pygame.image.save(shot, filename)
-    print(f"Screenshot saved: {rng_number}")
+    return (running, target_zoom, target_center_x, target_center_y,
+            toggle_legend, ticker_scroll, copy_rng)
 
 
 def run_simulation(screen, font, state):
@@ -90,7 +92,15 @@ def run_simulation(screen, font, state):
         zoom = 1.0
         view_center_x = SCREEN_WIDTH / 2.0
         view_center_y = SCREEN_HEIGHT / 2.0
+        target_zoom = zoom
+        target_center_x = view_center_x
+        target_center_y = view_center_y
         renderer = WorldRenderer()
+        show_legend = False
+        ticker = []  # [text, age, count] event lines, newest last (UI_TICKER_HISTORY kept for scrollback)
+        ticker_offset = 0  # 0 = live feed; >0 = scrolled that many entries back
+        rng_number = None
+        rng_flash = 0.0  # copied-to-clipboard flash on the RNG cell, 1 → 0
 
         while running:
             current_time = pygame.time.get_ticks()
@@ -98,11 +108,27 @@ def run_simulation(screen, font, state):
             delta_time = min(delta_time, MAX_DELTA_TIME)
             last_frame_time = current_time
 
-            running, zoom, view_center_x, view_center_y, take_screenshot = handle_input(
-                zoom, view_center_x, view_center_y
-            )
+            (running, target_zoom, target_center_x, target_center_y,
+             toggle_legend, ticker_scroll, copy_rng) = handle_input(
+                zoom, view_center_x, view_center_y, target_zoom, target_center_x, target_center_y)
             if not running:
                 break
+
+            # Ease the displayed view toward its targets (zoom in log space so the glide is
+            # perceptually uniform), snapping when close so the zoom==1.0 fast path re-engages.
+            blend = 1.0 - math.exp(-ZOOM_SMOOTH_RATE * delta_time)
+            zoom = math.exp(math.log(zoom) + (math.log(target_zoom) - math.log(zoom)) * blend)
+            view_center_x += (target_center_x - view_center_x) * blend
+            view_center_y += (target_center_y - view_center_y) * blend
+            if abs(zoom - target_zoom) < 0.001:
+                zoom = target_zoom
+            if abs(view_center_x - target_center_x) < 0.1 and abs(view_center_y - target_center_y) < 0.1:
+                view_center_x, view_center_y = target_center_x, target_center_y
+            if toggle_legend:
+                show_legend = not show_legend
+            if copy_rng and rng_number is not None:
+                if copy_to_clipboard(str(rng_number)):
+                    rng_flash = 1.0
 
             for universe in state.universes:
                 universe.barrier.update_deformation(universe, delta_time)
@@ -121,6 +147,30 @@ def run_simulation(screen, font, state):
                 state.universes = [u for u in state.universes if physics._universe_alive(u)]
             physics.prune_child_links(state)
 
+            # Drain each universe's astrophysical events into the HUD ticker; identical
+            # events landing within a beat coalesce into one line (shown without a count).
+            # Expired entries are kept (up to UI_TICKER_HISTORY) so the wheel can scroll back.
+            appended = 0
+            for universe in state.universes:
+                for text in universe.event_log:
+                    if ticker and ticker[-1][0] == text and ticker[-1][1] < 1.0:
+                        ticker[-1][2] += 1
+                    else:
+                        ticker.append([text, 0.0, 1])
+                        appended += 1
+                universe.event_log.clear()
+            for entry in ticker:
+                entry[1] += delta_time
+            trimmed = max(0, len(ticker) - UI_TICKER_HISTORY)
+            ticker = ticker[-UI_TICKER_HISTORY:]
+            if ticker_offset > 0:
+                # Keep the same entries in view while reading history (terminal-scrollback
+                # style): new arrivals push the anchor back, trims from the front pull it in.
+                ticker_offset += appended - trimmed
+            ticker_offset = max(0, min(ticker_offset + ticker_scroll,
+                                       max(0, len(ticker) - UI_TICKER_MAX_LINES)))
+            rng_flash = max(0.0, rng_flash - 2.0 * delta_time)
+
             # Fold this frame's trajectory into the entropy pool: OS timing jitter plus
             # chaotic observables (full state every FULL_FOLD_INTERVAL frames).
             state.entropy_pool.fold_frame(state, current_time, clock.get_rawtime())
@@ -135,9 +185,9 @@ def run_simulation(screen, font, state):
                     state = physics.initialize_state()
                     state.entropy_pool = entropy_pool  # the pool remembers past universes
                     current_year = 0.0
-                    zoom = 1.0
-                    view_center_x = SCREEN_WIDTH / 2.0
-                    view_center_y = SCREEN_HEIGHT / 2.0
+                    zoom = target_zoom = 1.0
+                    view_center_x = target_center_x = SCREEN_WIDTH / 2.0
+                    view_center_y = target_center_y = SCREEN_HEIGHT / 2.0
                     heat_death_timer = 0.0
             else:
                 heat_death_timer = 0.0
@@ -152,8 +202,12 @@ def run_simulation(screen, font, state):
                 print(f"HUD RNG failed: {rng_err}")
                 rng_number = None
 
+            draw_ticker(screen, ticker, ticker_offset)
             draw_stats(screen, clock.get_fps(), current_year, len(state.universes),
-                       state.entity_count(), state.entropy_pool.folds, rng_number)
+                       state.entity_count(), state.entropy_pool.folds, rng_number,
+                       state.mean_metallicity(), rng_flash)
+            if show_legend:
+                draw_legend(screen)
 
             #draw_ui(screen, font, current_year, zoom)
 
@@ -161,9 +215,6 @@ def run_simulation(screen, font, state):
 
             pygame.display.flip()
             clock.tick(TARGET_FPS)
-
-            if take_screenshot:
-                _save_screenshot(screen, state)
 
         print("Exited simulation")
 

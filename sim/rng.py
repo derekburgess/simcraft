@@ -36,8 +36,11 @@ from datetime import datetime
 
 import numpy as np
 
-MIN = 10000000000000000000  # Lower bound of RNG output range (20-digit minimum)
-MAX = 99999999999999999999  # Upper bound of RNG output range (20-digit maximum)
+# Output range: 39-digit decimal, carrying ≥129 bits of entropy per draw — at or above the
+# 128-bit floor for cryptographic key material (the HKDF-SHA256 pipeline behind it can back
+# up to 256 bits; the decimal length is the deliberate display/usability tradeoff).
+MIN = 10 ** 38              # Lower bound of RNG output range (39-digit minimum)
+MAX = 10 ** 39 - 1          # Upper bound of RNG output range (39-digit maximum)
 
 SERIALIZE_VERSION = 3
 _HKDF_INFO = b'simcraft-rng-v1'       # domain separation for output derivation

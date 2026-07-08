@@ -10,6 +10,9 @@ import numpy as np
 import pygame
 
 from sim.config import *
+from sim.rng import MAX as RNG_MAX
+
+RNG_DIGITS = len(str(RNG_MAX))  # HUD cell width follows the actual output range
 
 _START_COLOR_LUT = np.array(MOLECULAR_CLOUD_START_COLORS, dtype=float)
 _END_COLOR = np.array(MOLECULAR_CLOUD_END_COLOR, dtype=float)
@@ -88,7 +91,8 @@ def _cloud_visuals(clouds):
     start = _START_COLOR_LUT[elem]
     f2 = np.clip(1.0 - (size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4), None, None)[:, None]
     color = np.where((size <= 4)[:, None], _END_COLOR, start + f2 * (_END_COLOR - start))
-    tier = np.select([elem >= PROTOSTAR_ELEMENT_WEIGHT_HEAVY, elem >= PROTOSTAR_ELEMENT_WEIGHT_MEDIUM],
+    # Star color follows MASS — the real temperature sequence: small red, sun-like white, massive blue.
+    tier = np.select([mass >= STAR_TIER_HIGH_MASS, mass >= STAR_TIER_MEDIUM_MASS],
                      [2, 1], 0)
     star_color = np.stack(_STAR_COLOR_LUT)[tier]
     color = np.where(is_star[:, None], star_color, color).astype(np.int64)
@@ -178,12 +182,28 @@ def draw_black_hole(screen, bh, offset_x=0, offset_y=0):
     pygame.draw.circle(screen, BLACK_HOLE_DISK_COLOR, (int(tracer_x), int(tracer_y)), BLACK_HOLE_DISK_SIZE)
 
 
+def draw_white_dwarf(screen, wd, offset_x=0, offset_y=0):
+    # A white dwarf only cools: white-hot → dim ember → gone (the color runs toward the
+    # background so a fully cooled black dwarf literally disappears into space).
+    t = wd.cooling()
+    if t < 0.7:
+        color = interpolate_color(WHITE_DWARF_COLOR, WHITE_DWARF_COOL_COLOR, t / 0.7)
+    else:
+        color = interpolate_color(WHITE_DWARF_COOL_COLOR, BACKGROUND_COLOR, (t - 0.7) / 0.3)
+    pygame.draw.circle(screen, color, (int(wd.x + offset_x), int(wd.y + offset_y)), WHITE_DWARF_RADIUS)
+
+
 def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0):
     draw_x = int(ns.x + offset_x)
     draw_y = int(ns.y + offset_y)
     pulse_ox = ns.x + offset_x
     pulse_oy = ns.y + offset_y
-    current_color = (255, 255, 255) if ns.pulse_color_state == 1 else NEUTRON_STAR_COLOR
+    if ns.is_dead:  # past the death line: dark and silent
+        current_color = NEUTRON_STAR_DEAD_COLOR
+    elif ns.pulse_color_state == 1:
+        current_color = (255, 255, 255)
+    else:
+        current_color = NEUTRON_STAR_COLOR
     pygame.draw.circle(screen, current_color, (draw_x, draw_y), ns.radius)
 
     for pulse in ns.active_pulses:
@@ -255,6 +275,8 @@ def draw_universe(screen, universe, offset_x=0, offset_y=0):
                 pygame.draw.polygon(pulse_surface, BLACK_HOLE_MERGE_COLOR, local_points, pulse_width)
                 screen.blit(pulse_surface, (min_x, min_y))
 
+    for white_dwarf in universe.white_dwarfs:
+        draw_white_dwarf(screen, white_dwarf, offset_x, offset_y)
     for black_hole in universe.black_holes:
         draw_black_hole(screen, black_hole, offset_x, offset_y)
     for neutron_star in universe.neutron_stars:
@@ -350,18 +372,27 @@ def _get_stats_fonts():
     return _stats_font, _stats_rng_font
 
 
-def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_folds, rng_number):
+# Hit-test rect for the RNG cell, refreshed each draw — clicking it copies the number.
+RNG_CELL_RECT = None
+
+
+def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_folds, rng_number,
+               metallicity=0.0, rng_flash=0.0):
     """Full-width single-row table along the bottom of the screen, bordered, with
     UI_LABEL_X margins at the sides. The RNG output is the final cell in a larger
     font, sized to its 20-digit content; the leftover width is split evenly among
     the stat cells so the columns don't jitter as values change. SALT is the
-    entropy-pool fold count feeding the RNG output beside it."""
+    entropy-pool fold count feeding the RNG output beside it. Z is the mean
+    metallicity — how chemically aged the multiverse is (0 = pristine Big-Bang gas).
+    `rng_flash` (1→0) flashes the RNG cell white as copied-to-clipboard feedback."""
+    global RNG_CELL_RECT
     font, rng_font = _get_stats_fonts()
     stat_cells = [
         f"FPS: {fps:.0f}",
         f"YEAR: {format_years(current_year)}",
         f"UNIVERSES: {universe_count}",
         f"ENTITIES: {entity_count}",
+        f"METALLICITY: {metallicity:.3f}",
         f"SALT: {salt_folds:,}",
     ]
     rng_text = f"{rng_number}" if rng_number is not None else "..."
@@ -372,7 +403,7 @@ def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_fol
     table_left = UI_LABEL_X
     table_w = SCREEN_WIDTH - 2 * UI_LABEL_X
 
-    rng_w = rng_font.size("0" * 20)[0] + 2 * UI_STATS_CELL_PAD_X
+    rng_w = rng_font.size("0" * RNG_DIGITS)[0] + 2 * UI_STATS_CELL_PAD_X
     stat_w = (table_w - rng_w) // len(stat_cells)
 
     x = table_left
@@ -382,7 +413,9 @@ def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_fol
                            row_top + (row_h - surf.get_height()) // 2))
         x += stat_w
         pygame.draw.line(screen, UI_STATS_GRID_COLOR, (x, row_top), (x, row_bottom))
-    surf = rng_font.render(rng_text, True, UI_STATS_COLOR)
+    RNG_CELL_RECT = pygame.Rect(x, row_top, table_left + table_w - x, row_h)
+    rng_color = interpolate_color(UI_STATS_COLOR, (255, 255, 255), max(0.0, min(1.0, rng_flash)))
+    surf = rng_font.render(rng_text, True, rng_color)
     screen.blit(surf, (x + UI_STATS_CELL_PAD_X,
                        row_top + (row_h - surf.get_height()) // 2))
     pygame.draw.rect(screen, UI_STATS_GRID_COLOR, (table_left, row_top, table_w, row_h), 1)
@@ -392,3 +425,101 @@ def draw_ui(screen, font, current_year, zoom=1.0):
     draw_static_key(screen, font, zoom)
     year_text = font.render(format_year_display(current_year), True, LABEL_COLOR)
     screen.blit(year_text, (UI_LABEL_X, SCREEN_HEIGHT - UI_TEXT_Y_OFFSET))
+
+
+# ── Event ticker (readout row of the stats table) ───────────────────────────────────────────
+
+# Hit-test rect for the readout panel, refreshed each draw. The input handler uses it to
+# decide whether a mouse-wheel tick scrolls the log (cursor over the panel) or zooms.
+TICKER_PANEL_RECT = None
+
+
+def draw_ticker(screen, ticker, offset=0):
+    """Event readout row: a single full-width cell spanning the table, sitting directly on
+    top of the stats row. Events stack inside it as a live feed — newest at the bottom,
+    fading out with age. Each entry is a [text, age, count] triple maintained by the sim
+    loop; repeats within a beat are coalesced there, so a line appears once no matter how
+    many identical events fired (the count is tracked but not displayed).
+
+    `offset` scrolls back through history: 0 = live (fading feed); >0 shows entries that
+    far back from the newest, at full brightness so old history stays readable."""
+    global TICKER_PANEL_RECT
+    font, rng_font = _get_stats_fonts()
+    stats_row_h = rng_font.get_height() + 2 * UI_STATS_CELL_PAD_Y
+    stats_row_top = SCREEN_HEIGHT - UI_STATS_BOTTOM_MARGIN - stats_row_h
+    line_h = font.get_height() + 2
+    panel_h = UI_TICKER_MAX_LINES * line_h + 2 * UI_STATS_CELL_PAD_Y
+    panel_top = stats_row_top - panel_h
+    table_left = UI_LABEL_X
+    table_w = SCREEN_WIDTH - 2 * UI_LABEL_X
+    TICKER_PANEL_RECT = pygame.Rect(table_left, panel_top, table_w, panel_h)
+
+    if offset > 0:
+        end = len(ticker) - offset
+        lines = [(text, 0.0, count) for text, _, count in ticker[max(0, end - UI_TICKER_MAX_LINES):end]]
+    else:
+        lines = [e for e in ticker if e[1] < UI_TICKER_LIFETIME][-UI_TICKER_MAX_LINES:]
+
+    # No border: the feed floats above the stats table (TICKER_PANEL_RECT still marks the
+    # area so the mouse wheel scrolls the log when hovering here).
+    y = stats_row_top - UI_STATS_CELL_PAD_Y - line_h * len(lines)  # stack anchored to the bottom
+    for text, age, count in lines:
+        fade = max(0.0, 1.0 - age / UI_TICKER_LIFETIME)
+        color = interpolate_color(BACKGROUND_COLOR, UI_STATS_COLOR, fade)
+        screen.blit(font.render(text, True, color), (table_left + UI_STATS_CELL_PAD_X, y))
+        y += line_h
+
+
+# ── Legend (toggled with [L]) ───────────────────────────────────────────────────────────────
+
+_legend_font = None
+
+def _get_legend_font():
+    global _legend_font
+    if _legend_font is None:
+        _legend_font = pygame.font.SysFont(UI_STATS_FONT, UI_LEGEND_FONT_SIZE)
+    return _legend_font
+
+
+# (swatch color, label) rows; None color = section header.
+_LEGEND_ROWS = [
+    (None, "ENTITIES"),
+    (PROTOSTAR_LOW_COLOR, "Red dwarf — cool, almost immortal"),
+    (PROTOSTAR_MEDIUM_COLOR, "Sun-like star"),
+    (PROTOSTAR_HIGH_COLOR, "Blue giant — lives fast, dies violently"),
+    (WHITE_DWARF_COLOR, "White dwarf — cooling stellar core"),
+    (NEUTRON_STAR_COLOR, "Pulsar — spinning neutron star"),
+    (NEUTRON_STAR_DEAD_COLOR, "Dead pulsar — past the death line"),
+    (MAGNETAR_COLOR_A, "Magnetar — extreme magnetic field"),
+    (BLACK_HOLE_BORDER_COLOR, "Black hole — event horizon ring"),
+    (BARRIER_COLOR, "Barrier — the edge of a universe"),
+    (None, "ELEMENTS (cloud colors)"),
+] + list(zip(MOLECULAR_CLOUD_START_COLORS, ELEMENT_NAMES))
+
+
+def draw_legend(screen):
+    """Key to every entity and element color, drawn as a translucent panel on the right."""
+    font = _get_legend_font()
+    rendered = []
+    max_w = 0
+    for color, label in _LEGEND_ROWS:
+        surf = font.render(label, True,
+                           UI_LEGEND_HEADER_COLOR if color is None else UI_LEGEND_TEXT_COLOR)
+        rendered.append((color, surf))
+        w = surf.get_width() + (UI_LEGEND_SWATCH + 8 if color is not None else 0)
+        max_w = max(max_w, w)
+
+    panel_w = max_w + 2 * UI_LEGEND_PAD
+    panel_h = len(rendered) * UI_LEGEND_ROW_HEIGHT + 2 * UI_LEGEND_PAD
+    panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+    panel.fill(UI_LEGEND_BG)
+    y = UI_LEGEND_PAD
+    for color, surf in rendered:
+        x = UI_LEGEND_PAD
+        if color is not None:
+            sw_y = y + (UI_LEGEND_ROW_HEIGHT - UI_LEGEND_SWATCH) // 2
+            pygame.draw.rect(panel, color, (x, sw_y, UI_LEGEND_SWATCH, UI_LEGEND_SWATCH))
+            x += UI_LEGEND_SWATCH + 8
+        panel.blit(surf, (x, y + (UI_LEGEND_ROW_HEIGHT - surf.get_height()) // 2))
+        y += UI_LEGEND_ROW_HEIGHT
+    screen.blit(panel, (SCREEN_WIDTH - panel_w - UI_LEGEND_MARGIN, UI_LEGEND_MARGIN))

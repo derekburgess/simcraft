@@ -215,8 +215,9 @@ class Barrier:
             return sum(m for a, m in compact_angles_masses
                        if abs((a - angle + math.pi) % (2 * math.pi) - math.pi) < step * BARRIER_SECTION_SEARCH_RANGE)
 
-        # Magnetars are neutron stars: same containment physics.
-        for ns in (*universe.neutron_stars, *universe.magnetars):
+        # Magnetars are neutron stars: same containment physics. White dwarfs are far less
+        # dense but still compact — the same containment path holds them in.
+        for ns in (*universe.neutron_stars, *universe.magnetars, *universe.white_dwarfs):
             angle, dist, dx, dy = self._entity_angle_and_dist(ns)
             barrier_r = self.get_radius_at_angle(angle)
             if dist >= barrier_r:

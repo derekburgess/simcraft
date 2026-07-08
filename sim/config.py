@@ -24,10 +24,28 @@ UI_ZOOM_Y_OFFSET = 140          # Y offset from bottom of screen for the zoom la
 UI_EXIT_Y_OFFSET = 110          # Y offset from bottom of screen for the exit/quit label.
 UI_TEXT_Y_OFFSET = 40           # Y offset from bottom of screen for the year counter display.
 
+# ── Event ticker (readout row of the stats table, drawn directly above the stats row) ──
+# Styling (font, colors, padding) comes from the UI_STATS_* constants above so the two rows
+# read as one table.
+UI_TICKER_MAX_LINES = 3         # Lines the readout cell holds (fixed height).
+UI_TICKER_LIFETIME = 7.0        # Seconds an event entry stays visible in the LIVE view before it fades out fully.
+UI_TICKER_HISTORY = 60          # Entries kept for mouse-wheel scrollback (each may coalesce many events). Scrolled-back entries show at full brightness regardless of age.
+
+# ── Legend (entity + element key, toggled with [L]) ──
+UI_LEGEND_FONT_SIZE = 13        # Point size for legend text.
+UI_LEGEND_MARGIN = 24           # Gap (pixels) between the legend block and the screen edges.
+UI_LEGEND_PAD = 10              # Inner padding (pixels) of the legend panel.
+UI_LEGEND_ROW_HEIGHT = 17       # Vertical spacing (pixels) between legend rows.
+UI_LEGEND_SWATCH = 10           # Side length (pixels) of the color swatch squares.
+UI_LEGEND_BG = (0, 14, 28, 215)  # RGBA panel background (slightly lighter than space, mostly opaque).
+UI_LEGEND_TEXT_COLOR = (150, 170, 220)  # Legend text color.
+UI_LEGEND_HEADER_COLOR = (110, 110, 245)  # Legend section-header color.
+
 # ── Zoom ──
 ZOOM_MIN = 0.5                 # Minimum zoom level (zoomed out). Lower = can see more.
 ZOOM_MAX = 2.0                 # Maximum zoom level (zoomed in). Higher = can zoom in more.
-ZOOM_STEP = 0.25               # Zoom change per scroll wheel tick.
+ZOOM_STEP_FACTOR = 1.15        # Multiplicative zoom per wheel tick (target *= this). Multiplicative so a tick feels the same at every scale.
+ZOOM_SMOOTH_RATE = 10.0        # Per-second exponential ease of the displayed zoom/center toward their targets. Higher = snappier, lower = floatier.
 
 # ── Simulation ──
 SPATIAL_HASH_CELL_SIZE = 40     # Cell size (pixels) for the local-gravity neighborhood grid. Should match typical entity interaction radius.
@@ -138,6 +156,12 @@ MOLECULAR_CLOUD_START_COLORS = [
     (50, 130, 70),   # Chromium - Deep Green (CrI)
     (110, 70, 160),  # Titanium - Violet-Blue (TiI)
 ]
+# Element names, index-aligned with MOLECULAR_CLOUD_START_COLORS (used by the HUD legend).
+ELEMENT_NAMES = [
+    "Hydrogen", "Helium", "Oxygen", "Carbon", "Neon", "Nitrogen", "Iron", "Silicon",
+    "Gold", "Sulfur", "Magnesium", "Phosphorus", "Lithium", "Platinum", "Cobalt",
+    "Calcium", "Sodium", "Nickel", "Chromium", "Titanium",
+]
 MOLECULAR_CLOUD_END_COLOR = (225, 255, 255)  # Color clouds fade toward as they gain mass (white-blue).
 MOLECULAR_CLOUD_OPACITY = 128   # Maximum opacity for clouds below protostar mass (0-255).
 MOLECULAR_CLOUD_MIN_OPACITY = 64  # Minimum opacity for the lightest clouds (0-255).
@@ -151,15 +175,14 @@ MOLECULAR_CLOUD_EMISSION_VELOCITY = 0.6         # Emission kick speed
 MOLECULAR_CLOUD_EMISSION_SPREAD = 14              # Max spawn distance from parent
 MOLECULAR_CLOUD_EMISSION_COUNT = 10               # Max number of emissions per cloud
 
-# ── Supernova (molecular cloud reset events) ──
-MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.01    # Per-frame chance a massive star resets to gas cloud, ejecting material (supernova-like event).
-MOLECULAR_CLOUD_EJECTA_HEAVIER_ELEMENT_CHANCE = 0.07  # Probability that ejecta from supernovae produce heavier elements than the parent.
-SUPERNOVA_EJECTA_COUNT_HIGH = 2   # Number of ejecta pieces from a high-tier (heavy element) supernova.
-SUPERNOVA_EJECTA_COUNT_MEDIUM = 6 # Number of ejecta pieces from a medium-tier supernova.
-SUPERNOVA_EJECTA_COUNT_LOW = 20    # Number of ejecta pieces from a low-tier (light element) supernova.
-SUPERNOVA_EJECTA_SPREAD_HIGH = 14  # Max spawn radius (pixels) of ejecta from a high-tier supernova.
-SUPERNOVA_EJECTA_SPREAD_MEDIUM = 20  # Max spawn radius (pixels) of ejecta from a medium-tier supernova.
-SUPERNOVA_EJECTA_SPREAD_LOW = 26   # Max spawn radius (pixels) of ejecta from a low-tier supernova.
+# ── Supernova (core collapse of massive stars) ──
+# Only high-tier (massive, blue) stars — mass above BLACK_HOLE_THRESHOLD — can supernova,
+# matching the real mass cutoff (~8 solar masses) below which stars end as white dwarfs.
+MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.01    # Base per-frame chance a massive star goes supernova (resets to gas + ejecta).
+SUPERNOVA_LIFETIME_MASS_EXPONENT = 2  # Supernova chance scales as (mass/threshold)^this: heavier stars live faster and die younger.
+SUPERNOVA_EJECTA_COUNT_BASE = 6    # Ejecta pieces from a star right at the collapse threshold.
+SUPERNOVA_EJECTA_COUNT_PER_MASS = 0.6  # Extra ejecta pieces per unit of mass above the threshold (bigger star, bigger blast).
+SUPERNOVA_EJECTA_SPREAD = 20       # Max spawn radius (pixels) of supernova ejecta.
 SUPERNOVA_EJECTA_MAX_MASS_FRACTION = 0.35    # Maximum ejecta mass as a fraction of PROTOSTAR_THRESHOLD.
 
 # ── Protostars (clouds that reach enough mass to ignite) ──
@@ -167,34 +190,53 @@ PROTOSTAR_THRESHOLD = 28        # Mass at which a cloud becomes a protostar (cha
 PROTOSTAR_EJECTA_COUNT = 4     # Number of ejecta pieces produced during protostar formation events.
 PROTOSTAR_EJECTA_SPREAD = 14    # Max spawn distance (pixels) of ejecta from the parent star.
 
-# Element weight boundaries for star tiers.
-# When a cloud reaches PROTOSTAR_THRESHOLD mass, its element_index (position in
-# MOLECULAR_CLOUD_START_COLORS above) determines which tier of star it becomes:
-#   Index 0-2  (H, He, O)                   → LOW tier  — small white star
-#   Index 3-9  (C, Ne, N, Fe, Si, Au, S)               → MEDIUM tier — mid-size yellow-green star
-#   Index 10-19 (Mg, P, Li, Pt, Co, Ca, Na, Ni, Cr, Ti) → HIGH tier — large red giant
-# Lowering these values makes heavier stars more common; raising them makes them rarer.
-PROTOSTAR_ELEMENT_WEIGHT_MEDIUM = 3   # Element index at or above which a star becomes medium tier.
-PROTOSTAR_ELEMENT_WEIGHT_HEAVY = 10   # Element index at or above which a star becomes a red giant (high tier).
+# Star tiers are set by MASS (as in reality: mass determines a star's temperature, color, and
+# fate), not by element. Color runs cool-red (small) → warm white (sun-like) → blue (massive),
+# the real temperature sequence. Only high-tier stars can collapse or supernova; the rest
+# eventually fade into white dwarfs.
+STAR_TIER_MEDIUM_MASS = 34      # Mass at or above which a star is mid tier (sun-like).
+STAR_TIER_HIGH_MASS = 42        # Mass at or above which a star is a blue giant. Kept aligned with BLACK_HOLE_THRESHOLD: exactly the massive stars are the ones that can die violently.
 
-PROTOSTAR_LOW_COLOR = (225, 255, 255)      # White (current)
+# Ignition mass boost depends on the cloud's own metallicity: pristine hydrogen/helium clouds
+# fragment less and ignite as monsters (Population III), enriched clouds ignite smaller.
+STAR_ENRICHED_ELEMENT_MIN = 3   # Element index at or above which a cloud counts as metal-enriched (beyond H/He/O).
+PROTOSTAR_PRISTINE_MASS_BOOST = 12  # Ignition boost for pristine (H/He/O) clouds — first stars are giants.
+PROTOSTAR_ENRICHED_MASS_BOOST = 4   # Ignition boost for metal-enriched clouds.
+
+PROTOSTAR_LOW_COLOR = (255, 120, 70)       # Red dwarf — cool, dim, effectively immortal.
 PROTOSTAR_LOW_SIZE = 2
-PROTOSTAR_LOW_MASS_BOOST = 4              # No extra mass for light stars
-
-PROTOSTAR_MEDIUM_COLOR = (200, 230, 80)    # Yellow-green
+PROTOSTAR_MEDIUM_COLOR = (255, 240, 200)   # Sun-like — warm white.
 PROTOSTAR_MEDIUM_SIZE = 4
-PROTOSTAR_MEDIUM_MASS_BOOST = 8           # Medium stars get +3 mass on formation
-
-PROTOSTAR_HIGH_COLOR = (180, 60, 30)       # Red-orange
+PROTOSTAR_HIGH_COLOR = (150, 190, 255)     # Blue giant — hot, massive, short-lived.
 PROTOSTAR_HIGH_SIZE = 6
-PROTOSTAR_HIGH_MASS_BOOST = 12             # Red giants get +6 mass on formation
 
-# Higher BH conversion chance for red giants
-PROTOSTAR_RED_GIANT_BLACK_HOLE_CHANCE = 0.001
+# Collapse odds scale steeply with mass (fate is a knife-edge function of mass in reality).
+COLLAPSE_MASS_EXPONENT = 17     # BH/NS collapse chance scales as (mass/threshold)^this above BLACK_HOLE_THRESHOLD. 17 gives ~10x at the 48-mass cap, matching the old red-giant fast path so compact-object formation (which drives the matter cycle) stays frequent.
+# Metallicity biases the remnant: metal-rich massive stars shed more mass in winds and tend to
+# leave neutron stars; metal-poor ones keep their mass and collapse straight to black holes.
+COLLAPSE_NS_METALLICITY_BIAS = 0.15  # Added to NEUTRON_STAR_CHANCE for enriched stars, subtracted for pristine ones.
+
+# ── White Dwarfs (the quiet endpoint of most stars) ──
+# Sub-massive stars (below STAR_TIER_HIGH_MASS) don't explode: they shed a planetary nebula
+# and leave a white dwarf that cools for a long time, fades to a black dwarf, and vanishes.
+WHITE_DWARF_CHANCE = 0.002      # Base per-frame chance a sub-massive star ends its life; scaled by (mass/high-tier)^WHITE_DWARF_LIFETIME_MASS_EXPONENT so sun-like stars retire well before red dwarfs (live fast, die young — gently).
+WHITE_DWARF_LIFETIME_MASS_EXPONENT = 4  # Steepness of that scaling: at 4, a sun-like star retires ~3x sooner than a red dwarf.
+WHITE_DWARF_MASS_FRACTION = 0.5 # Fraction of the star's mass kept by the white dwarf; the rest blows off as the nebula.
+PLANETARY_NEBULA_EJECTA_COUNT = 6  # Clouds in the ejected shell (light elements — H/He/C).
+PLANETARY_NEBULA_SPREAD = 18    # Max spawn radius (pixels) of the nebula shell.
+WHITE_DWARF_COOL_TIME = 90.0    # Seconds for a white dwarf to cool to invisibility (black dwarf) and be removed.
+WHITE_DWARF_RADIUS = 2          # Visual radius in pixels (tiny, Earth-sized in reality).
+WHITE_DWARF_COLOR = (235, 240, 255)  # Fresh white dwarf — blazing white.
+WHITE_DWARF_COOL_COLOR = (70, 35, 25)  # Color it cools toward before fading into the background.
+# WD-WD collisions detonate as Type Ia supernovae: total destruction, no remnant, and the
+# iron-peak ejecta that make Type Ia the universe's main iron source (and standard candles).
+TYPE_IA_COLLISION_DISTANCE = 5  # Distance (pixels) at which two white dwarfs detonate.
+TYPE_IA_EJECTA_COUNT = 14       # Ejecta pieces from a Type Ia detonation.
+TYPE_IA_EJECTA_SPREAD = 30      # Max spawn radius (pixels) of Type Ia ejecta.
 
 # ── Black Holes ──
-BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse into a black hole.
-BLACK_HOLE_CHANCE = 0.0001      # Per-frame probability a qualifying star becomes a black hole. Very rare.
+BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse (kept equal to STAR_TIER_HIGH_MASS: only blue giants die violently).
+BLACK_HOLE_CHANCE = 0.0001      # Base per-frame collapse probability AT the threshold; scales as (mass/threshold)^COLLAPSE_MASS_EXPONENT. Very rare.
 BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead).
 
 # ── Multiverse (each black-hole birth opens a new universe outside the current ones) ──
@@ -249,20 +291,29 @@ BLACK_HOLE_DECAY_CLOUD_MASS_MAX = 28   # Maximum mass of each decay cloud.
 BLACK_HOLE_DECAY_EJECTA_SPREAD = 20    # Max spawn distance (pixels) of decay ejecta from the BH.
 
 # ── Neutron Stars ──
-NEUTRON_STAR_CHANCE = 0.6      # Probability of becoming a neutron star instead of a black hole on collapse.
+NEUTRON_STAR_CHANCE = 0.6      # Base probability of a neutron star instead of a black hole on collapse (biased by metallicity, see COLLAPSE_NS_METALLICITY_BIAS).
 NEUTRON_STAR_VELOCITY_DAMPING = 0.35  # Per-second velocity retention for neutron stars AND magnetars. Dense compact objects plow through the cloud sea with heavy dynamical friction, anchoring them like black holes (0.15) but less strongly. 1.0 = no extra braking.
 NEUTRON_STAR_RADIUS = 1         # Visual radius in pixels (tiny, as expected).
 NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE  # Gravitational pull strength. Moderate — between clouds and BHs.
-NEUTRON_STAR_DECAY_RATE = 2   # Mass lost per second. Higher = shorter lifespan.
-NEUTRON_STAR_DECAY_THRESHOLD = 0.8  # Mass at which a neutron star dissipates into ejecta.
+# Pulsars spin down (as in reality: the period grows until the pulsar crosses the "death line"
+# and goes radio-quiet) instead of losing mass while active. Real neutron stars then persist
+# forever; the slow dead-phase decay below is an artistic-license concession that returns their
+# mass to the cloud cycle — without it, dead pulsars would permanently drain the universe.
+NEUTRON_STAR_SPINDOWN_RATE = 1.5  # Pulse period grows as PULSE_RATE * (1 + age * this). Higher = faster spin-down.
+NEUTRON_STAR_DEATH_LINE_PERIOD = 0.5  # Pulse period (seconds) at which the pulsar goes dark and quiet (~21s of life at the rates above).
+NEUTRON_STAR_ACTIVE_DECAY_RATE = 0.05  # Mass lost per second while pulsing (rotational energy leaving as pulses — near zero).
+NEUTRON_STAR_DEAD_DECAY_RATE = 1.0  # Mass lost per second once dark (matter-cycle concession, see above).
+NEUTRON_STAR_DECAY_THRESHOLD = 0.8  # Mass at which a dead neutron star quietly dissipates into a few cold clouds.
+PULSAR_REMNANT_CLOUD_COUNT = 6  # Cold clouds released when a dead neutron star dissipates (no pulse, no fireworks).
+PULSAR_REMNANT_SPREAD = 14      # Max spawn radius (pixels) of those clouds.
 NEUTRON_STAR_COLOR = (0, 120, 255)  # RGB color of the neutron star (cyan-blue).
+NEUTRON_STAR_DEAD_COLOR = (70, 80, 100)  # Dim slate color of a pulsar that crossed the death line.
 NEUTRON_STAR_PULSE_RATE = 0.015  # Seconds between pulsar pulses. Lower = faster pulsing.
 NEUTRON_STAR_PULSE_STRENGTH = 7 # Force magnitude of each pulse ripple. Higher = stronger push on nearby entities.
 NEUTRON_STAR_PULSE_COLOR = (0, 140, 255, 245)  # RGBA color of the expanding pulse ring.
 NEUTRON_STAR_PULSE_WIDTH = 2    # Line width (pixels) for drawing pulse rings.
 NEUTRON_STAR_RIPPLE_SPEED = 64  # How fast (pixels/sec) pulse ripples expand outward.
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripples exert force on entities.
-NEUTRON_STAR_PULSE_MASS_BOOST = 0.02      # Mass cost per unit of pulse force. Pulsing drains the neutron star.
 NEUTRON_STAR_PULSE_COLOR_DURATION = 0.1  # Seconds the neutron star flashes white after each pulse.
 NEUTRON_STAR_PULSE_FADE_RATE = 1.5  # Rate multiplier for pulse fade once the wavefront reaches the barrier.
 
@@ -287,9 +338,29 @@ MAGNETAR_WALL_STICK = 12        # Pull (px/s^2) drawing an in-field magnetar to 
 MAGNETAR_BARRIER_ATTRACT_RATE = 1.2  # Per-second relaxation of in-field wall vertices toward the magnetar's radial distance — the visible "wall bows toward the magnet" attraction. Target-based (bounded), so it cannot run away like a constant pull would.
 
 # ── Kilonova (neutron star merger) ──
-KILONOVA_EJECTA_COUNT = 20      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements.
+KILONOVA_EJECTA_COUNT = 20      # Number of ejecta pieces from a NS-NS collision. Rich in heavy elements (r-process: gold, platinum — the GW170817 result).
 KILONOVA_COLLISION_DISTANCE = 6 # Distance (pixels) at which two neutron stars merge.
 KILONOVA_EJECTA_SPREAD = 40     # Max spawn distance (pixels) of kilonova ejecta. Large explosion!
+# The remnant depends on the combined mass (as with GW170817): light pairs leave a magnetar,
+# heavy pairs collapse straight to a black hole.
+KILONOVA_MAGNETAR_REMNANT_MAX = 70  # Combined mass below which the merger leaves a magnetar instead of a black hole.
+
+# ── Metallicity (chemical evolution of a universe) ──
+# Each universe tracks a metallicity Z in [0, 1] — a blend factor from pristine Big-Bang gas
+# toward metal-rich matter. Every enrichment event ratchets it up, and ejecta composition is
+# blended toward the metal-rich tables by Z, so universes visibly age chemically over
+# generations of stars (Population III → II → I). Children inherit Z when a universe rips.
+METALLICITY_PER_SUPERNOVA = 0.0002  # Z gained per core-collapse supernova (they are frequent; the arc should take many minutes).
+METALLICITY_PER_TYPE_IA = 0.002    # Z gained per Type Ia detonation (the main iron injector).
+METALLICITY_PER_KILONOVA = 0.004   # Z gained per kilonova (rare but heavy-element rich).
+METALLICITY_PER_NEBULA = 0.0002    # Z gained per planetary nebula (gentle enrichment).
+
+# ── Shock-triggered star formation ──
+# Supernova/pulsar wavefronts compress the clouds they pass through; compressed clouds are far
+# more likely to merge/collapse while the shock lasts — the real mechanism by which star
+# formation propagates in waves through galaxies.
+SHOCK_DURATION = 1.5           # Seconds a cloud stays "shocked" after a wavefront passes it.
+SHOCK_MERGE_CHANCE = 0.5       # Merge probability per frame for overlapping SHOCKED cloud pairs (vs 0.12 base).
 
 # ── Pulse Rendering ──
 PULSE_RENDER_POINT_COUNT = 64   # Number of polygon vertices used to draw each pulse ring.
@@ -371,6 +442,31 @@ BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE = [
     (0.99, 0.995), # Nickel range: 99-99.5%
     (0.995, 0.998),# Chromium range: 99.5-99.8%
     (0.998, 1.0),  # Titanium range: 99.8-100%
+]
+
+# Type Ia supernovae burn a carbon-oxygen white dwarf to iron-peak elements: no hydrogen or
+# helium, no r-process metals — mostly iron, nickel, silicon, sulfur, calcium, chromium.
+TYPE_IA_ELEMENTAL_ABUNDANCE = [
+    (0, 0.0),      # Hydrogen - none (the dwarf has no envelope)
+    (0.0, 0.0),    # Helium - none
+    (0.0, 0.06),   # Oxygen range: 0-6% (unburned fuel)
+    (0.06, 0.10),  # Carbon range: 6-10% (unburned fuel)
+    (0.10, 0.11),  # Neon range: 10-11%
+    (0.11, 0.11),  # Nitrogen - none
+    (0.11, 0.55),  # Iron range: 11-55% (the main product)
+    (0.55, 0.68),  # Silicon range: 55-68%
+    (0.68, 0.68),  # Gold - none (no r-process in a thermonuclear burn)
+    (0.68, 0.76),  # Sulfur range: 68-76%
+    (0.76, 0.79),  # Magnesium range: 76-79%
+    (0.79, 0.80),  # Phosphorus range: 79-80%
+    (0.80, 0.80),  # Lithium - none
+    (0.80, 0.80),  # Platinum - none
+    (0.80, 0.84),  # Cobalt range: 80-84%
+    (0.84, 0.90),  # Calcium range: 84-90%
+    (0.90, 0.91),  # Sodium range: 90-91%
+    (0.91, 0.97),  # Nickel range: 91-97%
+    (0.97, 0.99),  # Chromium range: 97-99%
+    (0.99, 1.0),   # Titanium range: 99-100%
 ]
 
 KILONOVA_ELEMENTAL_ABUNDANCE = [

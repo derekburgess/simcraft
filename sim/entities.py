@@ -1,6 +1,6 @@
-"""Compact objects: black holes and neutron stars. There are at most a handful of each, so they
-stay ordinary Python objects — but every interaction with the cloud field is vectorized over
-the field arrays in place (the arrays are the truth; there is no scatter step).
+"""Compact objects: black holes, neutron stars, and white dwarfs. There are at most a handful
+of each, so they stay ordinary Python objects — but every interaction with the cloud field is
+vectorized over the field arrays in place (the arrays are the truth; there is no scatter step).
 """
 import math
 import random
@@ -76,6 +76,7 @@ class BlackHole:
                         self.vy = (self.mass * self.vy + black_hole.mass * black_hole.vy) / total_mass
                     self.accretion_mass += black_hole.mass
                     universe.black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
+                    universe.event_log.append("BLACK HOLE MERGER — gravitational waves ripple out")
                 elif distance > 0:
                     soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                     force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (soft_dist ** 2)
@@ -84,7 +85,9 @@ class BlackHole:
 
         self._attract_clouds(universe, delta_time, alive, stream_moves, capture_radius, swirl_radius)
 
-        for entity in (*universe.neutron_stars, *universe.magnetars):
+        # Neutron stars, magnetars, and white dwarfs all fall in and get eaten the same way;
+        # ns_to_remove is the shared removal set for every small compact object.
+        for entity in (*universe.neutron_stars, *universe.magnetars, *universe.white_dwarfs):
             if entity in ns_to_remove:
                 continue
             dx = self.x - entity.x
@@ -208,6 +211,8 @@ class NeutronStar:
         self.mass = mass
         self.radius = NEUTRON_STAR_RADIUS
         self.angular_momentum = 0.0  # Spin from formation/interactions
+        self.age = 0.0               # Seconds since birth — drives spin-down
+        self.is_dead = False         # True once the pulse period crosses the death line
         self.pulse_rate = NEUTRON_STAR_PULSE_RATE
         self.pulse_strength = NEUTRON_STAR_PULSE_STRENGTH
         self.time_since_last_pulse = 0
@@ -260,6 +265,15 @@ class NeutronStar:
     def update_pulse(self, universe, ring, delta_time):
         self.time_since_last_pulse += delta_time
 
+        # Spin-down: rotational energy leaves with every pulse, so the period grows with age
+        # (the real P–Pdot track). Past the death line the pulsar goes dark and quiet — real
+        # pulsars end silent, not in an explosion.
+        self.age += delta_time
+        self.pulse_rate = NEUTRON_STAR_PULSE_RATE * (1.0 + self.age * NEUTRON_STAR_SPINDOWN_RATE)
+        if not self.is_dead and self.pulse_rate >= NEUTRON_STAR_DEATH_LINE_PERIOD:
+            self.is_dead = True
+            universe.event_log.append("PULSAR DEATH LINE — spin-down silences the beacon")
+
         if self.pulse_color_state == 1:
             self.pulse_color_duration -= delta_time
             if self.pulse_color_duration <= 0:
@@ -305,6 +319,9 @@ class NeutronStar:
                         force = np.where(apply, self.pulse_strength * effect / ((ripple + 1) ** 0.8), 0.0)
                         clouds.VX += (dx / distance) * force * delta_time
                         clouds.VY += (dy / distance) * force * delta_time
+                        # The wavefront also compresses what it passes: mark these clouds
+                        # shocked so they merge readily (triggered star formation).
+                        clouds.SHOCK = np.where(apply, SHOCK_DURATION, clouds.SHOCK)
 
             for black_hole in universe.black_holes:
                 dx = black_hole.x - self.x
@@ -327,14 +344,17 @@ class NeutronStar:
             if i < len(self.active_pulses):
                 self.active_pulses.pop(i)
 
-        if self.time_since_last_pulse >= self.pulse_rate and len(self.active_pulses) == 0:
+        if not self.is_dead and self.time_since_last_pulse >= self.pulse_rate and len(self.active_pulses) == 0:
             self.active_pulses.append([0, 0, 1.0])
             self.time_since_last_pulse = 0
             self.pulse_color_state = 1  # Set to white during pulse
             self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION  # Reset duration
 
     def decay(self, delta_time):
-        self.mass -= NEUTRON_STAR_DECAY_RATE * delta_time
+        # Active pulsars barely lose mass (death comes from spin-down, not evaporation); dead
+        # ones dissipate slowly to feed their mass back into the cloud cycle.
+        rate = NEUTRON_STAR_DEAD_DECAY_RATE if self.is_dead else NEUTRON_STAR_ACTIVE_DECAY_RATE
+        self.mass -= rate * delta_time
 
 
 class Magnetar(NeutronStar):
@@ -397,6 +417,27 @@ class Magnetar(NeutronStar):
             self.mass -= MAGNETAR_FLARE_MASS_COST
             self.pulse_color_state = 1
             self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION
+            universe.event_log.append("MAGNETAR GIANT FLARE — magnetic field snaps and reconnects")
 
     def decay(self, delta_time):
         self.mass -= MAGNETAR_DECAY_RATE * delta_time
+
+
+class WhiteDwarf:
+    """The quiet endpoint of most stars: the exposed core left after a sub-massive star sheds
+    its envelope as a planetary nebula. It does nothing but cool — white-hot to dim red to
+    invisible (a black dwarf), at which point physics.step removes it. Black holes can still
+    eat one, and two colliding white dwarfs detonate as a Type Ia supernova."""
+
+    def __init__(self, x, y, mass):
+        self.id = generate_unique_id()
+        self.x = x
+        self.y = y
+        self.vx = 0.0
+        self.vy = 0.0
+        self.mass = mass
+        self.age = 0.0
+
+    def cooling(self):
+        """0.0 fresh and white-hot → 1.0 fully cooled (black dwarf)."""
+        return min(self.age / WHITE_DWARF_COOL_TIME, 1.0)
