@@ -236,7 +236,10 @@ def run_simulation(screen, font, state):
 def main():
     pygame.init()
     pygame.display.set_caption("A long time ago in a universe far, far away...")
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    # RESIZABLE puts the maximize button in the title bar; SCALED keeps the game's logical
+    # resolution fixed at SCREEN_WIDTH x SCREEN_HEIGHT and lets SDL scale the output (and
+    # translate mouse coords) to whatever size the window actually is.
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE | pygame.SCALED)
     font = pygame.font.SysFont('Monospace', 14)
     print("Populating space with molecular clouds")
     state = physics.initialize_state()
