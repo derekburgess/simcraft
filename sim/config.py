@@ -5,8 +5,8 @@ import os
 # ── Display ──
 BACKGROUND_COLOR = (0, 10, 20) # RGB background color (dark blue-black, like space).
 
-SCREEN_WIDTH = 1920             # Display width in pixels. Change to match your monitor.
-SCREEN_HEIGHT = 1080             # Display height in pixels. Change to match your monitor.
+SCREEN_WIDTH = 1920             # Initial window width in pixels; rendering follows the live window size. Also anchors the world spawn center.
+SCREEN_HEIGHT = 1080             # Initial window height in pixels; rendering follows the live window size.
 
 # ── UI ──
 LABEL_COLOR = (60, 60, 200)    # RGB color for UI text labels.

@@ -294,19 +294,20 @@ class WorldRenderer:
         self.h = 0
 
     def render(self, screen, state, zoom, view_center_x, view_center_y):
-        view_w = int(SCREEN_WIDTH / zoom)
-        view_h = int(SCREEN_HEIGHT / zoom)
+        screen_w, screen_h = screen.get_size()
+        view_w = int(screen_w / zoom)
+        view_h = int(screen_h / zoom)
         # Only the visible rect is ever blitted and the view can't pan past the start center,
         # so the world surface never needs to grow with the multiverse.
-        needed_w = min(view_w + SCREEN_WIDTH, MULTIVERSE_RENDER_MAX)
-        needed_h = min(view_h + SCREEN_HEIGHT, MULTIVERSE_RENDER_MAX)
+        needed_w = min(view_w + screen_w, MULTIVERSE_RENDER_MAX)
+        needed_h = min(view_h + screen_h, MULTIVERSE_RENDER_MAX)
         if needed_w > self.w or needed_h > self.h:
             self.w = max(self.w, needed_w)
             self.h = max(self.h, needed_h)
             self.world_surface = pygame.Surface((self.w, self.h))
 
-        wox = (self.w - SCREEN_WIDTH) // 2
-        woy = (self.h - SCREEN_HEIGHT) // 2
+        wox = (self.w - screen_w) // 2
+        woy = (self.h - screen_h) // 2
         ws_cx = wox + view_center_x
         ws_cy = woy + view_center_y
         view_left = max(0, min(self.w - view_w, int(ws_cx - view_w / 2)))
@@ -328,7 +329,7 @@ class WorldRenderer:
             screen.blit(self.world_surface, (0, 0), area=visible_rect)
         else:
             visible_area = self.world_surface.subsurface(visible_rect)
-            scaled = pygame.transform.scale(visible_area, (SCREEN_WIDTH, SCREEN_HEIGHT))
+            scaled = pygame.transform.scale(visible_area, (screen_w, screen_h))
             screen.blit(scaled, (0, 0))
 
 
@@ -349,15 +350,16 @@ def format_year_display(current_year):
 
 
 def draw_static_key(screen, font, zoom):
-    snapshot_pos = (UI_LABEL_X, SCREEN_HEIGHT - UI_ZOOM_Y_OFFSET)
+    screen_h = screen.get_height()
+    snapshot_pos = (UI_LABEL_X, screen_h - UI_ZOOM_Y_OFFSET)
     if zoom != 1.0:
         zoom_text = f'[SCROLL] ZOOM: {zoom:.1f}x'
     else:
         zoom_text = '[SCROLL] ZOOM'
     screen.blit(font.render(zoom_text, True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-    snapshot_pos = (UI_LABEL_X, SCREEN_HEIGHT - UI_EXIT_Y_OFFSET)
+    snapshot_pos = (UI_LABEL_X, screen_h - UI_EXIT_Y_OFFSET)
     screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-    snapshot_pos = (UI_LABEL_X, SCREEN_HEIGHT - UI_EXIT_Y_OFFSET - 30)
+    snapshot_pos = (UI_LABEL_X, screen_h - UI_EXIT_Y_OFFSET - 30)
     screen.blit(font.render('[F11] FULLSCREEN', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
 
 
@@ -398,10 +400,10 @@ def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_fol
     rng_text = f"{rng_number}" if rng_number is not None else "..."
 
     row_h = rng_font.get_height() + 2 * UI_STATS_CELL_PAD_Y
-    row_top = SCREEN_HEIGHT - UI_STATS_BOTTOM_MARGIN - row_h
+    row_top = screen.get_height() - UI_STATS_BOTTOM_MARGIN - row_h
     row_bottom = row_top + row_h
     table_left = UI_LABEL_X
-    table_w = SCREEN_WIDTH - 2 * UI_LABEL_X
+    table_w = screen.get_width() - 2 * UI_LABEL_X
 
     rng_w = rng_font.size("0" * RNG_DIGITS)[0] + 2 * UI_STATS_CELL_PAD_X
     stat_w = (table_w - rng_w) // len(stat_cells)
@@ -424,7 +426,7 @@ def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_fol
 def draw_ui(screen, font, current_year, zoom=1.0):
     draw_static_key(screen, font, zoom)
     year_text = font.render(format_year_display(current_year), True, LABEL_COLOR)
-    screen.blit(year_text, (UI_LABEL_X, SCREEN_HEIGHT - UI_TEXT_Y_OFFSET))
+    screen.blit(year_text, (UI_LABEL_X, screen.get_height() - UI_TEXT_Y_OFFSET))
 
 
 # ── Event ticker (readout row of the stats table) ───────────────────────────────────────────
@@ -446,12 +448,12 @@ def draw_ticker(screen, ticker, offset=0):
     global TICKER_PANEL_RECT
     font, rng_font = _get_stats_fonts()
     stats_row_h = rng_font.get_height() + 2 * UI_STATS_CELL_PAD_Y
-    stats_row_top = SCREEN_HEIGHT - UI_STATS_BOTTOM_MARGIN - stats_row_h
+    stats_row_top = screen.get_height() - UI_STATS_BOTTOM_MARGIN - stats_row_h
     line_h = font.get_height() + 2
     panel_h = UI_TICKER_MAX_LINES * line_h + 2 * UI_STATS_CELL_PAD_Y
     panel_top = stats_row_top - panel_h
     table_left = UI_LABEL_X
-    table_w = SCREEN_WIDTH - 2 * UI_LABEL_X
+    table_w = screen.get_width() - 2 * UI_LABEL_X
     TICKER_PANEL_RECT = pygame.Rect(table_left, panel_top, table_w, panel_h)
 
     if offset > 0:
@@ -522,4 +524,4 @@ def draw_legend(screen):
             x += UI_LEGEND_SWATCH + 8
         panel.blit(surf, (x, y + (UI_LEGEND_ROW_HEIGHT - surf.get_height()) // 2))
         y += UI_LEGEND_ROW_HEIGHT
-    screen.blit(panel, (SCREEN_WIDTH - panel_w - UI_LEGEND_MARGIN, UI_LEGEND_MARGIN))
+    screen.blit(panel, (screen.get_width() - panel_w - UI_LEGEND_MARGIN, UI_LEGEND_MARGIN))

@@ -33,8 +33,9 @@ def copy_to_clipboard(text):
 
 
 def screen_to_world(screen_x, screen_y, zoom, view_center_x, view_center_y):
-    view_w = SCREEN_WIDTH / zoom
-    view_h = SCREEN_HEIGHT / zoom
+    screen_w, screen_h = pygame.display.get_surface().get_size()
+    view_w = screen_w / zoom
+    view_h = screen_h / zoom
     view_left = view_center_x - view_w / 2
     view_top = view_center_y - view_h / 2
     world_x = view_left + screen_x / zoom
@@ -236,10 +237,11 @@ def run_simulation(screen, font, state):
 def main():
     pygame.init()
     pygame.display.set_caption("A long time ago in a universe far, far away...")
-    # RESIZABLE puts the maximize button in the title bar; SCALED keeps the game's logical
-    # resolution fixed at SCREEN_WIDTH x SCREEN_HEIGHT and lets SDL scale the output (and
-    # translate mouse coords) to whatever size the window actually is.
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE | pygame.SCALED)
+    # RESIZABLE puts the maximize button in the title bar. Rendering happens at the window's
+    # actual size (the display surface auto-resizes with the window), so maximizing or
+    # fullscreening any aspect ratio fills the window edge-to-edge — no letterbox bars.
+    # SCREEN_WIDTH x SCREEN_HEIGHT is only the initial window size.
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
     font = pygame.font.SysFont('Monospace', 14)
     print("Populating space with molecular clouds")
     state = physics.initialize_state()
