@@ -27,7 +27,7 @@ Added a RNG for fun...
 
 2023 CE //
 
-A "blocky" (like minecraft) 2D Universe Simulator (Simcraft). Original base structure (seen in /backups) written with OpenAI GPT3.5/4 and VSCode Copilot. Enhanced, tested, and debugged by Derek. Uses `pip install pygame` https://www.pygame.org/
+A "blocky" (like minecraft) 2D Universe Simulator (Simcraft). Original base structure was written with OpenAI GPT3.5/4 and VSCode Copilot. Enhanced, tested, and debugged by Derek. Used https://www.pygame.org/
 
 ## Original Context
 
