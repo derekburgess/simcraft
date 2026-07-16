@@ -16,7 +16,7 @@ import random
 import numpy as np
 
 from sim.config import *
-from sim.fields import CloudField, pick_element, _random_offsets, blend_abundance
+from sim.fields import CloudField, pick_element, blend_abundance
 from sim.barrier import Barrier
 from sim.entities import BlackHole, NeutronStar, Magnetar, WhiteDwarf
 from sim.rng import EntropyPool
@@ -169,6 +169,20 @@ def _triggered_mergers(universe):
     if len(shocked) < 2:
         return
     merge_chance = SHOCK_MERGE_CHANCE * universe.local.fusion * universe.star_formation_efficiency()
+    if _fastphysics is not None and hasattr(_fastphysics, 'collide_shocked'):
+        # Compiled path: same upper-triangle/one-roll-per-pair statistics as the loop below,
+        # which stays as the semantic reference. Sustained pulse activity can shock hundreds
+        # of clouds at once, and the Python pair loop was the multiverse frame-time leader.
+        removed_u8 = np.zeros(n, dtype=np.uint8)
+        _fastphysics.collide_shocked(
+            np.ascontiguousarray(shocked), clouds.X, clouds.Y, clouds.SIZE, clouds.M,
+            clouds.VX, clouds.VY, clouds.ELEM, removed_u8, len(shocked),
+            merge_chance, PROTOSTAR_THRESHOLD, MOLECULAR_CLOUD_MAX_MASS,
+            MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_MIN_SIZE,
+            MOLECULAR_CLOUD_START_MASS, MOLECULAR_CLOUD_GROWTH_RATE)
+        if removed_u8.any():
+            clouds.keep(removed_u8 == 0)
+        return
     x, y, size, mass = clouds.x, clouds.y, clouds.size, clouds.mass
     vx, vy, elem = clouds.vx, clouds.vy, clouds.elem
     removed = np.zeros(n, dtype=bool)
@@ -212,97 +226,113 @@ def update_entities(universe):
     clouds = universe.clouds
     clouds.refresh()
 
+    # The old scalar loop rolled `random.random()` per cloud per frame. Restructured into
+    # three candidate passes with the same per-cloud Bernoulli statistics: heavy stars stay
+    # scalar in row order (the BH cap check is sequential), while the every-star WD roll and
+    # the every-eligible-cloud emission roll become single vectorized draws whose HITS take
+    # the branchy path. Only the draw stream changes — statistics, not physics.
     to_remove = np.zeros(clouds.n, dtype=bool)
-    spawns = []  # (x, y, mass, abundance, elem_or_None, vx, vy)
+    spawns = []  # (x, y, mass, elem_index, vx, vy) — batch-applied via spawn_batch
     n = clouds.n
     mass = clouds.mass
     elem = clouds.elem
-    for k in range(n):
-        if mass[k] > BLACK_HOLE_THRESHOLD and len(universe.black_holes) < BLACK_HOLE_MAX_COUNT:
-            # Fate is a steep function of mass: the heaviest stars collapse soonest.
-            mass_ratio = mass[k] / BLACK_HOLE_THRESHOLD
-            if random.random() < BLACK_HOLE_CHANCE * universe.local.collapse * mass_ratio ** COLLAPSE_MASS_EXPONENT:
-                # The star's own metallicity biases the remnant: metal-rich stars shed mass
-                # in winds and tend to leave neutron stars; metal-poor ones collapse to holes.
-                bias = COLLAPSE_NS_METALLICITY_BIAS if elem[k] >= STAR_ENRICHED_ELEMENT_MIN else -COLLAPSE_NS_METALLICITY_BIAS
-                if random.random() < NEUTRON_STAR_CHANCE + bias:
-                    # A small fraction of neutron-star births come out as magnetars, so the
-                    # black-hole formation rate (which drives the matter cycle) is untouched.
-                    if random.random() < MAGNETAR_CHANCE:
-                        universe.magnetars.append(Magnetar(clouds.x[k], clouds.y[k], mass[k]))
-                        universe.event_log.append("CORE COLLAPSE — a magnetar is born")
-                    else:
-                        universe.neutron_stars.append(NeutronStar(clouds.x[k], clouds.y[k], mass[k]))
-                        universe.event_log.append("CORE COLLAPSE — a pulsar is born")
+
+    # ── Heavy stars: collapse or supernova (scalar, row order — cap fills sequentially) ──
+    a_entered = np.zeros(n, dtype=bool)
+    for k in np.nonzero(mass[:n] > BLACK_HOLE_THRESHOLD)[0]:
+        if len(universe.black_holes) >= BLACK_HOLE_MAX_COUNT:
+            continue  # cap full: this cloud falls through to the emission pass, as the old elif chain did
+        a_entered[k] = True
+        # Fate is a steep function of mass: the heaviest stars collapse soonest.
+        mass_ratio = mass[k] / BLACK_HOLE_THRESHOLD
+        if random.random() < BLACK_HOLE_CHANCE * universe.local.collapse * mass_ratio ** COLLAPSE_MASS_EXPONENT:
+            # The star's own metallicity biases the remnant: metal-rich stars shed mass
+            # in winds and tend to leave neutron stars; metal-poor ones collapse to holes.
+            bias = COLLAPSE_NS_METALLICITY_BIAS if elem[k] >= STAR_ENRICHED_ELEMENT_MIN else -COLLAPSE_NS_METALLICITY_BIAS
+            if random.random() < NEUTRON_STAR_CHANCE + bias:
+                # A small fraction of neutron-star births come out as magnetars, so the
+                # black-hole formation rate (which drives the matter cycle) is untouched.
+                if random.random() < MAGNETAR_CHANCE:
+                    universe.magnetars.append(Magnetar(clouds.x[k], clouds.y[k], mass[k]))
+                    universe.event_log.append("CORE COLLAPSE — a magnetar is born")
                 else:
-                    universe.black_holes.append(BlackHole(clouds.x[k], clouds.y[k], mass[k]))
-                    universe.event_log.append("CORE COLLAPSE — star implodes into a black hole")
-                to_remove[k] = True
-            elif random.random() < MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE * mass_ratio ** SUPERNOVA_LIFETIME_MASS_EXPONENT:
-                # Core-collapse supernova: the star resets to a light gas cloud and ejects
-                # material whose composition reflects the universe's chemical age.
-                ejecta_count = SUPERNOVA_EJECTA_COUNT_BASE + int((mass[k] - BLACK_HOLE_THRESHOLD) * SUPERNOVA_EJECTA_COUNT_PER_MASS)
-                sn_abundance = blend_abundance(EJECTA_ELEMENTAL_ABUNDANCE,
-                                               BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE, universe.metallicity)
-                for _ in range(ejecta_count):
-                    offset_angle = random.uniform(0, 2 * math.pi)
-                    offset_dist = random.uniform(5, SUPERNOVA_EJECTA_SPREAD)
-                    ex = clouds.x[k] + offset_dist * math.cos(offset_angle)
-                    ey = clouds.y[k] + offset_dist * math.sin(offset_angle)
-                    emass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
-                    offs = _random_offsets()
-                    child_elem = pick_element(sn_abundance)
-                    spawns.append((ex, ey, emass, offs, child_elem,
-                                   math.cos(offset_angle) * offset_dist * 0.5,
-                                   math.sin(offset_angle) * offset_dist * 0.5))
-                mass[k] = MOLECULAR_CLOUD_START_MASS
-                clouds.is_star[k] = False
-                clouds.size[k] = MOLECULAR_CLOUD_START_SIZE
-                universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_SUPERNOVA)
-                universe.event_log.append("SUPERNOVA (TYPE II) — massive star explodes, seeding metals")
-        elif (clouds.is_star[k] and mass[k] < STAR_TIER_HIGH_MASS
-              and random.random() < WHITE_DWARF_CHANCE
-              * (mass[k] / STAR_TIER_HIGH_MASS) ** WHITE_DWARF_LIFETIME_MASS_EXPONENT):
-            # The common stellar ending: no explosion. The star sheds its envelope as a
-            # planetary nebula (light elements drift back to the cloud sea) and the core
-            # remains as a white dwarf that will spend a long time cooling.
-            for _ in range(PLANETARY_NEBULA_EJECTA_COUNT):
+                    universe.neutron_stars.append(NeutronStar(clouds.x[k], clouds.y[k], mass[k]))
+                    universe.event_log.append("CORE COLLAPSE — a pulsar is born")
+            else:
+                universe.black_holes.append(BlackHole(clouds.x[k], clouds.y[k], mass[k]))
+                universe.event_log.append("CORE COLLAPSE — star implodes into a black hole")
+            to_remove[k] = True
+        elif random.random() < MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE * mass_ratio ** SUPERNOVA_LIFETIME_MASS_EXPONENT:
+            # Core-collapse supernova: the star resets to a light gas cloud and ejects
+            # material whose composition reflects the universe's chemical age.
+            ejecta_count = SUPERNOVA_EJECTA_COUNT_BASE + int((mass[k] - BLACK_HOLE_THRESHOLD) * SUPERNOVA_EJECTA_COUNT_PER_MASS)
+            sn_abundance = blend_abundance(EJECTA_ELEMENTAL_ABUNDANCE,
+                                           BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE, universe.metallicity)
+            for _ in range(ejecta_count):
                 offset_angle = random.uniform(0, 2 * math.pi)
-                offset_dist = random.uniform(4, PLANETARY_NEBULA_SPREAD)
+                offset_dist = random.uniform(5, SUPERNOVA_EJECTA_SPREAD)
                 ex = clouds.x[k] + offset_dist * math.cos(offset_angle)
                 ey = clouds.y[k] + offset_dist * math.sin(offset_angle)
-                emass = random.uniform(MOLECULAR_CLOUD_START_MASS,
-                                       mass[k] * (1.0 - WHITE_DWARF_MASS_FRACTION) / PLANETARY_NEBULA_EJECTA_COUNT * 2)
-                offs = _random_offsets()
-                child_elem = pick_element(EJECTA_ELEMENTAL_ABUNDANCE)
-                spawns.append((ex, ey, emass, offs, child_elem,
-                               math.cos(offset_angle) * offset_dist * 0.4,
-                               math.sin(offset_angle) * offset_dist * 0.4))
-            wd = WhiteDwarf(clouds.x[k], clouds.y[k], mass[k] * WHITE_DWARF_MASS_FRACTION)
-            wd.vx, wd.vy = clouds.vx[k], clouds.vy[k]
-            universe.white_dwarfs.append(wd)
-            to_remove[k] = True
-            universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_NEBULA)
-            universe.event_log.append("PLANETARY NEBULA — a star retires as a white dwarf")
-        elif (mass[k] >= MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS
-              and clouds.emission_count[k] < MOLECULAR_CLOUD_EMISSION_COUNT and not to_remove[k]):
-            # Emission: clouds shed small daughter clouds carrying the parent's element.
-            if random.random() < MOLECULAR_CLOUD_EMISSION_CHANCE:
-                emit_mass = random.uniform(MOLECULAR_CLOUD_EMISSION_MASS_MIN, MOLECULAR_CLOUD_EMISSION_MASS_MAX)
-                offset_angle = random.uniform(0, 2 * math.pi)
-                offset_dist = random.uniform(2, MOLECULAR_CLOUD_EMISSION_SPREAD)
-                offs = _random_offsets()
-                pick_element(None)  # discarded draw: the old code constructed with a random element, then overwrote it with the parent's
-                spawns.append((clouds.x[k] + offset_dist * math.cos(offset_angle),
-                               clouds.y[k] + offset_dist * math.sin(offset_angle),
-                               emit_mass, offs, int(elem[k]),
-                               clouds.vx[k] + math.cos(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY,
-                               clouds.vy[k] + math.sin(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY))
-                clouds.emission_count[k] += 1
+                emass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
+                child_elem = pick_element(sn_abundance)
+                spawns.append((ex, ey, emass, child_elem,
+                               math.cos(offset_angle) * offset_dist * 0.5,
+                               math.sin(offset_angle) * offset_dist * 0.5))
+            mass[k] = MOLECULAR_CLOUD_START_MASS
+            clouds.is_star[k] = False
+            clouds.size[k] = MOLECULAR_CLOUD_START_SIZE
+            universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_SUPERNOVA)
+            universe.event_log.append("SUPERNOVA (TYPE II) — massive star explodes, seeding metals")
+
+    # ── Sub-massive stars: white-dwarf retirement (one vectorized roll over all stars) ──
+    star_idx = np.nonzero(clouds.IS_STAR & (clouds.M < STAR_TIER_HIGH_MASS))[0]
+    if len(star_idx):
+        wd_chance = (WHITE_DWARF_CHANCE
+                     * (clouds.M[star_idx] / STAR_TIER_HIGH_MASS) ** WHITE_DWARF_LIFETIME_MASS_EXPONENT)
+        star_idx = star_idx[np.random.random(len(star_idx)) < wd_chance]
+    for k in star_idx:
+        # The common stellar ending: no explosion. The star sheds its envelope as a
+        # planetary nebula (light elements drift back to the cloud sea) and the core
+        # remains as a white dwarf that will spend a long time cooling.
+        for _ in range(PLANETARY_NEBULA_EJECTA_COUNT):
+            offset_angle = random.uniform(0, 2 * math.pi)
+            offset_dist = random.uniform(4, PLANETARY_NEBULA_SPREAD)
+            ex = clouds.x[k] + offset_dist * math.cos(offset_angle)
+            ey = clouds.y[k] + offset_dist * math.sin(offset_angle)
+            emass = random.uniform(MOLECULAR_CLOUD_START_MASS,
+                                   mass[k] * (1.0 - WHITE_DWARF_MASS_FRACTION) / PLANETARY_NEBULA_EJECTA_COUNT * 2)
+            child_elem = pick_element(EJECTA_ELEMENTAL_ABUNDANCE)
+            spawns.append((ex, ey, emass, child_elem,
+                           math.cos(offset_angle) * offset_dist * 0.4,
+                           math.sin(offset_angle) * offset_dist * 0.4))
+        wd = WhiteDwarf(clouds.x[k], clouds.y[k], mass[k] * WHITE_DWARF_MASS_FRACTION)
+        wd.vx, wd.vy = clouds.vx[k], clouds.vy[k]
+        universe.white_dwarfs.append(wd)
+        to_remove[k] = True
+        universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_NEBULA)
+        universe.event_log.append("PLANETARY NEBULA — a star retires as a white dwarf")
+
+    # ── Emission: clouds shed small daughter clouds (one vectorized roll over eligibles) ──
+    eligible = ((clouds.M >= MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS)
+                & (clouds.emission_count[:n] < MOLECULAR_CLOUD_EMISSION_COUNT)
+                & ~to_remove & ~a_entered)
+    c_idx = np.nonzero(eligible)[0]
+    if len(c_idx):
+        c_idx = c_idx[np.random.random(len(c_idx)) < MOLECULAR_CLOUD_EMISSION_CHANCE]
+    for k in c_idx:
+        emit_mass = random.uniform(MOLECULAR_CLOUD_EMISSION_MASS_MIN, MOLECULAR_CLOUD_EMISSION_MASS_MAX)
+        offset_angle = random.uniform(0, 2 * math.pi)
+        offset_dist = random.uniform(2, MOLECULAR_CLOUD_EMISSION_SPREAD)
+        spawns.append((clouds.x[k] + offset_dist * math.cos(offset_angle),
+                       clouds.y[k] + offset_dist * math.sin(offset_angle),
+                       emit_mass, int(elem[k]),
+                       clouds.vx[k] + math.cos(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY,
+                       clouds.vy[k] + math.sin(offset_angle) * MOLECULAR_CLOUD_EMISSION_VELOCITY))
+        clouds.emission_count[k] += 1
+
     if to_remove.any():
         clouds.keep(~to_remove)
-    for (sx, sy, smass, soffs, selem, svx, svy) in spawns:
-        clouds.spawn(sx, sy, smass, elem=selem, vx=svx, vy=svy, offsets=soffs)
+    clouds.spawn_batch(spawns)
 
     # Hard cap on clouds per universe: bounds per-frame physics + rendering cost. Trim the
     # lowest-mass clouds when over the cap (rows end up mass-sorted, as the old list.sort did).
@@ -476,9 +506,8 @@ def step(universe, ring, delta_time):
                 ex = black_hole.x + offset_dist * math.cos(offset_angle)
                 ey = black_hole.y + offset_dist * math.sin(offset_angle)
                 emass = random.uniform(BLACK_HOLE_DECAY_CLOUD_MASS_MIN, BLACK_HOLE_DECAY_CLOUD_MASS_MAX)
-                offs = _random_offsets()
                 child_elem = pick_element(BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE)
-                spawns.append((ex, ey, emass, offs, child_elem,
+                spawns.append((ex, ey, emass, child_elem,
                                math.cos(offset_angle) * offset_dist * 0.5,
                                math.sin(offset_angle) * offset_dist * 0.5))
 
@@ -502,9 +531,8 @@ def step(universe, ring, delta_time):
                 ex = neutron_star.x + offset_dist * math.cos(offset_angle)
                 ey = neutron_star.y + offset_dist * math.sin(offset_angle)
                 emass = random.uniform(2, 8)
-                offs = _random_offsets()
                 child_elem = pick_element(remnant_abundance)
-                spawns.append((ex, ey, emass, offs, child_elem,
+                spawns.append((ex, ey, emass, child_elem,
                                math.cos(offset_angle) * offset_dist * 0.3,
                                math.sin(offset_angle) * offset_dist * 0.3))
 
@@ -555,9 +583,8 @@ def step(universe, ring, delta_time):
                     ex = cx + offset_dist * math.cos(offset_angle)
                     ey = cy + offset_dist * math.sin(offset_angle)
                     emass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
-                    offs = _random_offsets()
                     child_elem = pick_element(TYPE_IA_ELEMENTAL_ABUNDANCE)
-                    spawns.append((ex, ey, emass, offs, child_elem,
+                    spawns.append((ex, ey, emass, child_elem,
                                    math.cos(offset_angle) * offset_dist * 0.5,
                                    math.sin(offset_angle) * offset_dist * 0.5))
                 universe.black_hole_pulses.append([cx, cy, 0, wd_a.mass + wd_b.mass])
@@ -591,9 +618,8 @@ def step(universe, ring, delta_time):
                     ex = cx + offset_dist * math.cos(offset_angle)
                     ey = cy + offset_dist * math.sin(offset_angle)
                     emass = random.uniform(MOLECULAR_CLOUD_START_MASS, PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION)
-                    offs = _random_offsets()
                     child_elem = pick_element(KILONOVA_ELEMENTAL_ABUNDANCE)
-                    spawns.append((ex, ey, emass, offs, child_elem,
+                    spawns.append((ex, ey, emass, child_elem,
                                    math.cos(offset_angle) * offset_dist * 0.5,
                                    math.sin(offset_angle) * offset_dist * 0.5))
                 universe.black_hole_pulses.append([cx, cy, 0, combined_mass])
@@ -634,8 +660,7 @@ def step(universe, ring, delta_time):
         universe.neutron_stars = [ns for ns in universe.neutron_stars if ns not in ns_to_remove]
         universe.magnetars = [m for m in universe.magnetars if m not in ns_to_remove]
         universe.white_dwarfs = [wd for wd in universe.white_dwarfs if wd not in ns_to_remove]
-    for (sx, sy, smass, soffs, selem, svx, svy) in spawns:
-        clouds.spawn(sx, sy, smass, elem=selem, vx=svx, vy=svy, offsets=soffs)
+    clouds.spawn_batch(spawns)
 
     # ── Integration (semi-implicit Euler, kick→drift: damp velocity, then move with the new
     # velocity). Not symplectic — that's a property of Hamiltonian systems and this one is

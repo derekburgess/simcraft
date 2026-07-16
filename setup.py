@@ -6,10 +6,13 @@ https://github.com/pypa/sampleproject
 """
 
 # Always prefer setuptools over distutils
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 # To use a consistent encoding
 from codecs import open
 from os import path
+
+from Cython.Build import cythonize  # build requirement, declared in pyproject.toml
+import numpy
 
 here = path.abspath(path.dirname(__file__))
 
@@ -52,6 +55,15 @@ setup(
     # simple. Or you can use find_packages().
     packages=find_packages(exclude=[]),
 
+    # The compiled hot loops (collide + Barnes-Hut + shock mergers). Without this the
+    # installed package silently fell back to the pure-Python collision loops — the
+    # single biggest frame cost at multiverse scale.
+    ext_modules=cythonize(
+        [Extension("sim.fastphysics", ["sim/fastphysics.pyx"],
+                   include_dirs=[numpy.get_include()])],
+        compiler_directives={"language_level": "3"},
+    ),
+
     # Alternatively, if you want to distribute just a my_module.py, uncomment
     # this:
     #   py_modules=["my_module"],
@@ -64,7 +76,7 @@ setup(
         'pygame',
         'numpy',
         'taichi',      # GPU gravity backend (sim falls back to CPU without a GPU)
-        'cython',      # builds sim/fastphysics (collide + Barnes-Hut); prebuilt .so also ships
+        'cython',      # rebuilding sim/fastphysics in a working tree (install builds it via ext_modules)
         'pandas',      # rng.py batch mode
         'matplotlib',  # rng.py randomness plots
     ],

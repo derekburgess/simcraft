@@ -24,10 +24,12 @@ def pick_element(abundance=None):
 
 
 def _random_offsets():
-    """Block-cluster offsets, one per cloud — identical draws to the original __init__."""
-    return [(random.uniform(0.05, 0.22) * math.cos(random.uniform(0, 2 * math.pi)),
-             random.uniform(0.05, 0.22) * math.sin(random.uniform(0, 2 * math.pi)))
-            for _ in range(7)]
+    """Block-cluster offsets, one cloud's worth — same distribution as the original __init__
+    (radius ~ U[0.05, 0.22], angle ~ U[0, 2pi] per block), drawn vectorized from numpy's
+    stream instead of 28 scalar draws from `random`."""
+    r = np.random.uniform(0.05, 0.22, 7)
+    th = np.random.uniform(0.0, 2.0 * math.pi, 7)
+    return np.stack((r * np.cos(th), r * np.sin(th)), axis=1)
 
 
 def blend_abundance(base, enriched, z):
@@ -63,7 +65,9 @@ class CloudField:
         self.shock = np.zeros(cap)   # seconds of "compressed by a wavefront" remaining (triggered star formation)
         self.offsets = np.zeros((cap, 7, 2))
         self.sprites = [None] * cap      # cached pygame sprites, draw-only
-        self.sprite_keys = [None] * cap
+        # Visual cache key per row: (size, r, g, b, opacity) as int64, -1 = stale/no sprite.
+        # An array (not a list of tuples) so the renderer can diff all rows in one vector op.
+        self.sprite_keys = np.full((cap, 5), -1, dtype=np.int64)
 
     # ── views over the alive rows (setters allow `field.VX += ...` on the view) ──
     @property
@@ -111,7 +115,9 @@ class CloudField:
         grown_off[:self.n] = self.offsets[:self.n]
         self.offsets = grown_off
         self.sprites += [None] * (new_cap - self.cap)
-        self.sprite_keys += [None] * (new_cap - self.cap)
+        grown_keys = np.full((new_cap, 5), -1, dtype=np.int64)
+        grown_keys[:self.n] = self.sprite_keys[:self.n]
+        self.sprite_keys = grown_keys
         self.cap = new_cap
 
     def spawn(self, x, y, mass, abundance=None, elem=None, vx=0.0, vy=0.0, offsets=None):
@@ -144,8 +150,47 @@ class CloudField:
         self.shock[k] = 0.0
         self.offsets[k] = offs
         self.sprites[k] = None
-        self.sprite_keys[k] = None
+        self.sprite_keys[k] = -1
         return k
+
+    def spawn_batch(self, items):
+        """Append many clouds at once — event ejecta arrive in bursts (a supernova storm can
+        spawn ~1000 clouds in a frame). Equivalent to spawn() per item with pre-drawn elements;
+        block offsets for the whole batch come from ONE vectorized draw (same distribution as
+        _random_offsets, different draw stream — statistics, not bits, as ever).
+
+        items: sequence of (x, y, mass, elem, vx, vy)."""
+        m = len(items)
+        if m == 0:
+            return
+        self._ensure(m)
+        k0 = self.n
+        k1 = k0 + m
+        self.n = k1
+        xs, ys, ms, els, vxs, vys = (np.asarray(col, dtype=float) for col in zip(*items))
+        self.x[k0:k1] = xs
+        self.y[k0:k1] = ys
+        self.vx[k0:k1] = vxs
+        self.vy[k0:k1] = vys
+        self.mass[k0:k1] = ms
+        self.elem[k0:k1] = els.astype(np.int64)
+        self.emission_count[k0:k1] = 0
+        is_star = ms >= PROTOSTAR_THRESHOLD
+        self.is_star[k0:k1] = is_star
+        # Same size formulas as _size_for, vectorized (int() and astype both truncate toward 0).
+        shrink = ((ms - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE).astype(np.int64)
+        cloud_size = np.maximum(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - shrink)
+        star_size = np.select([ms >= STAR_TIER_HIGH_MASS, ms >= STAR_TIER_MEDIUM_MASS],
+                              [PROTOSTAR_HIGH_SIZE, PROTOSTAR_MEDIUM_SIZE], PROTOSTAR_LOW_SIZE)
+        self.size[k0:k1] = np.where(is_star, star_size, cloud_size)
+        self.shock[k0:k1] = 0.0
+        r = np.random.uniform(0.05, 0.22, (m, 7))
+        th = np.random.uniform(0.0, 2.0 * math.pi, (m, 7))
+        self.offsets[k0:k1, :, 0] = r * np.cos(th)
+        self.offsets[k0:k1, :, 1] = r * np.sin(th)
+        self.sprite_keys[k0:k1] = -1
+        for k in range(k0, k1):
+            self.sprites[k] = None
 
     @staticmethod
     def _size_for(mass, is_star):
@@ -201,14 +246,14 @@ class CloudField:
             arr = getattr(self, name)
             arr[:m] = arr[:n][idx]
         self.offsets[:m] = self.offsets[:n][idx]
-        sprites = self.sprites
-        keys = self.sprite_keys
-        for new_k, old_k in enumerate(idx):
-            sprites[new_k] = sprites[old_k]
-            keys[new_k] = keys[old_k]
+        self.sprite_keys[:m] = self.sprite_keys[:n][idx]  # fancy index copies — no aliasing
+        self.sprite_keys[m:n] = -1
+        # Snapshot before reordering: an in-place `sprites[new] = sprites[old]` loop corrupts
+        # entries when idx is unsorted (mass-sort trims, rip shuffles) — old slots get
+        # overwritten before they're read, desyncing sprites from their keys.
+        self.sprites[:m] = [self.sprites[old_k] for old_k in idx]
         for k in range(m, n):
-            sprites[k] = None
-            keys[k] = None
+            self.sprites[k] = None
         self.n = m
 
     def move_rows(self, dst, rows):

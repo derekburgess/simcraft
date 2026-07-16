@@ -99,74 +99,99 @@ def _cloud_visuals(clouds):
     return size, color, opacity
 
 
+# Stars are solid squares: tiny (size, color) cardinality, so their surfaces are shared from
+# one module-level cache instead of built per row.
+_STAR_SPRITE_CACHE = {}
+
+
+def _star_sprite(s, col):
+    surf = _STAR_SPRITE_CACHE.get((s, col))
+    if surf is None:
+        surf = pygame.Surface((s, s))
+        surf.fill(col)
+        _STAR_SPRITE_CACHE[(s, col)] = surf
+    return surf
+
+
 def draw_clouds(screen, clouds, offset_x=0, offset_y=0):
-    if clouds.n == 0:
+    """One batched Surface.blits in row order (z-order preserved). The per-cloud Python loop
+    runs only over STALE rows — visuals are diffed against the cached keys in one vector op —
+    so a settled field costs one numpy compare plus the blits call, not n blit calls."""
+    n = clouds.n
+    if n == 0:
         return
     size, color, opacity = _cloud_visuals(clouds)
-    X = clouds.X
-    Y = clouds.Y
+    keys = np.empty((n, 5), dtype=np.int64)
+    keys[:, 0] = size
+    keys[:, 1:4] = color
+    keys[:, 4] = opacity
+    stale = (keys != clouds.sprite_keys[:n]).any(axis=1)
     is_star = clouds.IS_STAR
-    offsets = clouds.offsets
     sprites = clouds.sprites
-    keys = clouds.sprite_keys
-    for k in range(clouds.n):
+    offsets = clouds.offsets
+    for k in np.nonzero(stale)[0]:
         s = int(size[k])
         col = (int(color[k, 0]), int(color[k, 1]), int(color[k, 2]))
         if is_star[k]:
-            pygame.draw.rect(screen, col, (X[k] + offset_x, Y[k] + offset_y, s, s))
+            sprites[k] = _star_sprite(s, col)
             continue
         # Translucent block-cluster sprite, rebuilt only when size/color/opacity change.
-        key = (s, col, int(opacity[k]))
-        if keys[k] != key:
-            surf = pygame.Surface((s * 2, s * 2), pygame.SRCALPHA)
-            num_blocks = 3 + (MOLECULAR_CLOUD_START_SIZE - s) // 4
-            block_r = max(1, int(s * 0.3))
-            rgba = col + (int(opacity[k]),)
-            for bi in range(min(num_blocks, 7)):
-                ox, oy = offsets[k, bi]
-                bx = int(s + ox * s)
-                by = int(s + oy * s)
-                pygame.draw.rect(surf, rgba, (bx - block_r, by - block_r, block_r * 2, block_r * 2))
-            sprites[k] = surf
-            keys[k] = key
-        center_x = int(X[k] + s / 2 + offset_x)
-        center_y = int(Y[k] + s / 2 + offset_y)
-        screen.blit(sprites[k], (center_x - s, center_y - s))
+        surf = pygame.Surface((s * 2, s * 2), pygame.SRCALPHA)
+        num_blocks = 3 + (MOLECULAR_CLOUD_START_SIZE - s) // 4
+        block_r = max(1, int(s * 0.3))
+        rgba = col + (int(opacity[k]),)
+        for bi in range(min(num_blocks, 7)):
+            ox, oy = offsets[k, bi]
+            bx = int(s + ox * s)
+            by = int(s + oy * s)
+            pygame.draw.rect(surf, rgba, (bx - block_r, by - block_r, block_r * 2, block_r * 2))
+        sprites[k] = surf
+    clouds.sprite_keys[:n] = keys
+    # Stars blit at their rect corner; clouds center their 2s x 2s sprite as the old path did.
+    X = clouds.X
+    Y = clouds.Y
+    px = np.where(is_star, X + offset_x, (X + size * 0.5 + offset_x).astype(np.int64) - size)
+    py = np.where(is_star, Y + offset_y, (Y + size * 0.5 + offset_y).astype(np.int64) - size)
+    screen.blits(zip(sprites[:n], zip(px.astype(np.int64).tolist(), py.astype(np.int64).tolist())),
+                 doreturn=False)
 
 
 # ── Pulses / compact objects ────────────────────────────────────────────────────────────────
 
 def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_pts=PULSE_RENDER_POINT_COUNT, offset_x=0, offset_y=0):
+    """Vectorized over the ring points (the old per-point/per-pulse Python loops were a top
+    frame cost once many pulses coexist). Pulses are still applied in list order — each
+    point's clamp sequence is unchanged, so the geometry is the same math as the scalar loop."""
     cx = ring.center[0] + offset_x
     cy = ring.center[1] + offset_y
-    points = []
-    for k in range(num_pts):
-        theta = (2 * math.pi / num_pts) * k
-        px = origin_x + pulse_radius * math.cos(theta)
-        py = origin_y + pulse_radius * math.sin(theta)
+    theta = (2 * math.pi / num_pts) * np.arange(num_pts)
+    px = origin_x + pulse_radius * np.cos(theta)
+    py = origin_y + pulse_radius * np.sin(theta)
 
-        for ox, oy, o_radius, _ in all_pulses:
-            if abs(ox - origin_x) < 0.1 and abs(oy - origin_y) < 0.1:
-                continue
-            dx_op = px - ox
-            dy_op = py - oy
-            dist_to_other = math.hypot(dx_op, dy_op)
-            if dist_to_other < o_radius and dist_to_other > 0:
-                px = ox + o_radius * dx_op / dist_to_other
-                py = oy + o_radius * dy_op / dist_to_other
+    for ox, oy, o_radius, _ in all_pulses:
+        if abs(ox - origin_x) < 0.1 and abs(oy - origin_y) < 0.1:
+            continue
+        dx_op = px - ox
+        dy_op = py - oy
+        dist = np.hypot(dx_op, dy_op)
+        inside = (dist < o_radius) & (dist > 0)
+        if inside.any():
+            scale = o_radius / dist[inside]
+            px[inside] = ox + dx_op[inside] * scale
+            py[inside] = oy + dy_op[inside] * scale
 
-        dxc = px - cx
-        dyc = py - cy
-        dist_from_center = math.hypot(dxc, dyc)
-        if dist_from_center > 0:
-            barrier_angle = math.atan2(dyc, dxc) % (2 * math.pi)
-            barrier_r = ring.get_radius_at_angle(barrier_angle)
-            if dist_from_center > barrier_r - PULSE_BARRIER_CLIP_MARGIN:
-                px = cx + (barrier_r - PULSE_BARRIER_CLIP_MARGIN) * math.cos(barrier_angle)
-                py = cy + (barrier_r - 4) * math.sin(barrier_angle)
+    dxc = px - cx
+    dyc = py - cy
+    dist_from_center = np.hypot(dxc, dyc)
+    barrier_angle = np.arctan2(dyc, dxc) % (2 * math.pi)
+    barrier_r = ring.radius_at(barrier_angle)
+    out = (dist_from_center > 0) & (dist_from_center > barrier_r - PULSE_BARRIER_CLIP_MARGIN)
+    if out.any():
+        clip_r = barrier_r[out] - PULSE_BARRIER_CLIP_MARGIN
+        px[out] = cx + clip_r * np.cos(barrier_angle[out])
+        py[out] = cy + clip_r * np.sin(barrier_angle[out])
 
-        points.append((int(px), int(py)))
-    return points
+    return list(zip(px.astype(np.int64).tolist(), py.astype(np.int64).tolist()))
 
 
 def draw_black_hole(screen, bh, offset_x=0, offset_y=0):
