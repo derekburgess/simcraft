@@ -1,6 +1,14 @@
 # simcraft
 ![hehe](/assets/cmb.jpg)
 
+A zero-player universe simulator, and a small piece of applied metaphysics.
+
+**The math.** Simcraft is not a physics code in the validation sense — it is a designed dynamical system: dissipative, driven, and hybrid (a continuous gravity flow punctuated by discrete events — collisions, ignitions, stellar fates — whose odds depend on the state; formally, a piecewise-deterministic Markov process). There are no conserved quantities, on purpose. The barrier breaks translation symmetry, damping breaks time symmetry, and by Noether's theorem nothing is owed. Structure comes from attractors instead of invariants: galaxies form *because* energy is lost, not despite it.
+
+**The metaphysics.** Runs are unrepeatable by design. Floating-point addition is not associative, each gravity backend sums in its own order, and chaos amplifies every last-bit difference into a different history — so no universe can be re-run, and none exists before it happens. Rounding is many-to-one, so the arrow of time is built into the arithmetic: the map cannot be inverted, the universe cannot be rewound. Each run is an event, not an object. When it ends it is gone completely, leaving one 42-digit number — the whole trajectory folded through an entropy pool that never forgets — as proof that this particular universe occurred. Nobody plays. The universe records itself, says one unrepeatable thing on the way out, and that's the point.
+
+---
+
 2026 CE //
 
 Astrophysics realism pass using `Claude Fable 5`. Stellar fate now follows mass (red dwarf → sun-like → blue giant, the real temperature sequence), with metallicity biasing ignition size and neutron-star-vs-black-hole outcomes. Sub-massive stars retire as white dwarfs via planetary nebulae (WD-WD collisions detonate as Type Ia supernovae); pulsars spin down and cross the death line instead of exploding; kilonova remnants are mass-dependent (magnetar or black hole, per GW170817). Each universe chemically ages: a metallicity Z ratchets up with every enrichment event and blends ejecta composition metal-rich over stellar generations. Supernova/pulsar shockwaves now trigger star formation in the clouds they compress. New HUD: a live event ticker with real-physics glosses, a Z stat, and an entity/element legend on `[L]`.

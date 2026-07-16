@@ -23,7 +23,7 @@ Entropy analysis:
   - os.urandom(32) is the IKM every draw: even if simulation state contributes 0 bits
     (attacker reads memory), the OS CSPRNG alone provides full 256-bit security. The
     simulation state is defense-in-depth.
-  - Rejection sampling bias: for range ~9x10^19, rejection probability is ~10^-57
+  - Rejection sampling bias: for range ~9x10^41, rejection probability is <10^-34
     per attempt — effectively zero. The loop exists for formal correctness.
 """
 
@@ -36,11 +36,12 @@ from datetime import datetime
 
 import numpy as np
 
-# Output range: 39-digit decimal, carrying ≥129 bits of entropy per draw — at or above the
-# 128-bit floor for cryptographic key material (the HKDF-SHA256 pipeline behind it can back
+# Output range: 42-digit decimal — the Answer to the Ultimate Question of Life, the Universe,
+# and Everything deserves the length — carrying ≥139 bits of entropy per draw, comfortably above
+# the 128-bit floor for cryptographic key material (the HKDF-SHA256 pipeline behind it can back
 # up to 256 bits; the decimal length is the deliberate display/usability tradeoff).
-MIN = 10 ** 38              # Lower bound of RNG output range (39-digit minimum)
-MAX = 10 ** 39 - 1          # Upper bound of RNG output range (39-digit maximum)
+MIN = 10 ** 41              # Lower bound of RNG output range (42-digit minimum)
+MAX = 10 ** 42 - 1          # Upper bound of RNG output range (42-digit maximum)
 
 SERIALIZE_VERSION = 3
 _HKDF_INFO = b'simcraft-rng-v1'       # domain separation for output derivation
