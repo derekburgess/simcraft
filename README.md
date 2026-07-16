@@ -44,6 +44,4 @@ https://www.bbc.com/news/science-environment-67950749
 
 ## Usage
 
-`pip install .`
-
-Run `simcraft` for the main game.
+Run `pip install .` then `simcraft`
