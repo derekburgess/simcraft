@@ -12,7 +12,8 @@ Dispatch order (config-gated):
   1. Taichi GPU, all-pairs in float32   — primary; ~0.3 ms per 500-cloud universe
      (~1e-7 relative error vs the float64 CPU paths — all-pairs, but not "exact")
   2. Cython Barnes-Hut quadtree         — approximate long-range, the CPU workhorse
-  3. numpy brute-force, exact all-pairs — reference implementation & last-resort fallback
+  3. numpy brute-force, all-pairs f64  — reference implementation & last-resort fallback
+     ("exact" below means unapproximated — every pair summed, no multipole — not bitwise-stable)
   4. local cell-neighborhood model      — only when BOTH flags are off: the original cheap
      short-range physics (a deliberately different, local-clumping universe)
 """

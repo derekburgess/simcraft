@@ -5,7 +5,7 @@
 
 Astrophysics realism pass using `Claude Fable 5`. Stellar fate now follows mass (red dwarf → sun-like → blue giant, the real temperature sequence), with metallicity biasing ignition size and neutron-star-vs-black-hole outcomes. Sub-massive stars retire as white dwarfs via planetary nebulae (WD-WD collisions detonate as Type Ia supernovae); pulsars spin down and cross the death line instead of exploding; kilonova remnants are mass-dependent (magnetar or black hole, per GW170817). Each universe chemically ages: a metallicity Z ratchets up with every enrichment event and blends ejecta composition metal-rich over stellar generations. Supernova/pulsar shockwaves now trigger star formation in the clouds they compress. New HUD: a live event ticker with real-physics glosses, a Z stat, and an entity/element legend on `[L]`.
 
-Full performance refactor using `Claude Fable 5`. Split the sim into modules around a numpy structure-of-arrays core; cloud gravity now has swappable backends (Taichi GPU, a new Cython Barnes-Hut quadtree, numpy brute-force) computing identical physics. Much faster.
+Full performance refactor using `Claude Fable 5`. Split the sim into modules around a numpy structure-of-arrays core; cloud gravity now has swappable backends (Taichi GPU, a new Cython Barnes-Hut quadtree, numpy brute-force) computing the same physics rules — never the same bits; float addition isn't associative and each backend sums in its own order, which is embraced: runs are unrepeatable by design. Much faster.
 
 Huge refactor using `Claude Code Opus 4.6`
 The "Ring" concept has been changed to a dynamic manifold barrier that is manipulated by gravity and gravitational events.

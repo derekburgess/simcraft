@@ -601,7 +601,9 @@ def step(universe, ring, delta_time):
     for (sx, sy, smass, soffs, selem, svx, svy) in spawns:
         clouds.spawn(sx, sy, smass, elem=selem, vx=svx, vy=svy, offsets=soffs)
 
-    # ── Integration (symplectic Euler: damp velocity, then move with the new velocity) ──
+    # ── Integration (semi-implicit Euler, kick→drift: damp velocity, then move with the new
+    # velocity). Not symplectic — that's a property of Hamiltonian systems and this one is
+    # dissipative by design: structure comes from damping and attractors, not conserved energy. ──
     damping = VELOCITY_DAMPING ** delta_time
     clouds.VX *= damping
     clouds.VY *= damping
