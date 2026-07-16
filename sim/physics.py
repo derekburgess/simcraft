@@ -28,6 +28,29 @@ except Exception:
     _fastphysics = None
 
 
+class LocalPhysics:
+    """Per-universe physical constants, as multipliers on the global dials. Root (Big-Bang)
+    universes are born at baseline 1.0; a child ripped from a parent inherits the parent's
+    values with a small log-normal mutation, clamped to [UNIVERSE_DIAL_MIN, UNIVERSE_DIAL_MAX].
+    Selection does the rest: universes whose physics makes more black holes rip more children
+    under the multiverse's carrying capacity — cosmological natural selection, with the
+    variation the clonal version lacked. Scope is deliberately narrow (the star-formation
+    pipeline only): BH gravity/disk dynamics stay globally tuned — see the galaxy-swirl
+    couplings — so mutation can change how MANY holes form, never how disks behave."""
+    __slots__ = ('g', 'fusion', 'collapse')
+
+    def __init__(self, g=1.0, fusion=1.0, collapse=1.0):
+        self.g = g                # x cloud/star self-gravity (force is linear in G, so this scales the summed output)
+        self.fusion = fusion      # x cloud merge chance, ambient and shock-triggered
+        self.collapse = collapse  # x core-collapse chance at the mass threshold
+
+    def mutated(self):
+        def drift(v):
+            return min(UNIVERSE_DIAL_MAX,
+                       max(UNIVERSE_DIAL_MIN, v * math.exp(random.gauss(0.0, UNIVERSE_MUTATION_SCALE))))
+        return LocalPhysics(drift(self.g), drift(self.fusion), drift(self.collapse))
+
+
 class Universe:
     """One self-contained world: a barrier plus the matter inside it."""
     def __init__(self, barrier):
@@ -40,7 +63,14 @@ class Universe:
         self.black_hole_pulses = []
         self.pending_rip_bhs = []  # black holes in this universe that reached rip mass this step
         self.metallicity = 0.0  # Z in [0,1]: chemical age, ratcheted up by enrichment events
+        self.local = LocalPhysics()  # this universe's own constants (mutated at rip, see class)
         self.event_log = []     # astrophysical events this step, drained into the HUD ticker
+
+    def star_formation_efficiency(self):
+        """Quenching: merge chances scale by (1-Z)^exponent, so the metallicity ratchet
+        doubles as a thermodynamic age. Chemically completed gas stops making stars and a
+        universe can die quietly of exhaustion — the arrow of time points at heat death."""
+        return (1.0 - self.metallicity) ** STAR_FORMATION_QUENCH_EXPONENT
 
 
 class SimulationState:
@@ -75,25 +105,28 @@ def _spawn_size(mass):
 
 
 def handle_collisions(universe):
-    """Cloud-cloud merge pass. The compiled path reads/writes the field arrays directly."""
+    """Cloud-cloud merge pass. The compiled path reads/writes the field arrays directly.
+    The merge chance carries this universe's fusion dial and its quenching factor."""
     clouds = universe.clouds
     n = clouds.n
     if n < 2:
         return
+    merge_chance = (MOLECULAR_CLOUD_MERGE_CHANCE * universe.local.fusion
+                    * universe.star_formation_efficiency())
     removed = np.zeros(n, dtype=np.uint8)
     if _fastphysics is not None:
         _fastphysics.collide(clouds.X, clouds.Y, clouds.SIZE, clouds.M, clouds.VX, clouds.VY,
                              clouds.ELEM, removed, n,
-                             MOLECULAR_CLOUD_MERGE_CHANCE, PROTOSTAR_THRESHOLD, MOLECULAR_CLOUD_MAX_MASS,
+                             merge_chance, PROTOSTAR_THRESHOLD, MOLECULAR_CLOUD_MAX_MASS,
                              MOLECULAR_CLOUD_START_SIZE, MOLECULAR_CLOUD_MIN_SIZE,
                              MOLECULAR_CLOUD_START_MASS, MOLECULAR_CLOUD_GROWTH_RATE)
     else:
-        _collide_python(clouds, removed, n)
+        _collide_python(clouds, removed, n, merge_chance)
     if removed.any():
         clouds.keep(removed == 0)
 
 
-def _collide_python(clouds, removed, n):
+def _collide_python(clouds, removed, n, merge_chance):
     """Pure-Python port of fastphysics.collide (fallback when the extension isn't built)."""
     x, y, size, mass = clouds.X, clouds.Y, clouds.SIZE, clouds.M
     vx, vy, elem = clouds.VX, clouds.VY, clouds.ELEM
@@ -109,7 +142,7 @@ def _collide_python(clouds, removed, n):
             if not (x[i] < x[j] + size[j] and x[i] + size[i] > x[j]
                     and y[i] < y[j] + size[j] and y[i] + size[i] > y[j]):
                 continue
-            if random.random() >= MOLECULAR_CLOUD_MERGE_CHANCE:
+            if random.random() >= merge_chance:
                 continue
             surv, cons = (j, i) if elem[j] > elem[i] else (i, j)
             merged = mass[surv] + mass[cons]
@@ -135,6 +168,7 @@ def _triggered_mergers(universe):
     shocked = np.nonzero(clouds.SHOCK > 0.0)[0]
     if len(shocked) < 2:
         return
+    merge_chance = SHOCK_MERGE_CHANCE * universe.local.fusion * universe.star_formation_efficiency()
     x, y, size, mass = clouds.x, clouds.y, clouds.size, clouds.mass
     vx, vy, elem = clouds.vx, clouds.vy, clouds.elem
     removed = np.zeros(n, dtype=bool)
@@ -152,7 +186,7 @@ def _triggered_mergers(universe):
             if not (x[i] < x[j] + size[j] and x[i] + size[i] > x[j]
                     and y[i] < y[j] + size[j] and y[i] + size[i] > y[j]):
                 continue
-            if random.random() >= SHOCK_MERGE_CHANCE:
+            if random.random() >= merge_chance:
                 continue
             surv, cons = (j, i) if elem[j] > elem[i] else (i, j)
             merged = mass[surv] + mass[cons]
@@ -187,7 +221,7 @@ def update_entities(universe):
         if mass[k] > BLACK_HOLE_THRESHOLD and len(universe.black_holes) < BLACK_HOLE_MAX_COUNT:
             # Fate is a steep function of mass: the heaviest stars collapse soonest.
             mass_ratio = mass[k] / BLACK_HOLE_THRESHOLD
-            if random.random() < BLACK_HOLE_CHANCE * mass_ratio ** COLLAPSE_MASS_EXPONENT:
+            if random.random() < BLACK_HOLE_CHANCE * universe.local.collapse * mass_ratio ** COLLAPSE_MASS_EXPONENT:
                 # The star's own metallicity biases the remnant: metal-rich stars shed mass
                 # in winds and tend to leave neutron stars; metal-poor ones collapse to holes.
                 bias = COLLAPSE_NS_METALLICITY_BIAS if elem[k] >= STAR_ENRICHED_ELEMENT_MIN else -COLLAPSE_NS_METALLICITY_BIAS
@@ -395,10 +429,12 @@ def step(universe, ring, delta_time):
     clouds = universe.clouds
 
     # Cloud/star mutual gravity (backend-dispatched: GPU / Barnes-Hut / brute / local).
+    # Force is linear in G, so this universe's local gravity dial scales the summed output —
+    # no backend needs to know about it.
     if clouds.n >= 2:
         fx, fy = gravity.cloud_forces(clouds.X, clouds.Y, clouds.M, clouds.IS_STAR)
-        clouds.VX += fx * delta_time
-        clouds.VY += fy * delta_time
+        clouds.VX += fx * (universe.local.g * delta_time)
+        clouds.VY += fy * (universe.local.g * delta_time)
 
     update_entities(universe)
 
@@ -708,8 +744,10 @@ def _rip_universe(source, center):
     cx, cy = center
     ring = Barrier(center, (BARRIER_INITIAL_SIZE, BARRIER_INITIAL_SIZE), BARRIER_POINT_COUNT)
     new_u = Universe(ring)
-    # The child is built from the parent's matter, so it inherits the parent's chemical age.
+    # The child is built from the parent's matter, so it inherits the parent's chemical age —
+    # and the parent's physics, with a small mutation (see LocalPhysics: heredity + variation).
     new_u.metallicity = source.metallicity
+    new_u.local = source.local.mutated()
     clouds = source.clouds
     move_count = int(clouds.n * UNIVERSE_RIP_TRANSFER_FRACTION)
     if move_count <= 0:
@@ -745,7 +783,9 @@ def process_universe_spawns(state):
             child = _rip_universe(src, _find_spawn_center(state, new_radius, src, bh))
             bh.child_universe = child
             state.universes.append(child)
-            src.event_log.append("SPACETIME RIP — a black hole opens a child universe")
+            src.event_log.append(
+                f"SPACETIME RIP — a child universe opens; its constants drift "
+                f"(G x{child.local.g:.2f}, fusion x{child.local.fusion:.2f}, collapse x{child.local.collapse:.2f})")
 
 
 def _translate_universe(u, dx, dy):
@@ -815,9 +855,63 @@ def resolve_barrier_overlaps(state, delta_time):
                 _dent_barrier_toward(B.barrier, ax, ay, d * (wA / total))
 
 
+def apply_dark_flow(state, delta_time):
+    """Dark flow: every universe drifts toward the multiverse's mass-weighted centroid —
+    motion whose cause lies entirely outside any one universe's boundary, which is what the
+    real (conjectured) dark flow is. The centroid includes each universe's own mass, so the
+    dominant universe barely moves (the centroid already sits near it) while lighter ones
+    stream toward it: Great Attractor semantics for free. The rate is weak — barrier contact
+    resolution easily absorbs it, so the cluster huddles and flattens instead of overlapping."""
+    universes = state.universes
+    if len(universes) < 2:
+        return
+    weights = []
+    for u in universes:
+        m = float(u.clouds.M.sum()) if u.clouds.n else 0.0
+        m += sum(bh.mass for bh in u.black_holes)
+        m += sum(ns.mass for ns in u.neutron_stars)
+        m += sum(mg.mass for mg in u.magnetars)
+        m += sum(wd.mass for wd in u.white_dwarfs)
+        weights.append(m)
+    total = sum(weights)
+    if total <= 0:
+        return
+    cx = sum(w * u.barrier.center[0] for w, u in zip(weights, universes)) / total
+    cy = sum(w * u.barrier.center[1] for w, u in zip(weights, universes)) / total
+    pull = min(1.0, DARK_FLOW_RATE * delta_time)
+    for u in universes:
+        ux, uy = u.barrier.center
+        _translate_universe(u, (cx - ux) * pull, (cy - uy) * pull)
+
+
 def _universe_alive(universe):
     return bool(universe.clouds.n or universe.black_holes or universe.neutron_stars
                 or universe.magnetars or universe.white_dwarfs)
+
+
+def reap_dead_universes(state):
+    """Remove universes whose last matter is gone, passing their final events — plus an
+    epitaph — to a surviving universe's log so the ticker still tells their ending. A
+    universe that dies chemically complete (Z >= HEAT_DEATH_Z) died of heat death; one that
+    empties young was lost. The last universe is never reaped: multiverse-wide heat death
+    lingers and resets in the main loop, as before."""
+    if len(state.universes) < 2:
+        return
+    dead = [u for u in state.universes if not _universe_alive(u)]
+    if not dead:
+        return
+    state.universes = [u for u in state.universes if _universe_alive(u)]
+    keeper = state.universes[0] if state.universes else None
+    if keeper is None:
+        return  # everything died at once; the main loop's heat-death reset takes it from here
+    for u in dead:
+        keeper.event_log.extend(u.event_log)
+        if u.metallicity >= HEAT_DEATH_Z:
+            keeper.event_log.append(
+                f"HEAT DEATH — a universe completes its chemistry (Z {u.metallicity:.2f}) and goes dark")
+        else:
+            keeper.event_log.append(
+                f"UNIVERSE LOST — the last of its matter is gone (Z {u.metallicity:.2f})")
 
 
 def enforce_total_cloud_cap(state):

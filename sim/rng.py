@@ -43,7 +43,7 @@ import numpy as np
 MIN = 10 ** 41              # Lower bound of RNG output range (42-digit minimum)
 MAX = 10 ** 42 - 1          # Upper bound of RNG output range (42-digit maximum)
 
-SERIALIZE_VERSION = 3
+SERIALIZE_VERSION = 4
 _HKDF_INFO = b'simcraft-rng-v1'       # domain separation for output derivation
 _POOL_PERSON = b'simcraft-pool-v1'    # blake2b personalization (16-byte max)
 _HEADER = struct.Struct('<B6I')       # version, n_universes, mc, bh, ns, mag, barrier_pts
@@ -56,6 +56,8 @@ def serialize_state(state_obj):
     Global header: _HEADER — version, universe count, total clouds/holes/stars/magnetars,
     total barrier points. Then per universe:
       frame     — struct.pack('<5I', n_clouds, n_holes, n_stars, n_magnetars, n_barrier_points)
+      physics   — '<4d' metallicity Z + local dials (g, fusion, collapse): dynamical state
+                  that shapes the future, so injectivity requires it (v4)
       clouds    — (n, 5) float64 [x, y, vx, vy, mass] + (n,) int64 element indices
       holes     — per hole '<7d' x, y, vx, vy, mass, angular_momentum, accretion_mass
       stars     — per star '<6d' x, y, vx, vy, mass, time_since_last_pulse
@@ -82,6 +84,7 @@ def serialize_state(state_obj):
         c = u.clouds
         parts.append(struct.pack('<5I', c.n, len(u.black_holes), len(u.neutron_stars),
                                  len(u.magnetars), len(u.barrier.radii)))
+        parts.append(struct.pack('<4d', u.metallicity, u.local.g, u.local.fusion, u.local.collapse))
         if c.n:
             block = np.empty((c.n, 5))
             block[:, 0] = c.X

@@ -245,6 +245,13 @@ BLACK_HOLE_RIP_MASS_FACTOR = 0.9  # Fraction of max mass a hole must reach to "r
 UNIVERSE_RIP_TRANSFER_FRACTION = 0.4  # Fraction of the source universe's clouds pulled through into a newly ripped universe (instead of spawning fresh matter). Keeps total entity count bounded.
 UNIVERSE_STREAM_FRACTION = 0.6  # After ripping, chance each cloud the hole accretes is streamed into its child universe (wormhole) instead of being consumed. 0 = one-time transfer only; 1 = everything it eats flows through.
 UNIVERSE_SPAWN_GAP = 4          # Minimum gap (pixels) between a newly spawned barrier and existing ones (measured to each barrier's local edge). Small = newborn universes bud right off their parent and the multiverse grows as a touching cluster.
+# Cosmological natural selection (Smolin): a ripped child inherits its parent's local physics
+# with a small mutation, so universes whose constants happen to make more black holes rip more
+# children under the multiverse's carrying capacity. Root (Big-Bang) universes are baseline 1.0.
+UNIVERSE_MUTATION_SCALE = 0.03  # σ of the log-normal drift applied to each local dial per generation. Small on purpose: the dynamics is threshold-dense and big jumps fall off bifurcation cliffs.
+UNIVERSE_DIAL_MIN = 0.5         # Hard floor for any local-physics multiplier, however many generations drift accumulates.
+UNIVERSE_DIAL_MAX = 2.0         # Hard ceiling for any local-physics multiplier.
+DARK_FLOW_RATE = 0.01           # Per-second rate at which every universe drifts toward the multiverse's mass-weighted centroid (exponential approach, ~100 s time constant). The cause of the drift lies outside any universe's own boundary — that's the point.
 BARRIER_REPULSION_RATE = 15.0   # Per-second rate at which overlapping universes are separated/flattened. Higher = firmer (less overlap).
 BARRIER_RESOLVE_ITERATIONS = 4  # Relaxation passes per frame for barrier contact. More = better convergence when many universes are packed together (prevents residual overlap).
 BARRIER_CONTACT_DEFORM = 1.0    # How strongly barriers flatten each other where they press together — the primary no-overlap mechanism at contact. Higher = deeper flattening.
@@ -354,6 +361,11 @@ METALLICITY_PER_SUPERNOVA = 0.0002  # Z gained per core-collapse supernova (they
 METALLICITY_PER_TYPE_IA = 0.002    # Z gained per Type Ia detonation (the main iron injector).
 METALLICITY_PER_KILONOVA = 0.004   # Z gained per kilonova (rare but heavy-element rich).
 METALLICITY_PER_NEBULA = 0.0002    # Z gained per planetary nebula (gentle enrichment).
+# Quenching: chemically old gas stops forming stars. Merge chances (ambient and shock) scale by
+# (1-Z)^exponent, so the Z ratchet doubles as a thermodynamic age — star formation declines over
+# generations and a universe can die quietly of exhaustion instead of only by violence.
+STAR_FORMATION_QUENCH_EXPONENT = 2.0  # Steepness of the decline: at Z=0.3 formation runs at ~half rate; at Z=0.7, ~a tenth.
+HEAT_DEATH_Z = 0.9              # A universe that dies above this Z earns the heat-death epitaph (died of completion); below it, the plainer one.
 
 # ── Shock-triggered star formation ──
 # Supernova/pulsar wavefronts compress the clouds they pass through; compressed clouds are far

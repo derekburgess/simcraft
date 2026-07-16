@@ -139,13 +139,15 @@ def run_simulation(screen, font, state):
             physics.process_universe_spawns(state)
             physics.enforce_total_cloud_cap(state)
 
-            # Keep universes from overlapping (larger shoves smaller aside).
+            # Dark flow: the whole cluster drifts toward its mass-weighted centroid; then
+            # keep universes from overlapping (larger shoves smaller aside).
+            physics.apply_dark_flow(state, delta_time)
             physics.resolve_barrier_overlaps(state, delta_time)
 
-            # A universe that runs out of matter is removed, freeing a slot for a future spawn.
-            # The last surviving universe is kept so heat death can linger/reset as before.
-            if len(state.universes) > 1:
-                state.universes = [u for u in state.universes if physics._universe_alive(u)]
+            # A universe that runs out of matter is removed (its final events and an epitaph
+            # pass to the ticker), freeing a slot for a future spawn. The last surviving
+            # universe is never reaped, so multiverse heat death can linger/reset as before.
+            physics.reap_dead_universes(state)
             physics.prune_child_links(state)
 
             # Drain each universe's astrophysical events into the HUD ticker; identical
