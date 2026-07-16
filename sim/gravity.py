@@ -2,10 +2,15 @@
 
 Every backend computes the SAME physics — tiered gravitational charge (stars pull
 STAR_GRAVITY_MULTIPLIER x their mass), Plummer-style softening — so switching backends changes
-speed and (for Barnes-Hut) approximation error, never the rules.
+speed and numerical error (Barnes-Hut approximation, GPU float32 precision), never the rules.
+No backend is bitwise-equivalent to another, and runs are not reproducible across machines:
+float addition is not associative, each backend sums forces in a different order, and chaos
+amplifies ulp-level differences into divergent histories. That is by design — validate backends
+against each other statistically (ensemble behavior), never trajectory-by-trajectory.
 
 Dispatch order (config-gated):
-  1. Taichi GPU, exact all-pairs        — primary; ~0.3 ms per 500-cloud universe
+  1. Taichi GPU, all-pairs in float32   — primary; ~0.3 ms per 500-cloud universe
+     (~1e-7 relative error vs the float64 CPU paths — all-pairs, but not "exact")
   2. Cython Barnes-Hut quadtree         — approximate long-range, the CPU workhorse
   3. numpy brute-force, exact all-pairs — reference implementation & last-resort fallback
   4. local cell-neighborhood model      — only when BOTH flags are off: the original cheap

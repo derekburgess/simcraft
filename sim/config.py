@@ -53,7 +53,7 @@ SPATIAL_HASH_CELL_SIZE = 40     # Cell size (pixels) for the local-gravity neigh
 # ── Cloud/star gravity backends ──
 # All backends compute the SAME force formula (tiered grav_mass, softening); they differ only in
 # speed and (for Barnes-Hut) approximation. Dispatch: GPU if available → Barnes-Hut → numpy brute.
-GPU_GRAVITY_ENABLED = True      # Use the Taichi GPU kernel for cloud/star gravity when available (exact all-pairs). Falls back to Barnes-Hut/brute on CPU if Taichi/GPU is unavailable.
+GPU_GRAVITY_ENABLED = True      # Use the Taichi GPU kernel for cloud/star gravity when available (all-pairs, float32 — ~1e-7 error vs the f64 CPU paths). Falls back to Barnes-Hut/brute on CPU if Taichi/GPU is unavailable.
 BARNES_HUT_ENABLED = True       # Toggle the Barnes-Hut CPU backend (compiled quadtree, approximate long-range). False = numpy brute-force fallback.
 BARNES_HUT_THETA = 0.7          # Opening angle. Lower = more accurate & slower (0 = brute force O(N^2)).
 BARNES_HUT_SOFTENING = 2.0      # Softening length (pixels) added to the force denominator to prevent close-range spikes.
