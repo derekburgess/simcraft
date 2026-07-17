@@ -193,7 +193,12 @@ class BlackHole:
 
     def decay(self, delta_time):
         if self.accretion_mass > 0:
-            growth = min(BLACK_HOLE_GROWTH_RATE * delta_time, self.accretion_mass)
+            # Eddington-style throttle: accretion chokes as the hole nears the mass cap
+            # (radiation pressure, in the real version). A continuously fed hole settles just
+            # under the cap instead of pinning AT it; once feeding stops, the 1/m^2 Hawking
+            # curve below takes over and evaporation can finally win.
+            throttle = max(0.0, 1.0 - (self.mass / BLACK_HOLE_MAX_MASS) ** BLACK_HOLE_EDDINGTON_EXPONENT)
+            growth = min(BLACK_HOLE_GROWTH_RATE * throttle * delta_time, self.accretion_mass)
             self.mass = min(self.mass + growth, BLACK_HOLE_MAX_MASS)
             self.accretion_mass = max(0.0, self.accretion_mass - growth)
         rate = BLACK_HOLE_DECAY_RATE * (BLACK_HOLE_DECAY_THRESHOLD / self.mass) ** 2

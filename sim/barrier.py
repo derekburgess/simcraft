@@ -99,7 +99,10 @@ class Barrier:
 
         clouds = universe.clouds
         if clouds.n:
-            heavy = clouds.M >= PROTOSTAR_THRESHOLD
+            # Own gate, below stardom: heavy clouds (>= BARRIER_DEFORM_CLOUD_MASS) dent at the
+            # cloud factor, stars at theirs. Gating on PROTOSTAR_THRESHOLD here made the cloud
+            # factor unreachable — any cloud that heavy ignites into a star on the next refresh.
+            heavy = clouds.M >= BARRIER_DEFORM_CLOUD_MASS
             if heavy.any():
                 dx = clouds.X[heavy] - self.center[0]
                 dy = clouds.Y[heavy] - self.center[1]

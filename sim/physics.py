@@ -914,24 +914,39 @@ def _universe_alive(universe):
                 or universe.magnetars or universe.white_dwarfs)
 
 
+def _universe_fate(universe):
+    """None while living; otherwise which of the three deaths this universe has met.
+    Contraction is a terminal fate, not a resting state: a barrier ground down below
+    UNIVERSE_COLLAPSE_RADIUS is a Big Crunch and takes everything inside with it —
+    including a hovering near-max black hole, which closes the old absorbing end-state."""
+    if float(universe.barrier.radii.mean()) < UNIVERSE_COLLAPSE_RADIUS:
+        return "crunch"
+    if not _universe_alive(universe):
+        return "heat" if universe.metallicity >= HEAT_DEATH_Z else "lost"
+    return None
+
+
 def reap_dead_universes(state):
-    """Remove universes whose last matter is gone, passing their final events — plus an
-    epitaph — to a surviving universe's log so the ticker still tells their ending. A
-    universe that dies chemically complete (Z >= HEAT_DEATH_Z) died of heat death; one that
-    empties young was lost. The last universe is never reaped: multiverse-wide heat death
-    lingers and resets in the main loop, as before."""
+    """Remove universes that met a fate — crunched, emptied young (lost), or emptied
+    chemically complete (heat death) — passing their final events plus an epitaph to a
+    surviving universe's log so the ticker still tells their ending. The last universe is
+    never reaped: multiverse-wide heat death lingers and resets in the main loop, as before."""
     if len(state.universes) < 2:
         return
-    dead = [u for u in state.universes if not _universe_alive(u)]
+    fates = [(u, _universe_fate(u)) for u in state.universes]
+    dead = [(u, f) for u, f in fates if f is not None]
     if not dead:
         return
-    state.universes = [u for u in state.universes if _universe_alive(u)]
-    keeper = state.universes[0] if state.universes else None
-    if keeper is None:
-        return  # everything died at once; the main loop's heat-death reset takes it from here
-    for u in dead:
+    state.universes = [u for u, f in fates if f is None]
+    if not state.universes:
+        return  # everything ended at once; the main loop's heat-death reset takes it from here
+    keeper = state.universes[0]
+    for u, f in dead:
         keeper.event_log.extend(u.event_log)
-        if u.metallicity >= HEAT_DEATH_Z:
+        if f == "crunch":
+            keeper.event_log.append(
+                f"BIG CRUNCH — a universe contracts to a point; nothing gets out (Z {u.metallicity:.2f})")
+        elif f == "heat":
             keeper.event_log.append(
                 f"HEAT DEATH — a universe completes its chemistry (Z {u.metallicity:.2f}) and goes dark")
         else:

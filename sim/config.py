@@ -60,7 +60,14 @@ BARNES_HUT_SOFTENING = 2.0      # Softening length (pixels) added to the force d
 BARNES_HUT_MAX_DEPTH = 28       # Max quadtree depth. Caps recursion when many clouds share near-identical positions.
 
 # ── Timing ──
-YEAR_RATE = 60                 # Simulated years per real second. Higher = faster time progression in the UI counter.
+# The cosmic clock is LOGARITHMIC — display only, nothing in the physics reads the year.
+# No linear rate can walk the K→M→B→T progression (each suffix spans 1000x the years of the
+# last, so linear time either crawls or teleports); instead each factor of 10 in cosmic years
+# takes a fixed slice of real time, which is also how cosmology actually talks about deep time
+# (log10 "cosmological decades", per the Five Ages of the Universe). Starts at ~19 yr/s, hits
+# 1K at ~36 s, 1M at ~7 min, 1B at ~13 min, 1T at ~19 min, and the real heat-death decade
+# (10^100 years) after ~3.2 hours of play.
+COSMIC_DECADE_SECONDS = 120     # Real seconds per factor-of-10 of cosmic years.
 MAX_DELTA_TIME = 0.05          # Maximum physics time step per frame (seconds). Caps dt to prevent instability on lag spikes.
 HEAT_DEATH_LINGER_DURATION = 12.0  # Seconds to display the empty ring after all matter is gone before starting a new universe.
 TARGET_FPS = 60                    # Target frame rate cap for the simulation loop.
@@ -107,7 +114,8 @@ BARRIER_LINE_WIDTH = 3          # Line width (pixels) for drawing the barrier ri
 
 # ── Barrier Interaction (how different entities interact with the barrier) ──
 MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR = 0.001  # Gravity multiplier for clouds vs barrier. Very weak — clouds drift inward gently.
-MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 6     # How strongly massive clouds dent the barrier on approach.
+MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 0.3   # How strongly massive clouds dent the barrier on approach. Tuned for the recollapse era: a dead universe packed with evaporation clouds grinds down to its Big Crunch in ~6-7 minutes (at 6 it imploded in seconds). This dial was dead code until BARRIER_DEFORM_CLOUD_MASS gave clouds their own gate, so no historical behavior depended on the old value.
+BARRIER_DEFORM_CLOUD_MASS = 24  # Mass at which a cloud starts denting the barrier. Below PROTOSTAR_THRESHOLD (28) on purpose: the deform gate used to reuse the star threshold, which made this factor dead code — anything heavy enough to dent became a star first. 24 matches the black-hole evaporation clouds ("these are heavy!"), so a dead universe full of them recollapses under its own weight toward the Big Crunch — a closed universe doing what closed universes do.
 
 STAR_BARRIER_GRAVITY_FACTOR = 0.005    # Gravity multiplier for ignited stars vs barrier. Stronger than clouds.
 STAR_BARRIER_DEFORM_FACTOR = 10        # How strongly stars dent the barrier on approach.
@@ -252,6 +260,7 @@ UNIVERSE_MUTATION_SCALE = 0.03  # σ of the log-normal drift applied to each loc
 UNIVERSE_DIAL_MIN = 0.5         # Hard floor for any local-physics multiplier, however many generations drift accumulates.
 UNIVERSE_DIAL_MAX = 2.0         # Hard ceiling for any local-physics multiplier.
 DARK_FLOW_RATE = 0.01           # Per-second rate at which every universe drifts toward the multiverse's mass-weighted centroid (exponential approach, ~100 s time constant). The cause of the drift lies outside any universe's own boundary — that's the point.
+UNIVERSE_COLLAPSE_RADIUS = 8    # Mean barrier radius (pixels) below which a universe dies in a Big Crunch, taking everything inside with it. Half the natal radius (BARRIER_INITIAL_SIZE/2 = 16): a latched magnetar squeezes TO natal size and can't crunch a universe alone — sustained grinding (contact denting, mass loading) must finish the job.
 BARRIER_REPULSION_RATE = 15.0   # Per-second rate at which overlapping universes are separated/flattened. Higher = firmer (less overlap).
 BARRIER_RESOLVE_ITERATIONS = 4  # Relaxation passes per frame for barrier contact. More = better convergence when many universes are packed together (prevents residual overlap).
 BARRIER_CONTACT_DEFORM = 1.0    # How strongly barriers flatten each other where they press together — the primary no-overlap mechanism at contact. Higher = deeper flattening.
@@ -261,7 +270,8 @@ UNIVERSE_CULL_MARGIN = 100      # Extra pixels beyond a universe's barrier radiu
 BLACK_HOLE_RADIUS = 14           # Visual radius divisor — smaller value = larger drawn black hole (mass / this). Shrinks the drawn disk and event horizon without changing gravitational mass.
 BLACK_HOLE_MAX_MASS = 115       # Maximum mass a black hole can accumulate. Capped lower so no single hole grows into an overwhelming dominant one.
 BLACK_HOLE_GRAVITY_CONSTANT = 30 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds; raised so disk clouds orbit faster (more visible swirl) and bind tighter.
-BLACK_HOLE_GROWTH_RATE = 1      # Maximum mass gained per second from the accretion buffer. Must stay below minimum decay rate (~1.23/sec at max mass) so BHs always net-decay.
+BLACK_HOLE_GROWTH_RATE = 1      # Maximum mass gained per second from the accretion buffer, before the Eddington throttle below. (Raw decay at max mass is only ~0.24/s — the old "always net-decay" claim here was stale from a lower mass cap; the throttle is what actually keeps fed holes under the cap now.)
+BLACK_HOLE_EDDINGTON_EXPONENT = 12  # Accretion efficiency scales by 1-(mass/max)^this — radiation pressure choking accretion near the cap. Steep on purpose: the growth-vs-decay margin is thin around mass 55-70, so a soft throttle there slows rip pacing several-fold. At 12, growth below mass ~95 is effectively untouched; a continuously fed hole settles at ~112 (above rip mass, below the cap) instead of pinning at 115 forever. Starve it and the 1/m^2 Hawking curve wins.
 BLACK_HOLE_DECAY_RATE = 50    # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
 BLACK_HOLE_GRAVITY_SOFTENING = 3     # Softening length (pixels) added to BH gravity denominator. Lower = steeper well = sharper slingshots, but less stable. Prevents catastrophic close-range force spikes.

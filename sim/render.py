@@ -362,7 +362,10 @@ class WorldRenderer:
 
 def format_years(years):
     """Humanize a literal year count: 950 → '950', 1.2e3 → '1.2K', 3.4e6 → '3.4M',
-    5.6e9 → '5.6B', 7.8e12 → '7.8T'."""
+    5.6e9 → '5.6B', 7.8e12 → '7.8T'; past the suffixes, cosmological-decade notation
+    (2.5e15 → '10^15.4'), the way deep time is actually written."""
+    if years >= 1e15:
+        return f"10^{math.log10(years):.1f}"
     for divisor, suffix in ((1e12, 'T'), (1e9, 'B'), (1e6, 'M'), (1e3, 'K')):
         value = round(years / divisor, 1)
         if value >= 1:

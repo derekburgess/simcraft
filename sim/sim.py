@@ -214,7 +214,9 @@ def run_simulation(screen, font, state):
 
             #draw_ui(screen, font, current_year, zoom)
 
-            current_year += delta_time * YEAR_RATE
+            # Log-time cosmic clock: dy = ln10/decade * (y + 1000) dt integrates to a fixed
+            # wall-time per factor-of-10 of years (see COSMIC_DECADE_SECONDS in config).
+            current_year += delta_time * (math.log(10) / COSMIC_DECADE_SECONDS) * (current_year + 1000.0)
 
             pygame.display.flip()
             clock.tick(TARGET_FPS)
