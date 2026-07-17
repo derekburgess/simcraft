@@ -218,6 +218,12 @@ def draw_white_dwarf(screen, wd, offset_x=0, offset_y=0):
     pygame.draw.circle(screen, color, (int(wd.x + offset_x), int(wd.y + offset_y)), WHITE_DWARF_RADIUS)
 
 
+def _crowd_dim(all_pulses):
+    """Loudness normalization for wave rings: full brightness up to PULSE_CROWD_REFERENCE
+    coexisting rings, then alpha scales by sqrt(reference/count) so storms don't stack to glare."""
+    return math.sqrt(min(1.0, PULSE_CROWD_REFERENCE / max(1, len(all_pulses))))
+
+
 def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0):
     draw_x = int(ns.x + offset_x)
     draw_y = int(ns.y + offset_y)
@@ -235,7 +241,7 @@ def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0):
         pulse_radius, _, fade = pulse
         if pulse_radius <= 1:
             continue
-        alpha = max(0, min(255, int(NEUTRON_STAR_PULSE_COLOR[3] * fade)))
+        alpha = max(0, min(255, int(NEUTRON_STAR_PULSE_COLOR[3] * fade * _crowd_dim(all_pulses))))
         if alpha == 0:
             continue
         points = _clip_pulse_points(pulse_ox, pulse_oy, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
@@ -297,7 +303,9 @@ def draw_universe(screen, universe, offset_x=0, offset_y=0):
             if w > 0 and h > 0:
                 pulse_surface = pygame.Surface((w, h), pygame.SRCALPHA)
                 local_points = [(p[0] - min_x, p[1] - min_y) for p in points]
-                pygame.draw.polygon(pulse_surface, BLACK_HOLE_MERGE_COLOR, local_points, pulse_width)
+                merge_color = (*BLACK_HOLE_MERGE_COLOR[:3],
+                               int(BLACK_HOLE_MERGE_COLOR[3] * _crowd_dim(all_pulses)))
+                pygame.draw.polygon(pulse_surface, merge_color, local_points, pulse_width)
                 screen.blit(pulse_surface, (min_x, min_y))
 
     for white_dwarf in universe.white_dwarfs:

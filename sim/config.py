@@ -97,9 +97,9 @@ MULTIVERSE_MAX_CLOUDS = 10000   # Hard cap on total clouds across ALL universes 
 BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
 BARRIER_GRAVITY_CONSTANT = 70 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Reduced so it contains without out-competing black holes for nearby clumping.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
-BARRIER_BASE_OPACITY = 150      # Transparency of the barrier at rest (0=invisible, 255=opaque).
+BARRIER_BASE_OPACITY = 120      # Transparency of the barrier at rest (0=invisible, 255=opaque).
 BARRIER_FLASH_COLOR = (0, 184, 106)  # RGB color the barrier flashes when deformed (green).
-BARRIER_FLASH_OPACITY = 255     # Peak opacity during a barrier flash (0-255).
+BARRIER_FLASH_OPACITY = 175     # Peak opacity during a barrier flash (0-255). Below full: during wave storms many segments flash at once, and at 255 the ring strobes.
 BARRIER_FLASH_DECAY = 4      # How fast barrier flashes fade per second. Higher = faster fade.
 BARRIER_WAVE_PUSH = 400      # Force magnitude when pulses hit the barrier. Higher = more barrier wobble.
 BARRIER_DAMPING = 0.04          # Damping factor for barrier deformation velocity. Lower = more oscillation.
@@ -283,8 +283,9 @@ BLACK_HOLE_MIN_CAPTURE_RADIUS = 2      # Absolute floor (pixels) for the consume
 # Frame-dragging swirl: near a hole, each cloud's velocity vector is gently rotated, curving
 # straight infall into a rotating accretion disk. Rotation conserves speed (no energy is added),
 # so the swirl can't blow up. Direction follows the hole's spin (angular_momentum).
-BLACK_HOLE_SWIRL_RATE = 5.0            # Relaxation rate (per second) at which disk clouds are driven toward circular-orbit speed; fades to 0 at the swirl radius. Higher = stronger/faster swirl.
-BLACK_HOLE_SWIRL_RADIUS = 140         # Disk radius (pixels) at the reference mass below. Scales with hole mass, so a massive hole organizes/swirls entities from much farther out than a small one.
+BLACK_HOLE_SWIRL_RATE = 12.0           # Relaxation rate (per second) at which disk clouds are driven toward circular-orbit speed; fades to 0 at the swirl radius. Higher = stronger/faster swirl.
+BLACK_HOLE_SWIRL_RADIUS = 180         # Disk radius (pixels) at the reference mass below. Scales with hole mass, so a massive hole organizes/swirls entities from much farther out than a small one.
+BLACK_HOLE_DISK_CIRCULARIZATION = 2.0  # Per-second damping of RADIAL motion inside the disk (viscous settling). This is what makes a disk look like a disk: swirl alone sets tangential speed but clouds still plunge through and get eaten in one pass; damping the radial component settles them into persistent orbits. Partial on purpose — the residual radial drift is the viscous accretion that keeps feeding the hole.
 BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equals BLACK_HOLE_SWIRL_RADIUS. A 2x-mass hole reaches 2x as far.
 # Dynamical friction: a massive hole plowing through the cloud sea is gravitationally braked.
 # Modeled as strong extra velocity damping (per second) so holes act as near-stationary anchors
@@ -292,7 +293,7 @@ BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equa
 BLACK_HOLE_VELOCITY_DAMPING = 0.15    # Per-second velocity retention for black holes. Strong anchor so a hole drifts SLOWER than its disk rotates — otherwise the disk smears into a comet instead of a visible swirl. Higher = roams more (smears the swirl).
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
 BLACK_HOLE_BORDER_COLOR = (100, 0, 0)  # RGB color of the event horizon ring (dark red).
-BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 200)  # RGBA color of the gravitational wave pulse from BH mergers.
+BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 110)  # RGBA color of the gravitational wave pulse from BH mergers. Brighter than pulsar rings on purpose (rarer, weightier events); crowd-dimming applies to these too.
 BLACK_HOLE_DISK_COLOR = (255, 100, 100)    # RGB color of the accretion disk tracer dot (light red).
 BLACK_HOLE_DISK_SIZE = 1                   # Visual size in pixels of the accretion disk tracer.
 BLACK_HOLE_DISK_ROTATION = 10            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
@@ -327,7 +328,8 @@ NEUTRON_STAR_COLOR = (0, 120, 255)  # RGB color of the neutron star (cyan-blue).
 NEUTRON_STAR_DEAD_COLOR = (70, 80, 100)  # Dim slate color of a pulsar that crossed the death line.
 NEUTRON_STAR_PULSE_RATE = 0.015  # Seconds between pulsar pulses. Lower = faster pulsing.
 NEUTRON_STAR_PULSE_STRENGTH = 7 # Force magnitude of each pulse ripple. Higher = stronger push on nearby entities.
-NEUTRON_STAR_PULSE_COLOR = (0, 140, 255, 245)  # RGBA color of the expanding pulse ring.
+NEUTRON_STAR_PULSE_COLOR = (0, 140, 255, 90)  # RGBA color of the expanding pulse ring. Alpha kept low: rings overlap and stack additively during wave storms.
+PULSE_CROWD_REFERENCE = 3  # Number of coexisting wave rings (per universe) shown at full brightness; beyond it each ring's alpha scales by sqrt(reference/count) — loudness normalization, so a lone kilonova ring stays dramatic while a storm of twenty auto-quiets instead of stacking to glare.
 NEUTRON_STAR_PULSE_WIDTH = 2    # Line width (pixels) for drawing pulse rings.
 NEUTRON_STAR_RIPPLE_SPEED = 64  # How fast (pixels/sec) pulse ripples expand outward.
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripples exert force on entities.

@@ -188,6 +188,16 @@ class BlackHole:
             dvt = np.where(in_swirl, (target_t - cur_t) * blend, 0.0)
             VX += dvt * tx
             VY += dvt * ty
+            # Disk circularization: viscously damp the RADIAL component so disk clouds settle
+            # into persistent orbits instead of plunging through in one pass — swirl sets the
+            # rotation, this makes it last. Damping is partial: the residual inward drift is
+            # the viscous accretion that keeps the hole fed.
+            cur_r = (VX - frame_vx) * ux + (VY - frame_vy) * uy
+            circ = np.minimum(1.0, BLACK_HOLE_DISK_CIRCULARIZATION
+                              * (1.0 - dist / swirl_radius) * delta_time)
+            dvr = np.where(in_swirl, -cur_r * circ, 0.0)
+            VX += dvr * ux
+            VY += dvr * uy
         self.vx -= float(rec_x.sum())
         self.vy -= float(rec_y.sum())
 
