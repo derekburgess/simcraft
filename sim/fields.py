@@ -48,7 +48,7 @@ class CloudField:
     object version had."""
 
     __slots__ = ('n', 'cap', 'x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count',
-                 'is_star', 'size', 'shock', 'offsets', 'sprites', 'sprite_keys')
+                 'is_star', 'has_civ', 'size', 'shock', 'offsets', 'sprites', 'sprite_keys')
 
     def __init__(self, cap=256):
         self.n = 0
@@ -61,6 +61,7 @@ class CloudField:
         self.elem = np.zeros(cap, dtype=np.int64)
         self.emission_count = np.zeros(cap, dtype=np.int64)
         self.is_star = np.zeros(cap, dtype=bool)
+        self.has_civ = np.zeros(cap, dtype=bool)  # rare Dyson-swarm civilization on this star
         self.size = np.zeros(cap)
         self.shock = np.zeros(cap)   # seconds of "compressed by a wavefront" remaining (triggered star formation)
         self.offsets = np.zeros((cap, 7, 2))
@@ -95,6 +96,8 @@ class CloudField:
     @property
     def IS_STAR(self): return self.is_star[:self.n]
     @property
+    def HAS_CIV(self): return self.has_civ[:self.n]
+    @property
     def SHOCK(self): return self.shock[:self.n]
     @SHOCK.setter
     def SHOCK(self, v): self.shock[:self.n] = v
@@ -106,7 +109,7 @@ class CloudField:
         new_cap = self.cap
         while new_cap < need:
             new_cap *= 2
-        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'size', 'shock'):
+        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'has_civ', 'size', 'shock'):
             old = getattr(self, name)
             grown = np.zeros(new_cap, dtype=old.dtype)
             grown[:self.n] = old[:self.n]
@@ -146,6 +149,7 @@ class CloudField:
         self.elem[k] = el
         self.emission_count[k] = 0
         self.is_star[k] = mass >= PROTOSTAR_THRESHOLD
+        self.has_civ[k] = False
         self.size[k] = self._size_for(mass, self.is_star[k])
         self.shock[k] = 0.0
         self.offsets[k] = offs
@@ -177,6 +181,7 @@ class CloudField:
         self.emission_count[k0:k1] = 0
         is_star = ms >= PROTOSTAR_THRESHOLD
         self.is_star[k0:k1] = is_star
+        self.has_civ[k0:k1] = False
         # Same size formulas as _size_for, vectorized (int() and astype both truncate toward 0).
         shrink = ((ms - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE).astype(np.int64)
         cloud_size = np.maximum(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE - shrink)
@@ -242,7 +247,7 @@ class CloudField:
         n = self.n
         idx = np.asarray(idx, dtype=np.int64)
         m = len(idx)
-        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'size', 'shock'):
+        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'has_civ', 'size', 'shock'):
             arr = getattr(self, name)
             arr[:m] = arr[:n][idx]
         self.offsets[:m] = self.offsets[:n][idx]
@@ -282,6 +287,7 @@ class CloudField:
             dst.elem[k] = self.elem[r]
             dst.emission_count[k] = self.emission_count[r]
             dst.is_star[k] = self.is_star[r]
+            dst.has_civ[k] = self.has_civ[r]
             dst.size[k] = self.size[r]
             dst.shock[k] = self.shock[r]
             dst.offsets[k] = self.offsets[r]

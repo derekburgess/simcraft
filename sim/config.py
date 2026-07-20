@@ -64,10 +64,14 @@ BARNES_HUT_MAX_DEPTH = 28       # Max quadtree depth. Caps recursion when many c
 # No linear rate can walk the K→M→B→T progression (each suffix spans 1000x the years of the
 # last, so linear time either crawls or teleports); instead each factor of 10 in cosmic years
 # takes a fixed slice of real time, which is also how cosmology actually talks about deep time
-# (log10 "cosmological decades", per the Five Ages of the Universe). Starts at ~19 yr/s, hits
-# 1K at ~36 s, 1M at ~7 min, 1B at ~13 min, 1T at ~19 min, and the real heat-death decade
-# (10^100 years) after ~3.2 hours of play.
-COSMIC_DECADE_SECONDS = 120     # Real seconds per factor-of-10 of cosmic years.
+# (log10 "cosmological decades", per the Five Ages of the Universe). Uncapped, that rate has no
+# ceiling — it compounds forever, so it never stops feeling like it's speeding up. MAX_YEAR_RATE
+# below caps it once it reaches the pace that felt right (right around 1B years: 1K at ~2.7 s,
+# 1M at ~27 s, 1B at ~54 s, all unchanged from the pure-exponential curve), after which growth
+# is linear at that capped rate instead of continuing to accelerate — so 1T now takes ~67 min
+# instead of 81 s, and the heat-death decade (10^100 years) is hours away, not ~14.5 min.
+COSMIC_DECADE_SECONDS = 9       # Real seconds per factor-of-10 of cosmic years.
+MAX_YEAR_RATE = 2.5e8           # Ceiling (years/sec) on the cosmic clock — growth goes linear past this rate.
 MAX_DELTA_TIME = 0.05          # Maximum physics time step per frame (seconds). Caps dt to prevent instability on lag spikes.
 HEAT_DEATH_LINGER_DURATION = 12.0  # Seconds to display the empty ring after all matter is gone before starting a new universe.
 TARGET_FPS = 60                    # Target frame rate cap for the simulation loop.
@@ -205,6 +209,18 @@ PROTOSTAR_EJECTA_SPREAD = 14    # Max spawn distance (pixels) of ejecta from the
 STAR_TIER_MEDIUM_MASS = 34      # Mass at or above which a star is mid tier (sun-like).
 STAR_TIER_HIGH_MASS = 42        # Mass at or above which a star is a blue giant. Kept aligned with BLACK_HOLE_THRESHOLD: exactly the massive stars are the ones that can die violently.
 
+# ── Civilizations (rare Dyson-swarm dimming on stable, non-violent, metal-enriched stars) ──
+CIVILIZATION_CHANCE = 0.0001    # Per-frame chance an eligible medium-tier star develops one, at Z=0.
+CIVILIZATION_Z_BOOST = 4.0      # Multiplier added at Z=1: chance scales by (1 + Z * this), so a fully enriched universe is 5x more likely.
+CIVILIZATION_DISC_COLOR = (225, 225, 235)  # Flat cold white-grey — doesn't appear elsewhere in the palette.
+CIVILIZATION_DISC_PADDING = 1   # Pixels beyond the star's own sprite radius for the opaque occluding disc.
+CIVILIZATION_RING_COLOR = (150, 150, 162)  # Metallic gray for the swarm's ring segments — distinct from the disc's cold white.
+CIVILIZATION_RING_PADDING = 3   # Pixels beyond the star's own sprite radius for the dot ring.
+CIVILIZATION_RING_DOT_COUNT = 8   # Number of small dots (swarm segments) spaced around the ring.
+CIVILIZATION_RING_DOT_RADIUS = 1  # Visual radius (pixels) of each ring dot.
+CIVILIZATION_FLICKER_STEP = 0.15    # Seconds per flicker step — a stepped light curve, not a smooth pulse.
+CIVILIZATION_FLICKER_GAP_CHANCE = 4  # 1-in-N steps the star's own disc blinks off (a transit-style gap); the ring stays steady.
+
 # Ignition mass boost depends on the cloud's own metallicity: pristine hydrogen/helium clouds
 # fragment less and ignite as monsters (Population III), enriched clouds ignite smaller.
 STAR_ENRICHED_ELEMENT_MIN = 3   # Element index at or above which a cloud counts as metal-enriched (beyond H/He/O).
@@ -297,6 +313,14 @@ BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 110)  # RGBA color of the gravitational wa
 BLACK_HOLE_DISK_COLOR = (255, 100, 100)    # RGB color of the accretion disk tracer dot (light red).
 BLACK_HOLE_DISK_SIZE = 1                   # Visual size in pixels of the accretion disk tracer.
 BLACK_HOLE_DISK_ROTATION = 10            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
+
+# ── Quasar Flares (Eddington-choked accretion bursts, see BlackHole.decay) ──
+BLACK_HOLE_FLARE_THRESHOLD = 0.96     # Minimum flare_length (pixels) before jets render/log.
+BLACK_HOLE_FLARE_PX_PER_MASS = 0.64   # Jet length (pixels) granted per unit of mass captured, at full choke.
+BLACK_HOLE_FLARE_DECAY_PER_SEC = 10   # How fast (pixels/sec) a flare shrinks back down between meals.
+BLACK_HOLE_FLARE_MAX_LENGTH = 11.52   # Cap on jet length (pixels) so one huge capture doesn't paint off-screen beams.
+BLACK_HOLE_FLARE_COLOR = (255, 245, 200)  # Hot white-yellow, distinct from the disk tracer's soft red.
+BLACK_HOLE_FLARE_BASE_FRACTION = 0.18  # Cone base half-width as a fraction of the hole's own radius, so it visibly touches the hole.
 BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION = 0.999  # Per-second dissipation rate for black hole angular momentum (spin-down).
 BLACK_HOLE_PULSE_SPEED_MULTIPLIER = 1.5  # Speed multiplier applied to BH merger pulses relative to NS ripple speed.
 BLACK_HOLE_PULSE_MASS_SCALE = 3.5      # Divisor for consumed mass when scaling merger pulse force on the BARRIER. Lower = stronger barrier ripple on a merger.

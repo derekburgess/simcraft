@@ -284,6 +284,22 @@ def update_entities(universe):
             universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_SUPERNOVA)
             universe.event_log.append("SUPERNOVA (TYPE II) — massive star explodes, seeding metals")
 
+    # ── Civilizations: rare Dyson-swarm emergence on stable, non-violent, metal-enriched stars ──
+    # Rocky planets and biochemistry need real metals, not just H/He/O, so a pristine
+    # Population III star is never eligible (same enriched-vs-pristine split ignition and
+    # collapse fate already use). On top of that hard gate, a chemically older universe (higher
+    # Z) makes emergence more likely — the same enrichment that eventually quenches star
+    # formation also makes the stars that do form better odds for hosting something.
+    civ_idx = np.nonzero(clouds.IS_STAR & (clouds.M >= STAR_TIER_MEDIUM_MASS)
+                          & (clouds.M < STAR_TIER_HIGH_MASS) & ~clouds.HAS_CIV
+                          & (clouds.ELEM >= STAR_ENRICHED_ELEMENT_MIN))[0]
+    if len(civ_idx):
+        civ_chance = CIVILIZATION_CHANCE * (1.0 + universe.metallicity * CIVILIZATION_Z_BOOST)
+        hits = civ_idx[np.random.random(len(civ_idx)) < civ_chance]
+        if len(hits):
+            clouds.has_civ[hits] = True
+            universe.event_log.append("CIVILIZATION EMERGES — a world lights its star's shadow")
+
     # ── Sub-massive stars: white-dwarf retirement (one vectorized roll over all stars) ──
     star_idx = np.nonzero(clouds.IS_STAR & (clouds.M < STAR_TIER_HIGH_MASS))[0]
     if len(star_idx):
@@ -310,6 +326,8 @@ def update_entities(universe):
         universe.white_dwarfs.append(wd)
         to_remove[k] = True
         universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_NEBULA)
+        if clouds.has_civ[k]:
+            universe.event_log.append("CIVILIZATION LOST — swallowed by its dying star")
         universe.event_log.append("PLANETARY NEBULA — a star retires as a white dwarf")
 
     # ── Emission: clouds shed small daughter clouds (one vectorized roll over eligibles) ──
@@ -491,7 +509,7 @@ def step(universe, ring, delta_time):
         if black_hole in bh_to_remove:
             continue
         black_hole.attract(universe, delta_time, alive, stream_moves, ns_to_remove, bh_to_remove)
-        black_hole.decay(delta_time)
+        black_hole.decay(delta_time, universe)
         # A hole that grows to near-max "rips" open a new universe and then streams matter into it.
         # It only rips once (while it has a child); if that child later dies, it can rip again.
         rip_mass = BLACK_HOLE_RIP_MASS_FACTOR * BLACK_HOLE_MAX_MASS

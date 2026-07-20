@@ -46,6 +46,9 @@ class BlackHole:
         self.tracer_angle = random.uniform(0, 2 * math.pi)
         self.angular_momentum = 0.0  # Spin from off-center accretion
         self.child_universe = None  # the universe this hole ripped open and streams matter into (None until it rips)
+        self.flare_length = 0.0  # Current quasar jet length (pixels) — spikes per meal, decays back down
+        self.is_flaring = False
+        self._prev_accretion_mass = 0.0  # last frame's post-drain backlog, to detect fresh captures
 
     def attract(self, universe, delta_time, alive, stream_moves, ns_to_remove, bh_to_remove):
         # Event horizon: the radius at which matter is actually consumed. Smaller than the
@@ -201,19 +204,35 @@ class BlackHole:
         self.vx -= float(rec_x.sum())
         self.vy -= float(rec_y.sum())
 
-    def decay(self, delta_time):
+    def decay(self, delta_time, universe):
+        # Eddington-style throttle: accretion chokes as the hole nears the mass cap (radiation
+        # pressure, in the real version). A continuously fed hole settles just under the cap
+        # instead of pinning AT it; once feeding stops, the 1/m^2 Hawking curve below takes
+        # over and evaporation can finally win.
+        throttle = max(0.0, 1.0 - (self.mass / BLACK_HOLE_MAX_MASS) ** BLACK_HOLE_EDDINGTON_EXPONENT)
+
+        # Flares are an impulse per meal, not a static reading of the backlog: whatever landed
+        # in accretion_mass since last frame (weighted by how hard the throttle is choking right
+        # now, so it's near-zero far from the cap) kicks the jets out, then they shrink back down
+        # on their own clock — a big capture flares bright and fades instead of holding a length.
+        captured_this_frame = max(0.0, self.accretion_mass - self._prev_accretion_mass)
+        self.flare_length = max(0.0, self.flare_length - BLACK_HOLE_FLARE_DECAY_PER_SEC * delta_time)
+        self.flare_length = min(BLACK_HOLE_FLARE_MAX_LENGTH, self.flare_length
+                                 + captured_this_frame * (1.0 - throttle) * BLACK_HOLE_FLARE_PX_PER_MASS)
+
+        was_flaring = self.is_flaring
+        self.is_flaring = self.flare_length >= BLACK_HOLE_FLARE_THRESHOLD
+        if self.is_flaring and not was_flaring:
+            universe.event_log.append("QUASAR FLARE — Eddington-choked accretion lights the disk")
+
         if self.accretion_mass > 0:
-            # Eddington-style throttle: accretion chokes as the hole nears the mass cap
-            # (radiation pressure, in the real version). A continuously fed hole settles just
-            # under the cap instead of pinning AT it; once feeding stops, the 1/m^2 Hawking
-            # curve below takes over and evaporation can finally win.
-            throttle = max(0.0, 1.0 - (self.mass / BLACK_HOLE_MAX_MASS) ** BLACK_HOLE_EDDINGTON_EXPONENT)
             growth = min(BLACK_HOLE_GROWTH_RATE * throttle * delta_time, self.accretion_mass)
             self.mass = min(self.mass + growth, BLACK_HOLE_MAX_MASS)
             self.accretion_mass = max(0.0, self.accretion_mass - growth)
         rate = BLACK_HOLE_DECAY_RATE * (BLACK_HOLE_DECAY_THRESHOLD / self.mass) ** 2
         self.mass -= rate * delta_time
         self.accretion_mass = max(0.0, self.accretion_mass - rate * delta_time)
+        self._prev_accretion_mass = self.accretion_mass
 
 
 class NeutronStar:

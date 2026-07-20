@@ -215,8 +215,13 @@ def run_simulation(screen, font, state):
             #draw_ui(screen, font, current_year, zoom)
 
             # Log-time cosmic clock: dy = ln10/decade * (y + 1000) dt integrates to a fixed
-            # wall-time per factor-of-10 of years (see COSMIC_DECADE_SECONDS in config).
-            current_year += delta_time * (math.log(10) / COSMIC_DECADE_SECONDS) * (current_year + 1000.0)
+            # wall-time per factor-of-10 of years (see COSMIC_DECADE_SECONDS in config). That
+            # rate has no ceiling on its own — it compounds forever, so it never stops feeling
+            # like it's speeding up. Capping it turns the curve linear once it would exceed the
+            # pace that felt right (reached right around the billions mark), instead of letting
+            # it keep exponentially accelerating for the rest of the session.
+            year_rate = min(MAX_YEAR_RATE, (math.log(10) / COSMIC_DECADE_SECONDS) * (current_year + 1000.0))
+            current_year += delta_time * year_rate
 
             pygame.display.flip()
             clock.tick(TARGET_FPS)

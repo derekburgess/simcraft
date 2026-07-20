@@ -5,6 +5,7 @@ The world surface is sized to the view plus a margin (capped by MULTIVERSE_RENDE
 to the full extent of the multiverse, and universes fully outside the view are culled.
 """
 import math
+import time
 
 import numpy as np
 import pygame
@@ -155,6 +156,30 @@ def draw_clouds(screen, clouds, offset_x=0, offset_y=0):
     screen.blits(zip(sprites[:n], zip(px.astype(np.int64).tolist(), py.astype(np.int64).tolist())),
                  doreturn=False)
 
+    # Civilizations: a ring of small orbiting swarm segments (steady — the structure itself
+    # doesn't blink) around a star whose own light flickers in and out like an irregular light
+    # curve (transits/gaps), rather than a smooth pulse that would read as a pulsar.
+    civ_idx = np.nonzero(is_star & clouds.HAS_CIV)[0]
+    if len(civ_idx):
+        time_bucket = int(time.time() / CIVILIZATION_FLICKER_STEP)
+        for k in civ_idx:
+            cx = int(px[k] + size[k] * 0.5)
+            cy = int(py[k] + size[k] * 0.5)
+            # Ring of dots (the swarm's segments) — always present, doesn't flicker.
+            ring_radius = int(size[k] * 0.5) + CIVILIZATION_RING_PADDING
+            for i in range(CIVILIZATION_RING_DOT_COUNT):
+                angle = (2 * math.pi / CIVILIZATION_RING_DOT_COUNT) * i
+                dx = int(cx + ring_radius * math.cos(angle))
+                dy = int(cy + ring_radius * math.sin(angle))
+                pygame.draw.circle(screen, CIVILIZATION_RING_COLOR, (dx, dy), CIVILIZATION_RING_DOT_RADIUS)
+            if hash((int(k), time_bucket)) % CIVILIZATION_FLICKER_GAP_CHANCE == 0:
+                continue
+            # Opaque disc (cold white, solid like the magnetar's core) sits above the star's
+            # own sprite and covers it — the swarm blocking its star, not just haloing it.
+            # This is the piece that flickers.
+            disc_radius = int(size[k] * 0.5) + CIVILIZATION_DISC_PADDING
+            pygame.draw.circle(screen, CIVILIZATION_DISC_COLOR, (cx, cy), disc_radius)
+
 
 # ── Pulses / compact objects ────────────────────────────────────────────────────────────────
 
@@ -201,6 +226,18 @@ def draw_black_hole(screen, bh, offset_x=0, offset_y=0):
     bh.border_radius = radius
     pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (draw_x, draw_y), radius)
     pygame.draw.circle(screen, BLACK_HOLE_COLOR, (draw_x, draw_y), radius - 2)
+
+    if bh.is_flaring:
+        jet_length = bh.flare_length
+        base_half = max(1, radius * BLACK_HOLE_FLARE_BASE_FRACTION)
+        for sign in (1, -1):
+            y_base = draw_y + sign * radius
+            y_tip = draw_y + sign * (radius + jet_length)
+            pygame.draw.polygon(screen, BLACK_HOLE_FLARE_COLOR, [
+                (draw_x - base_half, y_base),
+                (draw_x + base_half, y_base),
+                (draw_x, y_tip),
+            ])
 
     tracer_x = draw_x + bh.border_radius * math.cos(bh.tracer_angle)
     tracer_y = draw_y + bh.border_radius * math.sin(bh.tracer_angle)
