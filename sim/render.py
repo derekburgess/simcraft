@@ -229,13 +229,20 @@ def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0):
     draw_y = int(ns.y + offset_y)
     pulse_ox = ns.x + offset_x
     pulse_oy = ns.y + offset_y
-    if ns.is_dead:  # past the death line: dark and silent
-        current_color = NEUTRON_STAR_DEAD_COLOR
-    elif ns.pulse_color_state == 1:
-        current_color = (255, 255, 255)
-    else:
-        current_color = NEUTRON_STAR_COLOR
-    pygame.draw.circle(screen, current_color, (draw_x, draw_y), ns.radius)
+    current_color = NEUTRON_STAR_DEAD_COLOR if ns.is_dead else NEUTRON_STAR_COLOR
+
+    if not ns.is_dead:  # jets are the beam that dies with the pulsar, not a separate fade
+        flashing = ns.pulse_color_state == 1
+        jet_color = (255, 255, 255) if flashing else NEUTRON_STAR_COLOR
+        jet_length = NEUTRON_STAR_JET_FLASH_LENGTH if flashing else NEUTRON_STAR_JET_LENGTH
+        pygame.draw.line(screen, jet_color, (draw_x, draw_y - jet_length),
+                          (draw_x, draw_y + jet_length), NEUTRON_STAR_JET_WIDTH)
+
+    # pygame.draw.circle at radius 1 rasterizes as a 2px blob offset from (draw_x, draw_y),
+    # which would visibly throw off the jet's alignment through the core — a symmetric square
+    # keeps a true center pixel at (draw_x, draw_y) for the jet line to line up with.
+    core_size = ns.radius * 2 + 1
+    pygame.draw.rect(screen, current_color, (draw_x - ns.radius, draw_y - ns.radius, core_size, core_size))
 
     for pulse in ns.active_pulses:
         pulse_radius, _, fade = pulse

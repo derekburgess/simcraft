@@ -325,6 +325,9 @@ NEUTRON_STAR_DECAY_THRESHOLD = 0.8  # Mass at which a dead neutron star quietly 
 PULSAR_REMNANT_CLOUD_COUNT = 6  # Cold clouds released when a dead neutron star dissipates (no pulse, no fireworks).
 PULSAR_REMNANT_SPREAD = 14      # Max spawn radius (pixels) of those clouds.
 NEUTRON_STAR_COLOR = (0, 120, 255)  # RGB color of the neutron star (cyan-blue).
+NEUTRON_STAR_JET_LENGTH = 2     # Visual length (pixels) of each polar jet segment.
+NEUTRON_STAR_JET_FLASH_LENGTH = 4  # Jet length (pixels) during the white flash window — the beam pulse stretching out.
+NEUTRON_STAR_JET_WIDTH = 1      # Line width (pixels) for drawing jets.
 NEUTRON_STAR_DEAD_COLOR = (70, 80, 100)  # Dim slate color of a pulsar that crossed the death line.
 NEUTRON_STAR_PULSE_RATE = 0.015  # Seconds between pulsar pulses. Lower = faster pulsing.
 NEUTRON_STAR_PULSE_STRENGTH = 7 # Force magnitude of each pulse ripple. Higher = stronger push on nearby entities.

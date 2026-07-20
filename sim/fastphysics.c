@@ -5,7 +5,7 @@
     "distutils": {
         "depends": [],
         "include_dirs": [
-            "/tmp/pip-build-env-rwlv6wxt/overlay/lib/python3.12/site-packages/numpy/_core/include"
+            "/tmp/pip-build-env-c76iu9j8/overlay/lib/python3.12/site-packages/numpy/_core/include"
         ],
         "name": "sim.fastphysics",
         "sources": [
