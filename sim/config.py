@@ -246,6 +246,7 @@ COLLAPSE_NS_METALLICITY_BIAS = 0.15  # Added to NEUTRON_STAR_CHANCE for enriched
 WHITE_DWARF_CHANCE = 0.002      # Base per-frame chance a sub-massive star ends its life; scaled by (mass/high-tier)^WHITE_DWARF_LIFETIME_MASS_EXPONENT so sun-like stars retire well before red dwarfs (live fast, die young — gently).
 WHITE_DWARF_LIFETIME_MASS_EXPONENT = 4  # Steepness of that scaling: at 4, a sun-like star retires ~3x sooner than a red dwarf.
 WHITE_DWARF_MASS_FRACTION = 0.5 # Fraction of the star's mass kept by the white dwarf; the rest blows off as the nebula.
+WHITE_DWARF_GRAVITY_CONSTANT = 1 * GRAVITY_SCALE  # Gravitational pull on clouds. Weaker than a neutron star's — dense, but not exotic-matter dense.
 PLANETARY_NEBULA_EJECTA_COUNT = 6  # Clouds in the ejected shell (light elements — H/He/C).
 PLANETARY_NEBULA_SPREAD = 18    # Max spawn radius (pixels) of the nebula shell.
 WHITE_DWARF_COOL_TIME = 90.0    # Seconds for a white dwarf to cool to invisibility (black dwarf) and be removed.

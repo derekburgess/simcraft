@@ -572,16 +572,40 @@ def step(universe, ring, delta_time):
             universe.neutron_stars.append(settled)
 
     # ── White-dwarf pass ──
-    # White dwarfs only cool. Once fully cooled they are black dwarfs — invisible against
-    # space — and are removed. Two that collide detonate as a Type Ia supernova: total
-    # thermonuclear destruction, no remnant, and a spray of iron-peak elements.
+    # White dwarfs cool and pull on nearby gas. Once fully cooled they are black dwarfs —
+    # invisible against space — and are removed. Two that collide detonate as a Type Ia
+    # supernova: total thermonuclear destruction, no remnant, and a spray of iron-peak elements.
     for wd in universe.white_dwarfs:
         if wd in ns_to_remove:
             continue
+        wd.apply_gravity(universe, delta_time)
         wd.age += delta_time
         if wd.age >= WHITE_DWARF_COOL_TIME:
             ns_to_remove.add(wd)
             universe.event_log.append("BLACK DWARF — a white dwarf finishes cooling, fades from view")
+
+    # ── Mutual gravity: neutron stars, magnetars, and white dwarfs ──
+    # Each of these previously only felt clouds and black holes — nothing pulled two of them
+    # toward EACH OTHER, so kilonovae (NS-NS) and Type Ia (WD-WD) relied entirely on positional
+    # coincidence. Black holes are untouched here — their relationships with these types (and
+    # with each other) already exist and are tuned elsewhere.
+    small_bodies = [b for b in (*universe.neutron_stars, *universe.magnetars, *universe.white_dwarfs)
+                    if b not in ns_to_remove]
+    for i in range(len(small_bodies)):
+        a = small_bodies[i]
+        for j in range(i + 1, len(small_bodies)):
+            b = small_bodies[j]
+            dx = b.x - a.x
+            dy = b.y - a.y
+            distance = max(math.hypot(dx, dy), 1)
+            force = NEUTRON_STAR_GRAVITY_CONSTANT * (a.mass * b.mass) / (distance ** 2)
+            ux, uy = dx / distance, dy / distance
+            kick = force * delta_time
+            a.vx += ux * kick
+            a.vy += uy * kick
+            b.vx -= ux * kick
+            b.vy -= uy * kick
+
     alive_wd = [wd for wd in universe.white_dwarfs if wd not in ns_to_remove]
     for i in range(len(alive_wd)):
         if alive_wd[i] in ns_to_remove:

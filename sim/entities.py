@@ -459,7 +459,7 @@ class Magnetar(NeutronStar):
 
 class WhiteDwarf:
     """The quiet endpoint of most stars: the exposed core left after a sub-massive star sheds
-    its envelope as a planetary nebula. It does nothing but cool — white-hot to dim red to
+    its envelope as a planetary nebula. Otherwise it just cools — white-hot to dim red to
     invisible (a black dwarf), at which point physics.step removes it. Black holes can still
     eat one, and two colliding white dwarfs detonate as a Type Ia supernova."""
 
@@ -475,3 +475,28 @@ class WhiteDwarf:
     def cooling(self):
         """0.0 fresh and white-hot → 1.0 fully cooled (black dwarf)."""
         return min(self.age / WHITE_DWARF_COOL_TIME, 1.0)
+
+    def apply_gravity(self, universe, delta_time):
+        clouds = universe.clouds
+        if not clouds.n:
+            return
+        cell = SPATIAL_HASH_CELL_SIZE
+        ncx = int(self.x // cell)
+        ncy = int(self.y // cell)
+        ccx = np.floor(clouds.X / cell).astype(np.int64)
+        ccy = np.floor(clouds.Y / cell).astype(np.int64)
+        dx = clouds.X - self.x
+        dy = clouds.Y - self.y
+        dist_sq = dx * dx + dy * dy
+        near = (np.abs(ccx - ncx) <= 1) & (np.abs(ccy - ncy) <= 1) & (dist_sq >= 1.0)
+        if not near.any():
+            return
+        d2 = np.where(near, dist_sq, 1.0)
+        distance = np.sqrt(d2)
+        force = np.where(near, WHITE_DWARF_GRAVITY_CONSTANT * (self.mass * clouds.M) / d2, 0.0)
+        fx = (dx / distance) * force * delta_time
+        fy = (dy / distance) * force * delta_time
+        clouds.VX -= fx
+        clouds.VY -= fy
+        self.vx += float((fx * clouds.M).sum()) / self.mass
+        self.vy += float((fy * clouds.M).sum()) / self.mass
