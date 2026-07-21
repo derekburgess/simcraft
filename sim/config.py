@@ -32,9 +32,9 @@ UI_TICKER_TOP_MARGIN = 24       # Gap (pixels) between the top of the screen and
 UI_TICKER_LIFETIME = 7.0        # Seconds an event entry stays visible before it fades out and is dropped for good (no scrollback).
 
 # ── Element inventory row (one block per element currently present, drawn above the ticker) ──
-UI_ELEMENTS_FONT_SIZE = 11      # Point size for the element symbol drawn on each block.
-UI_ELEMENTS_BLOCK_SIZE = 20     # Side length (pixels) of each element color block (square).
-UI_ELEMENTS_BLOCK_GAP = 3       # Horizontal gap (pixels) between adjacent blocks.
+UI_ELEMENTS_FONT_SIZE = 14      # Point size for the element symbol drawn on each block.
+UI_ELEMENTS_BLOCK_SIZE = 26     # Side length (pixels) of each element color block (square).
+UI_ELEMENTS_BLOCK_GAP = 4       # Horizontal gap (pixels) between adjacent blocks.
 UI_ELEMENTS_MARGIN_BOTTOM = 6   # Gap (pixels) between the block row and the ticker panel above it.
 
 # ── Hotkey cheat sheet (top-right corner, shown on start, toggled with [H]) ──
