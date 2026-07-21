@@ -98,6 +98,15 @@ class SimulationState:
             return 0.0
         return sum(u.metallicity for u in self.universes) / len(self.universes)
 
+    def present_elements(self):
+        """Sorted indices of every element currently carried by a live cloud/star, anywhere
+        in the multiverse — drives the HUD's element inventory row."""
+        present = set()
+        for u in self.universes:
+            if u.clouds.n:
+                present.update(np.unique(u.clouds.ELEM).tolist())
+        return sorted(present)
+
 
 def _spawn_size(mass):
     return max(MOLECULAR_CLOUD_MIN_SIZE,

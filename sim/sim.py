@@ -9,7 +9,7 @@ import pygame
 from sim.config import *
 from sim import physics
 from sim import render
-from sim.render import WorldRenderer, draw_ui, draw_stats, draw_ticker, draw_legend
+from sim.render import WorldRenderer, draw_ui, draw_stats, draw_ticker, draw_legend, draw_elements
 from sim.rng import generate, MIN as RNG_MIN, MAX as RNG_MAX
 
 
@@ -205,6 +205,7 @@ def run_simulation(screen, font, state):
                 print(f"HUD RNG failed: {rng_err}")
                 rng_number = None
 
+            draw_elements(screen, state.present_elements())
             draw_ticker(screen, ticker, ticker_offset)
             draw_stats(screen, clock.get_fps(), current_year, len(state.universes),
                        state.entity_count(), state.entropy_pool.folds, rng_number,

@@ -552,6 +552,45 @@ def draw_ticker(screen, ticker, offset=0):
         y += line_h
 
 
+_elements_font = None
+
+def _get_elements_font():
+    global _elements_font
+    if _elements_font is None:
+        _elements_font = pygame.font.SysFont(UI_STATS_FONT, UI_ELEMENTS_FONT_SIZE, bold=True)
+    return _elements_font
+
+
+def draw_elements(screen, present_elements):
+    """Element inventory row: one color block per element currently present anywhere in the
+    multiverse, sitting directly above the stats table (the ticker's fixed-height panel floats
+    higher and is ignored here, so this row stays pinned to the table regardless of how many
+    log lines are actually showing). Blocks are laid out right to left, starting flush with
+    the table's right edge, so the row grows leftward as the chemistry of the universe
+    diversifies."""
+    if not present_elements:
+        return
+    font = _get_elements_font()
+    stats_row_h = _get_stats_fonts()[1].get_height() + 2 * UI_STATS_CELL_PAD_Y
+    stats_row_top = screen.get_height() - UI_STATS_BOTTOM_MARGIN - stats_row_h
+    row_bottom = stats_row_top - UI_ELEMENTS_MARGIN_BOTTOM
+    row_top = row_bottom - UI_ELEMENTS_BLOCK_SIZE
+    table_right = screen.get_width() - UI_LABEL_X
+
+    x = table_right - UI_ELEMENTS_BLOCK_SIZE
+    for elem in reversed(present_elements):
+        color = MOLECULAR_CLOUD_START_COLORS[elem]
+        rect = pygame.Rect(x, row_top, UI_ELEMENTS_BLOCK_SIZE, UI_ELEMENTS_BLOCK_SIZE)
+        pygame.draw.rect(screen, color, rect)
+        # Contrast the symbol against its own block: light text on dark blocks, dark on light.
+        luminance = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
+        text_color = (20, 20, 20) if luminance > 140 else (235, 235, 235)
+        surf = font.render(ELEMENT_SYMBOLS[elem], True, text_color)
+        screen.blit(surf, (rect.centerx - surf.get_width() // 2,
+                           rect.centery - surf.get_height() // 2))
+        x -= UI_ELEMENTS_BLOCK_SIZE + UI_ELEMENTS_BLOCK_GAP
+
+
 # ── Legend (toggled with [L]) ───────────────────────────────────────────────────────────────
 
 _legend_font = None
