@@ -38,6 +38,18 @@ UI_ELEMENTS_BLOCK_SIZE = 20     # Side length (pixels) of each element color blo
 UI_ELEMENTS_BLOCK_GAP = 3       # Horizontal gap (pixels) between adjacent blocks.
 UI_ELEMENTS_MARGIN_BOTTOM = 6   # Gap (pixels) between the block row and the ticker panel above it.
 
+# ── Hotkey cheat sheet (top-right corner, shown on start, toggled with [H]) ──
+UI_HOTKEYS_FONT_SIZE = 13       # Point size for the hotkey rows.
+UI_HOTKEYS_MARGIN = 24          # Gap (pixels) between the panel and the screen edges.
+UI_HOTKEYS_PAD = 10             # Inner padding (pixels) of the panel.
+UI_HOTKEYS_ROW_SPACING = 6      # Extra vertical gap (pixels) added to each row's line height.
+UI_HOTKEYS_KEY_GAP = 10         # Horizontal gap (pixels) between a row's key label and its description.
+UI_HOTKEYS_BG = (0, 14, 28, 215)      # RGBA panel background (slightly lighter than space, mostly opaque).
+UI_HOTKEYS_KEY_COLOR = (170, 190, 255)  # Key label color (e.g. "[L]") — brighter, since it's the actionable part.
+UI_HOTKEYS_TEXT_COLOR = (140, 150, 190)  # Description text color — dimmer than the key.
+UI_HOTKEYS_HOLD_SECONDS = 20.0  # Seconds the panel stays fully opaque before it starts fading.
+UI_HOTKEYS_FADE_SECONDS = 10.0  # Seconds the fade-to-transparent takes once it starts (20 + 10 = 30s total).
+
 # ── Zoom ──
 ZOOM_MIN = 0.5                 # Minimum zoom level (zoomed out). Lower = can see more.
 ZOOM_MAX = 2.0                 # Maximum zoom level (zoomed in). Higher = can zoom in more.

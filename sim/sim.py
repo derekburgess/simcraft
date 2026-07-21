@@ -9,7 +9,7 @@ import pygame
 from sim.config import *
 from sim import physics
 from sim import render
-from sim.render import WorldRenderer, draw_ui, draw_stats, draw_ticker, draw_elements
+from sim.render import WorldRenderer, draw_ui, draw_stats, draw_ticker, draw_elements, draw_hotkeys, hotkeys_alpha
 from sim.rng import generate, MIN as RNG_MIN, MAX as RNG_MAX
 
 
@@ -51,6 +51,8 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
     running = True
     toggle_ticker = False
     toggle_barrier = False
+    toggle_hotkeys = False
+    toggle_gravity_waves = False
     ticker_scroll = 0
     copy_rng = False
 
@@ -59,8 +61,12 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
             running = False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_l:
             toggle_ticker = True
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_b:
             toggle_barrier = True
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_h:
+            toggle_hotkeys = True
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_g:
+            toggle_gravity_waves = True
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
             pygame.display.toggle_fullscreen()
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -83,7 +89,7 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
                 target_center_y = world_y
 
     return (running, target_zoom, target_center_x, target_center_y,
-            toggle_ticker, toggle_barrier, ticker_scroll, copy_rng)
+            toggle_ticker, toggle_barrier, toggle_hotkeys, toggle_gravity_waves, ticker_scroll, copy_rng)
 
 
 def run_simulation(screen, font, state):
@@ -102,6 +108,9 @@ def run_simulation(screen, font, state):
         renderer = WorldRenderer()
         show_ticker = True
         show_barrier = True
+        show_gravity_waves = True
+        show_hotkeys = True
+        hotkeys_age = 0.0  # seconds since last shown; drives the fade in hotkeys_alpha()
         ticker = []  # [text, age, count] event lines, newest last (UI_TICKER_HISTORY kept for scrollback)
         ticker_offset = 0  # 0 = live feed; >0 = scrolled that many entries back
         rng_number = None
@@ -114,7 +123,8 @@ def run_simulation(screen, font, state):
             last_frame_time = current_time
 
             (running, target_zoom, target_center_x, target_center_y,
-             toggle_ticker, toggle_barrier, ticker_scroll, copy_rng) = handle_input(
+             toggle_ticker, toggle_barrier, toggle_hotkeys, toggle_gravity_waves,
+             ticker_scroll, copy_rng) = handle_input(
                 zoom, view_center_x, view_center_y, target_zoom, target_center_x, target_center_y)
             if not running:
                 break
@@ -137,6 +147,12 @@ def run_simulation(screen, font, state):
                     render.TICKER_PANEL_RECT = None
             if toggle_barrier:
                 show_barrier = not show_barrier
+            if toggle_gravity_waves:
+                show_gravity_waves = not show_gravity_waves
+            if toggle_hotkeys:
+                show_hotkeys = not show_hotkeys
+                if show_hotkeys:
+                    hotkeys_age = 0.0
             if copy_rng and rng_number is not None:
                 if copy_to_clipboard(str(rng_number)):
                     rng_flash = 1.0
@@ -205,7 +221,7 @@ def run_simulation(screen, font, state):
             else:
                 heat_death_timer = 0.0
 
-            renderer.render(screen, state, zoom, view_center_x, view_center_y, show_barrier)
+            renderer.render(screen, state, zoom, view_center_x, view_center_y, show_barrier, show_gravity_waves)
 
             # Fresh RNG output every frame, drawn from the running entropy pool
             # (which folds the live state continuously — no full re-serialize here).
@@ -221,6 +237,14 @@ def run_simulation(screen, font, state):
             draw_stats(screen, clock.get_fps(), current_year, len(state.universes),
                        state.entity_count(), state.entropy_pool.folds, rng_number,
                        state.mean_metallicity(), rng_flash)
+
+            if show_hotkeys:
+                hotkeys_age += delta_time
+                alpha = hotkeys_alpha(hotkeys_age)
+                if alpha <= 0:
+                    show_hotkeys = False
+                else:
+                    draw_hotkeys(screen, alpha)
 
             #draw_ui(screen, font, current_year, zoom)
 

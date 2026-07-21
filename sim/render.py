@@ -261,7 +261,7 @@ def _crowd_dim(all_pulses):
     return math.sqrt(min(1.0, PULSE_CROWD_REFERENCE / max(1, len(all_pulses))))
 
 
-def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0):
+def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0, show_gravity_waves=True):
     draw_x = int(ns.x + offset_x)
     draw_y = int(ns.y + offset_y)
     pulse_ox = ns.x + offset_x
@@ -281,6 +281,8 @@ def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0):
     core_size = ns.radius * 2 + 1
     pygame.draw.rect(screen, current_color, (draw_x - ns.radius, draw_y - ns.radius, core_size, core_size))
 
+    if not show_gravity_waves:
+        return
     for pulse in ns.active_pulses:
         pulse_radius, _, fade = pulse
         if pulse_radius <= 1:
@@ -319,7 +321,7 @@ def draw_magnetar(screen, mag, offset_x=0, offset_y=0):
     pygame.draw.circle(screen, color, (draw_x, draw_y), mag.radius)
 
 
-def draw_universe(screen, universe, offset_x=0, offset_y=0, show_barrier=True):
+def draw_universe(screen, universe, offset_x=0, offset_y=0, show_barrier=True, show_gravity_waves=True):
     ring = universe.barrier
     if show_barrier:
         draw_barrier(screen, ring, offset_x, offset_y)
@@ -332,33 +334,34 @@ def draw_universe(screen, universe, offset_x=0, offset_y=0, show_barrier=True):
     for pulse in universe.black_hole_pulses:
         all_pulses.append((pulse[0] + offset_x, pulse[1] + offset_y, pulse[2], 1.0))
 
-    for pulse in universe.black_hole_pulses:
-        x, y, pulse_radius, consumed_mass = pulse
-        if pulse_radius > 1:
-            draw_x = x + offset_x
-            draw_y = y + offset_y
-            pulse_width = max(2, int(consumed_mass / 20))
-            points = _clip_pulse_points(draw_x, draw_y, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
-            min_x = min(p[0] for p in points) - PULSE_RENDER_MARGIN
-            min_y = min(p[1] for p in points) - PULSE_RENDER_MARGIN
-            max_x = max(p[0] for p in points) + PULSE_RENDER_MARGIN
-            max_y = max(p[1] for p in points) + PULSE_RENDER_MARGIN
-            w = max_x - min_x
-            h = max_y - min_y
-            if w > 0 and h > 0:
-                pulse_surface = pygame.Surface((w, h), pygame.SRCALPHA)
-                local_points = [(p[0] - min_x, p[1] - min_y) for p in points]
-                merge_color = (*BLACK_HOLE_MERGE_COLOR[:3],
-                               int(BLACK_HOLE_MERGE_COLOR[3] * _crowd_dim(all_pulses)))
-                pygame.draw.polygon(pulse_surface, merge_color, local_points, pulse_width)
-                screen.blit(pulse_surface, (min_x, min_y))
+    if show_gravity_waves:
+        for pulse in universe.black_hole_pulses:
+            x, y, pulse_radius, consumed_mass = pulse
+            if pulse_radius > 1:
+                draw_x = x + offset_x
+                draw_y = y + offset_y
+                pulse_width = max(2, int(consumed_mass / 20))
+                points = _clip_pulse_points(draw_x, draw_y, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
+                min_x = min(p[0] for p in points) - PULSE_RENDER_MARGIN
+                min_y = min(p[1] for p in points) - PULSE_RENDER_MARGIN
+                max_x = max(p[0] for p in points) + PULSE_RENDER_MARGIN
+                max_y = max(p[1] for p in points) + PULSE_RENDER_MARGIN
+                w = max_x - min_x
+                h = max_y - min_y
+                if w > 0 and h > 0:
+                    pulse_surface = pygame.Surface((w, h), pygame.SRCALPHA)
+                    local_points = [(p[0] - min_x, p[1] - min_y) for p in points]
+                    merge_color = (*BLACK_HOLE_MERGE_COLOR[:3],
+                                   int(BLACK_HOLE_MERGE_COLOR[3] * _crowd_dim(all_pulses)))
+                    pygame.draw.polygon(pulse_surface, merge_color, local_points, pulse_width)
+                    screen.blit(pulse_surface, (min_x, min_y))
 
     for white_dwarf in universe.white_dwarfs:
         draw_white_dwarf(screen, white_dwarf, offset_x, offset_y)
     for black_hole in universe.black_holes:
         draw_black_hole(screen, black_hole, offset_x, offset_y)
     for neutron_star in universe.neutron_stars:
-        draw_neutron_star(screen, neutron_star, ring, all_pulses, offset_x, offset_y)
+        draw_neutron_star(screen, neutron_star, ring, all_pulses, offset_x, offset_y, show_gravity_waves)
     for magnetar in universe.magnetars:
         draw_magnetar(screen, magnetar, offset_x, offset_y)
 
@@ -371,7 +374,7 @@ class WorldRenderer:
         self.w = 0
         self.h = 0
 
-    def render(self, screen, state, zoom, view_center_x, view_center_y, show_barrier=True):
+    def render(self, screen, state, zoom, view_center_x, view_center_y, show_barrier=True, show_gravity_waves=True):
         screen_w, screen_h = screen.get_size()
         view_w = int(screen_w / zoom)
         view_h = int(screen_h / zoom)
@@ -401,7 +404,7 @@ class WorldRenderer:
             if (bcx + reach < view_left or bcx - reach > view_left + view_w or
                     bcy + reach < view_top or bcy - reach > view_top + view_h):
                 continue
-            draw_universe(self.world_surface, universe, wox, woy, show_barrier)
+            draw_universe(self.world_surface, universe, wox, woy, show_barrier, show_gravity_waves)
 
         if zoom == 1.0:
             screen.blit(self.world_surface, (0, 0), area=visible_rect)
@@ -618,3 +621,70 @@ def draw_elements(screen, present_elements):
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                            rect.centery - surf.get_height() // 2))
         x -= UI_ELEMENTS_BLOCK_SIZE + UI_ELEMENTS_BLOCK_GAP
+
+
+# ── Hotkey cheat sheet (top-right corner, shown on start, toggled with [H]) ─────────────────
+
+_hotkeys_font = None
+
+def _get_hotkeys_font():
+    global _hotkeys_font
+    if _hotkeys_font is None:
+        _hotkeys_font = pygame.font.SysFont(UI_STATS_FONT, UI_HOTKEYS_FONT_SIZE)
+    return _hotkeys_font
+
+
+# (key label, description) rows.
+_HOTKEY_ROWS = [
+    ("B", "Toggle universe barriers"),
+    ("G", "Toggle gravitational waves"),
+    ("L", "Toggle event log"),
+    ("H", "Toggle this help"),
+    ("F11", "Toggle fullscreen"),
+    ("SCROLL", "Zoom, or scroll the log when hovering it"),
+    ("CLICK", "Copy the RNG number (on the RNG cell)"),
+    ("Q", "Quit"),
+]
+
+
+def hotkeys_alpha(age):
+    """Opacity (1 → 0) for the hotkey panel `age` seconds after it was last shown: fully
+    opaque for UI_HOTKEYS_HOLD_SECONDS, then a linear fade over UI_HOTKEYS_FADE_SECONDS."""
+    if age < UI_HOTKEYS_HOLD_SECONDS:
+        return 1.0
+    fade_t = age - UI_HOTKEYS_HOLD_SECONDS
+    if fade_t >= UI_HOTKEYS_FADE_SECONDS:
+        return 0.0
+    return 1.0 - fade_t / UI_HOTKEYS_FADE_SECONDS
+
+
+def draw_hotkeys(screen, alpha):
+    """Hotkey cheat sheet, translucent panel in the top-right corner. `alpha` (1 → 0) fades
+    both the background and the text uniformly as the panel ages out."""
+    if alpha <= 0:
+        return
+    font = _get_hotkeys_font()
+    key_surfs = [font.render(f"[{key}]", True, UI_HOTKEYS_KEY_COLOR) for key, _ in _HOTKEY_ROWS]
+    label_surfs = [font.render(label, True, UI_HOTKEYS_TEXT_COLOR) for _, label in _HOTKEY_ROWS]
+    key_w = max(s.get_width() for s in key_surfs)
+    row_w = key_w + UI_HOTKEYS_KEY_GAP + max(s.get_width() for s in label_surfs)
+    row_h = font.get_height() + UI_HOTKEYS_ROW_SPACING
+
+    panel_w = row_w + 2 * UI_HOTKEYS_PAD
+    panel_h = len(_HOTKEY_ROWS) * row_h + 2 * UI_HOTKEYS_PAD
+    panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+    panel.fill((*UI_HOTKEYS_BG[:3], int(UI_HOTKEYS_BG[3] * alpha)))
+
+    # Scale each glyph surface's existing per-pixel alpha (antialiasing) by the fade factor —
+    # Surface.set_alpha is ignored on per-pixel-alpha surfaces, so a multiply blend is used
+    # instead of a flat opacity call.
+    fade_mult = (255, 255, 255, int(255 * alpha))
+    y = UI_HOTKEYS_PAD
+    for key_surf, label_surf in zip(key_surfs, label_surfs):
+        key_surf.fill(fade_mult, special_flags=pygame.BLEND_RGBA_MULT)
+        label_surf.fill(fade_mult, special_flags=pygame.BLEND_RGBA_MULT)
+        panel.blit(key_surf, (UI_HOTKEYS_PAD, y))
+        panel.blit(label_surf, (UI_HOTKEYS_PAD + key_w + UI_HOTKEYS_KEY_GAP, y))
+        y += row_h
+
+    screen.blit(panel, (screen.get_width() - panel_w - UI_HOTKEYS_MARGIN, UI_HOTKEYS_MARGIN))
