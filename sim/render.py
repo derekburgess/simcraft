@@ -319,9 +319,10 @@ def draw_magnetar(screen, mag, offset_x=0, offset_y=0):
     pygame.draw.circle(screen, color, (draw_x, draw_y), mag.radius)
 
 
-def draw_universe(screen, universe, offset_x=0, offset_y=0):
+def draw_universe(screen, universe, offset_x=0, offset_y=0, show_barrier=True):
     ring = universe.barrier
-    draw_barrier(screen, ring, offset_x, offset_y)
+    if show_barrier:
+        draw_barrier(screen, ring, offset_x, offset_y)
     draw_clouds(screen, universe.clouds, offset_x, offset_y)
 
     all_pulses = []
@@ -370,7 +371,7 @@ class WorldRenderer:
         self.w = 0
         self.h = 0
 
-    def render(self, screen, state, zoom, view_center_x, view_center_y):
+    def render(self, screen, state, zoom, view_center_x, view_center_y, show_barrier=True):
         screen_w, screen_h = screen.get_size()
         view_w = int(screen_w / zoom)
         view_h = int(screen_h / zoom)
@@ -400,7 +401,7 @@ class WorldRenderer:
             if (bcx + reach < view_left or bcx - reach > view_left + view_w or
                     bcy + reach < view_top or bcy - reach > view_top + view_h):
                 continue
-            draw_universe(self.world_surface, universe, wox, woy)
+            draw_universe(self.world_surface, universe, wox, woy, show_barrier)
 
         if zoom == 1.0:
             screen.blit(self.world_surface, (0, 0), area=visible_rect)
@@ -457,6 +458,20 @@ def _get_stats_fonts():
 # Hit-test rect for the RNG cell, refreshed each draw — clicking it copies the number.
 RNG_CELL_RECT = None
 
+# FPS, YEAR, UNIVERSES, ENTITIES, METALLICITY, SALT — kept in sync with draw_stats's stat_cells.
+_NUM_STAT_CELLS = 6
+
+
+def _stats_columns(screen):
+    """Column geometry for the stats table, shared with the ticker panel above it so the
+    panel's width can lock to the first two columns (FPS, YEAR) instead of the full table."""
+    font, rng_font = _get_stats_fonts()
+    table_left = UI_LABEL_X
+    table_w = screen.get_width() - 2 * UI_LABEL_X
+    rng_w = rng_font.size("0" * RNG_DIGITS)[0] + 2 * UI_STATS_CELL_PAD_X
+    stat_w = (table_w - rng_w) // _NUM_STAT_CELLS
+    return table_left, table_w, stat_w
+
 
 def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_folds, rng_number,
                metallicity=0.0, rng_flash=0.0):
@@ -482,11 +497,7 @@ def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_fol
     row_h = rng_font.get_height() + 2 * UI_STATS_CELL_PAD_Y
     row_top = screen.get_height() - UI_STATS_BOTTOM_MARGIN - row_h
     row_bottom = row_top + row_h
-    table_left = UI_LABEL_X
-    table_w = screen.get_width() - 2 * UI_LABEL_X
-
-    rng_w = rng_font.size("0" * RNG_DIGITS)[0] + 2 * UI_STATS_CELL_PAD_X
-    stat_w = (table_w - rng_w) // len(stat_cells)
+    table_left, table_w, stat_w = _stats_columns(screen)
 
     x = table_left
     for text in stat_cells:
@@ -516,9 +527,33 @@ def draw_ui(screen, font, current_year, zoom=1.0):
 TICKER_PANEL_RECT = None
 
 
+def _ticker_layout(screen):
+    """Panel geometry shared by draw_ticker and the sim loop's scrollback clamp, so both agree
+    on how many lines actually fit. The panel spans from UI_TICKER_TOP_MARGIN down to the
+    stats row (full screen height, so the line count follows the window size instead of a
+    fixed cap) but only as wide as the first two stat columns (FPS, YEAR) — wider ate most of
+    the screen's scroll-wheel zoom area since a wheel tick over the panel scrolls the log
+    instead of zooming."""
+    font, rng_font = _get_stats_fonts()
+    stats_row_h = rng_font.get_height() + 2 * UI_STATS_CELL_PAD_Y
+    stats_row_top = screen.get_height() - UI_STATS_BOTTOM_MARGIN - stats_row_h
+    line_h = font.get_height() + 2
+    panel_top = UI_TICKER_TOP_MARGIN
+    panel_h = max(line_h, stats_row_top - panel_top)
+    max_lines = max(1, (panel_h - 2 * UI_STATS_CELL_PAD_Y) // line_h)
+    table_left, table_w, stat_w = _stats_columns(screen)
+    panel_w = 2 * stat_w
+    return panel_top, panel_h, line_h, stats_row_top, max_lines, table_left, panel_w
+
+
+def ticker_visible_lines(screen):
+    return _ticker_layout(screen)[4]
+
+
 def draw_ticker(screen, ticker, offset=0):
-    """Event readout row: a single full-width cell spanning the table, sitting directly on
-    top of the stats row. Events stack inside it as a live feed — newest at the bottom,
+    """Event readout panel: sits above the stats row, as wide as its first two columns
+    (FPS, YEAR) rather than the full table, so it doesn't swallow the scroll-wheel zoom area
+    everywhere else on screen. Events stack inside it as a live feed — newest at the bottom,
     fading out with age. Each entry is a [text, age, count] triple maintained by the sim
     loop; repeats within a beat are coalesced there, so a line appears once no matter how
     many identical events fired (the count is tracked but not displayed).
@@ -527,20 +562,14 @@ def draw_ticker(screen, ticker, offset=0):
     far back from the newest, at full brightness so old history stays readable."""
     global TICKER_PANEL_RECT
     font, rng_font = _get_stats_fonts()
-    stats_row_h = rng_font.get_height() + 2 * UI_STATS_CELL_PAD_Y
-    stats_row_top = screen.get_height() - UI_STATS_BOTTOM_MARGIN - stats_row_h
-    line_h = font.get_height() + 2
-    panel_h = UI_TICKER_MAX_LINES * line_h + 2 * UI_STATS_CELL_PAD_Y
-    panel_top = stats_row_top - panel_h
-    table_left = UI_LABEL_X
-    table_w = screen.get_width() - 2 * UI_LABEL_X
-    TICKER_PANEL_RECT = pygame.Rect(table_left, panel_top, table_w, panel_h)
+    panel_top, panel_h, line_h, stats_row_top, max_lines, table_left, panel_w = _ticker_layout(screen)
+    TICKER_PANEL_RECT = pygame.Rect(table_left, panel_top, panel_w, panel_h)
 
     if offset > 0:
         end = len(ticker) - offset
-        lines = [(text, 0.0, count) for text, _, count in ticker[max(0, end - UI_TICKER_MAX_LINES):end]]
+        lines = [(text, 0.0, count) for text, _, count in ticker[max(0, end - max_lines):end]]
     else:
-        lines = [e for e in ticker if e[1] < UI_TICKER_LIFETIME][-UI_TICKER_MAX_LINES:]
+        lines = [e for e in ticker if e[1] < UI_TICKER_LIFETIME][-max_lines:]
 
     # No border: the feed floats above the stats table (TICKER_PANEL_RECT still marks the
     # area so the mouse wheel scrolls the log when hovering here).
@@ -589,58 +618,3 @@ def draw_elements(screen, present_elements):
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                            rect.centery - surf.get_height() // 2))
         x -= UI_ELEMENTS_BLOCK_SIZE + UI_ELEMENTS_BLOCK_GAP
-
-
-# ── Legend (toggled with [L]) ───────────────────────────────────────────────────────────────
-
-_legend_font = None
-
-def _get_legend_font():
-    global _legend_font
-    if _legend_font is None:
-        _legend_font = pygame.font.SysFont(UI_STATS_FONT, UI_LEGEND_FONT_SIZE)
-    return _legend_font
-
-
-# (swatch color, label) rows; None color = section header.
-_LEGEND_ROWS = [
-    (None, "ENTITIES"),
-    (PROTOSTAR_LOW_COLOR, "Red dwarf — cool, almost immortal"),
-    (PROTOSTAR_MEDIUM_COLOR, "Sun-like star"),
-    (PROTOSTAR_HIGH_COLOR, "Blue giant — lives fast, dies violently"),
-    (WHITE_DWARF_COLOR, "White dwarf — cooling stellar core"),
-    (NEUTRON_STAR_COLOR, "Pulsar — spinning neutron star"),
-    (NEUTRON_STAR_DEAD_COLOR, "Dead pulsar — past the death line"),
-    (MAGNETAR_COLOR_A, "Magnetar — extreme magnetic field"),
-    (BLACK_HOLE_BORDER_COLOR, "Black hole — event horizon ring"),
-    (BARRIER_COLOR, "Barrier — the edge of a universe"),
-    (None, "ELEMENTS (cloud colors)"),
-] + list(zip(MOLECULAR_CLOUD_START_COLORS, ELEMENT_NAMES))
-
-
-def draw_legend(screen):
-    """Key to every entity and element color, drawn as a translucent panel on the right."""
-    font = _get_legend_font()
-    rendered = []
-    max_w = 0
-    for color, label in _LEGEND_ROWS:
-        surf = font.render(label, True,
-                           UI_LEGEND_HEADER_COLOR if color is None else UI_LEGEND_TEXT_COLOR)
-        rendered.append((color, surf))
-        w = surf.get_width() + (UI_LEGEND_SWATCH + 8 if color is not None else 0)
-        max_w = max(max_w, w)
-
-    panel_w = max_w + 2 * UI_LEGEND_PAD
-    panel_h = len(rendered) * UI_LEGEND_ROW_HEIGHT + 2 * UI_LEGEND_PAD
-    panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-    panel.fill(UI_LEGEND_BG)
-    y = UI_LEGEND_PAD
-    for color, surf in rendered:
-        x = UI_LEGEND_PAD
-        if color is not None:
-            sw_y = y + (UI_LEGEND_ROW_HEIGHT - UI_LEGEND_SWATCH) // 2
-            pygame.draw.rect(panel, color, (x, sw_y, UI_LEGEND_SWATCH, UI_LEGEND_SWATCH))
-            x += UI_LEGEND_SWATCH + 8
-        panel.blit(surf, (x, y + (UI_LEGEND_ROW_HEIGHT - surf.get_height()) // 2))
-        y += UI_LEGEND_ROW_HEIGHT
-    screen.blit(panel, (screen.get_width() - panel_w - UI_LEGEND_MARGIN, UI_LEGEND_MARGIN))

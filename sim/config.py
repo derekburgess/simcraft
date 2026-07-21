@@ -24,28 +24,19 @@ UI_ZOOM_Y_OFFSET = 140          # Y offset from bottom of screen for the zoom la
 UI_EXIT_Y_OFFSET = 110          # Y offset from bottom of screen for the exit/quit label.
 UI_TEXT_Y_OFFSET = 40           # Y offset from bottom of screen for the year counter display.
 
-# ── Event ticker (readout row of the stats table, drawn directly above the stats row) ──
+# ── Event ticker (readout panel above the stats row, toggled with [L]) ──
 # Styling (font, colors, padding) comes from the UI_STATS_* constants above so the two rows
-# read as one table.
-UI_TICKER_MAX_LINES = 3         # Lines the readout cell holds (fixed height).
+# read as one table. The panel spans from UI_TICKER_TOP_MARGIN down to the stats row, so how
+# many lines actually fit is computed from screen height, not fixed.
+UI_TICKER_TOP_MARGIN = 24       # Gap (pixels) between the top of the screen and the panel.
 UI_TICKER_LIFETIME = 7.0        # Seconds an event entry stays visible in the LIVE view before it fades out fully.
-UI_TICKER_HISTORY = 60          # Entries kept for mouse-wheel scrollback (each may coalesce many events). Scrolled-back entries show at full brightness regardless of age.
+UI_TICKER_HISTORY = 200         # Entries kept for mouse-wheel scrollback (each may coalesce many events). Scrolled-back entries show at full brightness regardless of age.
 
 # ── Element inventory row (one block per element currently present, drawn above the ticker) ──
 UI_ELEMENTS_FONT_SIZE = 11      # Point size for the element symbol drawn on each block.
 UI_ELEMENTS_BLOCK_SIZE = 20     # Side length (pixels) of each element color block (square).
 UI_ELEMENTS_BLOCK_GAP = 3       # Horizontal gap (pixels) between adjacent blocks.
 UI_ELEMENTS_MARGIN_BOTTOM = 6   # Gap (pixels) between the block row and the ticker panel above it.
-
-# ── Legend (entity + element key, toggled with [L]) ──
-UI_LEGEND_FONT_SIZE = 13        # Point size for legend text.
-UI_LEGEND_MARGIN = 24           # Gap (pixels) between the legend block and the screen edges.
-UI_LEGEND_PAD = 10              # Inner padding (pixels) of the legend panel.
-UI_LEGEND_ROW_HEIGHT = 17       # Vertical spacing (pixels) between legend rows.
-UI_LEGEND_SWATCH = 10           # Side length (pixels) of the color swatch squares.
-UI_LEGEND_BG = (0, 14, 28, 215)  # RGBA panel background (slightly lighter than space, mostly opaque).
-UI_LEGEND_TEXT_COLOR = (150, 170, 220)  # Legend text color.
-UI_LEGEND_HEADER_COLOR = (110, 110, 245)  # Legend section-header color.
 
 # ── Zoom ──
 ZOOM_MIN = 0.5                 # Minimum zoom level (zoomed out). Lower = can see more.

@@ -9,7 +9,7 @@ import pygame
 from sim.config import *
 from sim import physics
 from sim import render
-from sim.render import WorldRenderer, draw_ui, draw_stats, draw_ticker, draw_legend, draw_elements
+from sim.render import WorldRenderer, draw_ui, draw_stats, draw_ticker, draw_elements
 from sim.rng import generate, MIN as RNG_MIN, MAX as RNG_MAX
 
 
@@ -49,7 +49,8 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
     cuts. The cursor's world point is computed against the CURRENT (displayed) view — the
     thing the user is actually pointing at."""
     running = True
-    toggle_legend = False
+    toggle_ticker = False
+    toggle_barrier = False
     ticker_scroll = 0
     copy_rng = False
 
@@ -57,7 +58,9 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_q):
             running = False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_l:
-            toggle_legend = True
+            toggle_ticker = True
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            toggle_barrier = True
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
             pygame.display.toggle_fullscreen()
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -80,7 +83,7 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
                 target_center_y = world_y
 
     return (running, target_zoom, target_center_x, target_center_y,
-            toggle_legend, ticker_scroll, copy_rng)
+            toggle_ticker, toggle_barrier, ticker_scroll, copy_rng)
 
 
 def run_simulation(screen, font, state):
@@ -97,7 +100,8 @@ def run_simulation(screen, font, state):
         target_center_x = view_center_x
         target_center_y = view_center_y
         renderer = WorldRenderer()
-        show_legend = False
+        show_ticker = True
+        show_barrier = True
         ticker = []  # [text, age, count] event lines, newest last (UI_TICKER_HISTORY kept for scrollback)
         ticker_offset = 0  # 0 = live feed; >0 = scrolled that many entries back
         rng_number = None
@@ -110,7 +114,7 @@ def run_simulation(screen, font, state):
             last_frame_time = current_time
 
             (running, target_zoom, target_center_x, target_center_y,
-             toggle_legend, ticker_scroll, copy_rng) = handle_input(
+             toggle_ticker, toggle_barrier, ticker_scroll, copy_rng) = handle_input(
                 zoom, view_center_x, view_center_y, target_zoom, target_center_x, target_center_y)
             if not running:
                 break
@@ -125,8 +129,14 @@ def run_simulation(screen, font, state):
                 zoom = target_zoom
             if abs(view_center_x - target_center_x) < 0.1 and abs(view_center_y - target_center_y) < 0.1:
                 view_center_x, view_center_y = target_center_x, target_center_y
-            if toggle_legend:
-                show_legend = not show_legend
+            if toggle_ticker:
+                show_ticker = not show_ticker
+                if not show_ticker:
+                    # Otherwise the panel's last rect lingers and keeps eating scroll-wheel
+                    # zoom events over where it used to be, even though nothing is drawn there.
+                    render.TICKER_PANEL_RECT = None
+            if toggle_barrier:
+                show_barrier = not show_barrier
             if copy_rng and rng_number is not None:
                 if copy_to_clipboard(str(rng_number)):
                     rng_flash = 1.0
@@ -171,7 +181,7 @@ def run_simulation(screen, font, state):
                 # style): new arrivals push the anchor back, trims from the front pull it in.
                 ticker_offset += appended - trimmed
             ticker_offset = max(0, min(ticker_offset + ticker_scroll,
-                                       max(0, len(ticker) - UI_TICKER_MAX_LINES)))
+                                       max(0, len(ticker) - render.ticker_visible_lines(screen))))
             rng_flash = max(0.0, rng_flash - 2.0 * delta_time)
 
             # Fold this frame's trajectory into the entropy pool: OS timing jitter plus
@@ -195,7 +205,7 @@ def run_simulation(screen, font, state):
             else:
                 heat_death_timer = 0.0
 
-            renderer.render(screen, state, zoom, view_center_x, view_center_y)
+            renderer.render(screen, state, zoom, view_center_x, view_center_y, show_barrier)
 
             # Fresh RNG output every frame, drawn from the running entropy pool
             # (which folds the live state continuously — no full re-serialize here).
@@ -206,12 +216,11 @@ def run_simulation(screen, font, state):
                 rng_number = None
 
             draw_elements(screen, state.present_elements())
-            draw_ticker(screen, ticker, ticker_offset)
+            if show_ticker:
+                draw_ticker(screen, ticker, ticker_offset)
             draw_stats(screen, clock.get_fps(), current_year, len(state.universes),
                        state.entity_count(), state.entropy_pool.folds, rng_number,
                        state.mean_metallicity(), rng_flash)
-            if show_legend:
-                draw_legend(screen)
 
             #draw_ui(screen, font, current_year, zoom)
 
