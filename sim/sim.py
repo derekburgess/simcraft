@@ -221,7 +221,7 @@ def run_simulation(screen, font, state):
             if show_ticker:
                 draw_ticker(screen, ticker)
             draw_stats(screen, clock.get_fps(), current_year, len(state.universes),
-                       state.entity_count(), state.entropy_pool.folds, rng_number,
+                       state.entity_count(), rng_number,
                        state.mean_metallicity(), rng_flash)
 
             if show_hotkeys:

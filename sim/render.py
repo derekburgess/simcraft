@@ -466,8 +466,8 @@ def _get_stats_fonts():
 # Hit-test rect for the RNG cell, refreshed each draw — clicking it copies the number.
 RNG_CELL_RECT = None
 
-# FPS, YEAR, UNIVERSES, ENTITIES, METALLICITY, SALT — kept in sync with draw_stats's stat_cells.
-_NUM_STAT_CELLS = 6
+# FPS, YEAR, UNIVERSES, ENTITIES, METALLICITY — kept in sync with draw_stats's stat_cells.
+_NUM_STAT_CELLS = 5
 
 
 def _stats_columns(screen):
@@ -481,14 +481,13 @@ def _stats_columns(screen):
     return table_left, table_w, stat_w
 
 
-def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_folds, rng_number,
+def draw_stats(screen, fps, current_year, universe_count, entity_count, rng_number,
                metallicity=0.0, rng_flash=0.0):
     """Full-width single-row table along the bottom of the screen, bordered, with
     UI_LABEL_X margins at the sides. The RNG output is the final cell in a larger
     font, sized to its 20-digit content; the leftover width is split evenly among
-    the stat cells so the columns don't jitter as values change. SALT is the
-    entropy-pool fold count feeding the RNG output beside it. Z is the mean
-    metallicity — how chemically aged the multiverse is (0 = pristine Big-Bang gas).
+    the stat cells so the columns don't jitter as values change. METALLICITY (Z) is
+    how chemically aged the multiverse is (0 = pristine Big-Bang gas).
     `rng_flash` (1→0) flashes the RNG cell white as copied-to-clipboard feedback."""
     global RNG_CELL_RECT
     font, rng_font = _get_stats_fonts()
@@ -497,8 +496,7 @@ def draw_stats(screen, fps, current_year, universe_count, entity_count, salt_fol
         f"YEAR: {format_years(current_year)}",
         f"UNIVERSES: {universe_count}",
         f"ENTITIES: {entity_count}",
-        f"METALLICITY: {metallicity:.3f}",
-        f"SALT: {salt_folds:,}",
+        f"METALLICITY (Z): {metallicity:.3f}",
     ]
     rng_text = f"{rng_number}" if rng_number is not None else "..."
 
