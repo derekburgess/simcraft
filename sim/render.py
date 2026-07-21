@@ -387,6 +387,13 @@ class WorldRenderer:
             self.h = max(self.h, needed_h)
             self.world_surface = pygame.Surface((self.w, self.h))
 
+        # view_w/h can exceed the world surface when the window is wide enough (or zoomed out
+        # far enough) that screen_w/zoom + screen_w blows past MULTIVERSE_RENDER_MAX — needed_w
+        # then clamps below view_w, and an unclamped view_w here would build a visible_rect
+        # wider than the surface, which subsurface() below rejects.
+        view_w = min(view_w, self.w)
+        view_h = min(view_h, self.h)
+
         wox = (self.w - screen_w) // 2
         woy = (self.h - screen_h) // 2
         ws_cx = wox + view_center_x
@@ -443,8 +450,6 @@ def draw_static_key(screen, font, zoom):
     screen.blit(font.render(zoom_text, True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
     snapshot_pos = (UI_LABEL_X, screen_h - UI_EXIT_Y_OFFSET)
     screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-    snapshot_pos = (UI_LABEL_X, screen_h - UI_EXIT_Y_OFFSET - 30)
-    screen.blit(font.render('[F11] FULLSCREEN', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
 
 
 _stats_font = None
@@ -525,18 +530,9 @@ def draw_ui(screen, font, current_year, zoom=1.0):
 
 # ── Event ticker (readout row of the stats table) ───────────────────────────────────────────
 
-# Hit-test rect for the readout panel, refreshed each draw. The input handler uses it to
-# decide whether a mouse-wheel tick scrolls the log (cursor over the panel) or zooms.
-TICKER_PANEL_RECT = None
-
-
 def _ticker_layout(screen):
-    """Panel geometry shared by draw_ticker and the sim loop's scrollback clamp, so both agree
-    on how many lines actually fit. The panel spans from UI_TICKER_TOP_MARGIN down to the
-    stats row (full screen height, so the line count follows the window size instead of a
-    fixed cap) but only as wide as the first two stat columns (FPS, YEAR) — wider ate most of
-    the screen's scroll-wheel zoom area since a wheel tick over the panel scrolls the log
-    instead of zooming."""
+    """Panel geometry for draw_ticker: spans from UI_TICKER_TOP_MARGIN down to the stats row,
+    so the number of lines that fit follows the window height."""
     font, rng_font = _get_stats_fonts()
     stats_row_h = rng_font.get_height() + 2 * UI_STATS_CELL_PAD_Y
     stats_row_top = screen.get_height() - UI_STATS_BOTTOM_MARGIN - stats_row_h
@@ -544,38 +540,19 @@ def _ticker_layout(screen):
     panel_top = UI_TICKER_TOP_MARGIN
     panel_h = max(line_h, stats_row_top - panel_top)
     max_lines = max(1, (panel_h - 2 * UI_STATS_CELL_PAD_Y) // line_h)
-    table_left, table_w, stat_w = _stats_columns(screen)
-    panel_w = 2 * stat_w
-    return panel_top, panel_h, line_h, stats_row_top, max_lines, table_left, panel_w
+    return line_h, stats_row_top, max_lines, UI_LABEL_X
 
 
-def ticker_visible_lines(screen):
-    return _ticker_layout(screen)[4]
-
-
-def draw_ticker(screen, ticker, offset=0):
-    """Event readout panel: sits above the stats row, as wide as its first two columns
-    (FPS, YEAR) rather than the full table, so it doesn't swallow the scroll-wheel zoom area
-    everywhere else on screen. Events stack inside it as a live feed — newest at the bottom,
-    fading out with age. Each entry is a [text, age, count] triple maintained by the sim
-    loop; repeats within a beat are coalesced there, so a line appears once no matter how
-    many identical events fired (the count is tracked but not displayed).
-
-    `offset` scrolls back through history: 0 = live (fading feed); >0 shows entries that
-    far back from the newest, at full brightness so old history stays readable."""
-    global TICKER_PANEL_RECT
+def draw_ticker(screen, ticker):
+    """Event readout panel: a live feed of the most recent events, newest at the bottom,
+    fading out with age — once an entry fades it's gone for good, no scrollback. Each entry is
+    a [text, age, count] triple maintained by the sim loop; repeats within a beat are coalesced
+    there, so a line appears once no matter how many identical events fired (the count is
+    tracked but not displayed)."""
     font, rng_font = _get_stats_fonts()
-    panel_top, panel_h, line_h, stats_row_top, max_lines, table_left, panel_w = _ticker_layout(screen)
-    TICKER_PANEL_RECT = pygame.Rect(table_left, panel_top, panel_w, panel_h)
+    line_h, stats_row_top, max_lines, table_left = _ticker_layout(screen)
+    lines = [e for e in ticker if e[1] < UI_TICKER_LIFETIME][-max_lines:]
 
-    if offset > 0:
-        end = len(ticker) - offset
-        lines = [(text, 0.0, count) for text, _, count in ticker[max(0, end - max_lines):end]]
-    else:
-        lines = [e for e in ticker if e[1] < UI_TICKER_LIFETIME][-max_lines:]
-
-    # No border: the feed floats above the stats table (TICKER_PANEL_RECT still marks the
-    # area so the mouse wheel scrolls the log when hovering here).
     y = stats_row_top - UI_STATS_CELL_PAD_Y - line_h * len(lines)  # stack anchored to the bottom
     for text, age, count in lines:
         fade = max(0.0, 1.0 - age / UI_TICKER_LIFETIME)
@@ -636,14 +613,14 @@ def _get_hotkeys_font():
 
 # (key label, description) rows.
 _HOTKEY_ROWS = [
+    ("H", "Toggle this help"),
+    ("Q", "Quit the simulation"),
+    ("R", "Reset the simulation"),
+    ("L", "Toggle event log"),
     ("B", "Toggle universe barriers"),
     ("G", "Toggle gravitational waves"),
-    ("L", "Toggle event log"),
-    ("H", "Toggle this help"),
-    ("F11", "Toggle fullscreen"),
-    ("SCROLL", "Zoom, or scroll the log when hovering it"),
-    ("CLICK", "Copy the RNG number (on the RNG cell)"),
-    ("Q", "Quit"),
+    ("SCROLL", "Zoom in and out"),
+    ("CLICK", "Copy RNG output"),
 ]
 
 

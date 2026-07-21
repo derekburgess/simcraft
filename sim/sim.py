@@ -53,7 +53,7 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
     toggle_barrier = False
     toggle_hotkeys = False
     toggle_gravity_waves = False
-    ticker_scroll = 0
+    reset_requested = False
     copy_rng = False
 
     for event in pygame.event.get():
@@ -67,17 +67,13 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
             toggle_hotkeys = True
         if event.type == pygame.KEYDOWN and event.key == pygame.K_g:
             toggle_gravity_waves = True
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
-            pygame.display.toggle_fullscreen()
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+            reset_requested = True
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if render.RNG_CELL_RECT is not None and render.RNG_CELL_RECT.collidepoint(event.pos):
                 copy_rng = True
         if event.type == pygame.MOUSEWHEEL:
             mouse_sx, mouse_sy = pygame.mouse.get_pos()
-            # Over the event readout, the wheel scrolls the log; anywhere else it zooms.
-            if render.TICKER_PANEL_RECT is not None and render.TICKER_PANEL_RECT.collidepoint((mouse_sx, mouse_sy)):
-                ticker_scroll += event.y
-                continue
             world_x, world_y = screen_to_world(mouse_sx, mouse_sy, zoom, view_center_x, view_center_y)
             old_target = target_zoom
             target_zoom = max(ZOOM_MIN, min(ZOOM_MAX, target_zoom * ZOOM_STEP_FACTOR ** event.y))
@@ -89,7 +85,8 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
                 target_center_y = world_y
 
     return (running, target_zoom, target_center_x, target_center_y,
-            toggle_ticker, toggle_barrier, toggle_hotkeys, toggle_gravity_waves, ticker_scroll, copy_rng)
+            toggle_ticker, toggle_barrier, toggle_hotkeys, toggle_gravity_waves,
+            reset_requested, copy_rng)
 
 
 def run_simulation(screen, font, state):
@@ -111,8 +108,7 @@ def run_simulation(screen, font, state):
         show_gravity_waves = True
         show_hotkeys = True
         hotkeys_age = 0.0  # seconds since last shown; drives the fade in hotkeys_alpha()
-        ticker = []  # [text, age, count] event lines, newest last (UI_TICKER_HISTORY kept for scrollback)
-        ticker_offset = 0  # 0 = live feed; >0 = scrolled that many entries back
+        ticker = []  # [text, age, count] event lines, newest last; dropped once faded (no scrollback)
         rng_number = None
         rng_flash = 0.0  # copied-to-clipboard flash on the RNG cell, 1 → 0
 
@@ -124,7 +120,7 @@ def run_simulation(screen, font, state):
 
             (running, target_zoom, target_center_x, target_center_y,
              toggle_ticker, toggle_barrier, toggle_hotkeys, toggle_gravity_waves,
-             ticker_scroll, copy_rng) = handle_input(
+             reset_requested, copy_rng) = handle_input(
                 zoom, view_center_x, view_center_y, target_zoom, target_center_x, target_center_y)
             if not running:
                 break
@@ -141,10 +137,6 @@ def run_simulation(screen, font, state):
                 view_center_x, view_center_y = target_center_x, target_center_y
             if toggle_ticker:
                 show_ticker = not show_ticker
-                if not show_ticker:
-                    # Otherwise the panel's last rect lingers and keeps eating scroll-wheel
-                    # zoom events over where it used to be, even though nothing is drawn there.
-                    render.TICKER_PANEL_RECT = None
             if toggle_barrier:
                 show_barrier = not show_barrier
             if toggle_gravity_waves:
@@ -178,47 +170,41 @@ def run_simulation(screen, font, state):
 
             # Drain each universe's astrophysical events into the HUD ticker; identical
             # events landing within a beat coalesce into one line (shown without a count).
-            # Expired entries are kept (up to UI_TICKER_HISTORY) so the wheel can scroll back.
-            appended = 0
+            # Entries are dropped once they've fully faded — no scrollback to preserve them for.
             for universe in state.universes:
                 for text in universe.event_log:
                     if ticker and ticker[-1][0] == text and ticker[-1][1] < 1.0:
                         ticker[-1][2] += 1
                     else:
                         ticker.append([text, 0.0, 1])
-                        appended += 1
                 universe.event_log.clear()
             for entry in ticker:
                 entry[1] += delta_time
-            trimmed = max(0, len(ticker) - UI_TICKER_HISTORY)
-            ticker = ticker[-UI_TICKER_HISTORY:]
-            if ticker_offset > 0:
-                # Keep the same entries in view while reading history (terminal-scrollback
-                # style): new arrivals push the anchor back, trims from the front pull it in.
-                ticker_offset += appended - trimmed
-            ticker_offset = max(0, min(ticker_offset + ticker_scroll,
-                                       max(0, len(ticker) - render.ticker_visible_lines(screen))))
+            ticker = [e for e in ticker if e[1] < UI_TICKER_LIFETIME]
             rng_flash = max(0.0, rng_flash - 2.0 * delta_time)
 
             # Fold this frame's trajectory into the entropy pool: OS timing jitter plus
             # chaotic observables (full state every FULL_FOLD_INTERVAL frames).
             state.entropy_pool.fold_frame(state, current_time, clock.get_rawtime())
 
-            # Heat death of the whole multiverse: every universe is gone. Start fresh.
+            # Heat death of the whole multiverse (every universe gone) lingers for
+            # HEAT_DEATH_LINGER_DURATION before resetting, so the empty scene isn't a
+            # jump-cut; a manual [R] reset fires the same reset immediately.
             if not state.universes or state.entity_count() == 0 or state.total_mass() <= 0:
                 heat_death_timer += delta_time
-                if heat_death_timer >= HEAT_DEATH_LINGER_DURATION:
-                    print(f"Reset at year {current_year}")
-                    entropy_pool = state.entropy_pool
-                    entropy_pool.fold(b'heat-death-reset')
-                    state = physics.initialize_state()
-                    state.entropy_pool = entropy_pool  # the pool remembers past universes
-                    current_year = 0.0
-                    zoom = target_zoom = 1.0
-                    view_center_x = target_center_x = SCREEN_WIDTH / 2.0
-                    view_center_y = target_center_y = SCREEN_HEIGHT / 2.0
-                    heat_death_timer = 0.0
             else:
+                heat_death_timer = 0.0
+            if reset_requested or heat_death_timer >= HEAT_DEATH_LINGER_DURATION:
+                print(f"Manual reset at year {current_year}" if reset_requested
+                      else f"Reset at year {current_year}")
+                entropy_pool = state.entropy_pool
+                entropy_pool.fold(b'manual-reset' if reset_requested else b'heat-death-reset')
+                state = physics.initialize_state()
+                state.entropy_pool = entropy_pool  # the pool remembers past universes
+                current_year = 0.0
+                zoom = target_zoom = 1.0
+                view_center_x = target_center_x = SCREEN_WIDTH / 2.0
+                view_center_y = target_center_y = SCREEN_HEIGHT / 2.0
                 heat_death_timer = 0.0
 
             renderer.render(screen, state, zoom, view_center_x, view_center_y, show_barrier, show_gravity_waves)
@@ -233,7 +219,7 @@ def run_simulation(screen, font, state):
 
             draw_elements(screen, state.present_elements())
             if show_ticker:
-                draw_ticker(screen, ticker, ticker_offset)
+                draw_ticker(screen, ticker)
             draw_stats(screen, clock.get_fps(), current_year, len(state.universes),
                        state.entity_count(), state.entropy_pool.folds, rng_number,
                        state.mean_metallicity(), rng_flash)

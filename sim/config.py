@@ -29,8 +29,7 @@ UI_TEXT_Y_OFFSET = 40           # Y offset from bottom of screen for the year co
 # read as one table. The panel spans from UI_TICKER_TOP_MARGIN down to the stats row, so how
 # many lines actually fit is computed from screen height, not fixed.
 UI_TICKER_TOP_MARGIN = 24       # Gap (pixels) between the top of the screen and the panel.
-UI_TICKER_LIFETIME = 7.0        # Seconds an event entry stays visible in the LIVE view before it fades out fully.
-UI_TICKER_HISTORY = 200         # Entries kept for mouse-wheel scrollback (each may coalesce many events). Scrolled-back entries show at full brightness regardless of age.
+UI_TICKER_LIFETIME = 7.0        # Seconds an event entry stays visible before it fades out and is dropped for good (no scrollback).
 
 # ── Element inventory row (one block per element currently present, drawn above the ticker) ──
 UI_ELEMENTS_FONT_SIZE = 11      # Point size for the element symbol drawn on each block.
