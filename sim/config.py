@@ -335,7 +335,7 @@ BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps hole
 # ── Multiverse (each black-hole birth opens a new universe outside the current ones) ──
 UNIVERSE_MAX_COUNT = max(2, os.cpu_count() or 4)  # Cap coexisting universes at the machine's core count, so the cap scales with the hardware. Universes are stepped serially.
 BLACK_HOLE_RIP_MASS_FACTOR = 0.9  # Fraction of max mass a hole must reach to "rip" open a new universe. <1 because decay keeps holes hovering just under the hard cap.
-UNIVERSE_RIP_TRANSFER_FRACTION = 0.4  # Fraction of the source universe's clouds pulled through into a newly ripped universe (instead of spawning fresh matter). Keeps total entity count bounded.
+UNIVERSE_RIP_TRANSFER_FRACTION = 0.5  # Fraction of the source universe's clouds pulled through into a newly ripped universe (instead of spawning fresh matter). Keeps total entity count bounded. Raised 0.4→0.5 with the 15k cloud cap: newborns start fuller, parents feel the rip harder.
 UNIVERSE_STREAM_FRACTION = 0.6  # After ripping, chance each cloud the hole accretes is streamed into its child universe (wormhole) instead of being consumed. 0 = one-time transfer only; 1 = everything it eats flows through.
 UNIVERSE_SPAWN_GAP = 4          # Minimum gap (pixels) between a newly spawned barrier and existing ones (measured to each barrier's local edge). Small = newborn universes bud right off their parent and the multiverse grows as a touching cluster.
 # Cosmological natural selection (Smolin): a ripped child inherits its parent's local physics
@@ -369,9 +369,9 @@ BLACK_HOLE_MIN_CAPTURE_RADIUS = 2      # Absolute floor (pixels) for the consume
 # straight infall into a rotating accretion disk. Rotation conserves speed (no energy is added),
 # so the swirl can't blow up. Direction follows the hole's spin (angular_momentum).
 BLACK_HOLE_SWIRL_RATE = 12.0           # Relaxation rate (per second) at which disk clouds are driven toward circular-orbit speed; fades to 0 at the swirl radius. Higher = stronger/faster swirl.
-BLACK_HOLE_SWIRL_RADIUS = 180         # Disk radius (pixels) at the reference mass below. Scales with hole mass, so a massive hole organizes/swirls entities from much farther out than a small one.
+BLACK_HOLE_SWIRL_RADIUS = 180         # Disk radius (pixels) at the reference mass below. Scales with sqrt(mass/reference): massive holes still reach farther, but young holes keep a readable disk — a newborn 42-mass hole reaches ~117px instead of the ~76px the old linear scaling gave.
 BLACK_HOLE_DISK_CIRCULARIZATION = 2.0  # Per-second damping of RADIAL motion inside the disk (viscous settling). This is what makes a disk look like a disk: swirl alone sets tangential speed but clouds still plunge through and get eaten in one pass; damping the radial component settles them into persistent orbits. Partial on purpose — the residual radial drift is the viscous accretion that keeps feeding the hole.
-BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equals BLACK_HOLE_SWIRL_RADIUS. A 2x-mass hole reaches 2x as far.
+BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equals BLACK_HOLE_SWIRL_RADIUS. A 2x-mass hole reaches sqrt(2) ≈ 1.4x as far.
 # Dynamical friction: a massive hole plowing through the cloud sea is gravitationally braked.
 # Modeled as strong extra velocity damping (per second) so holes act as near-stationary anchors
 # instead of being dragged along by accretion and bulk flows. 1.0 = no extra braking.
@@ -426,8 +426,8 @@ NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE  # Gravitational pull strength
 # and goes radio-quiet) instead of losing mass while active. Real neutron stars then persist
 # forever; the slow dead-phase decay below is an artistic-license concession that returns their
 # mass to the cloud cycle — without it, dead pulsars would permanently drain the universe.
-NEUTRON_STAR_SPINDOWN_RATE = 1.5  # Pulse period grows as PULSE_RATE * (1 + age * this). Higher = faster spin-down.
-NEUTRON_STAR_DEATH_LINE_PERIOD = 0.5  # Pulse period (seconds) at which the pulsar goes dark and quiet (~21s of life at the rates above).
+NEUTRON_STAR_SPINDOWN_RATE = 0.092  # Pulse period grows as PULSE_RATE * (1 + age * this). At 0.092 the period grows 0.4s -> 1.5s over ~30s, hitting the death line below.
+NEUTRON_STAR_DEATH_LINE_PERIOD = 1.5  # Pulse period (seconds) at which the pulsar goes dark and quiet (~30s of life at the rates above).
 NEUTRON_STAR_ACTIVE_DECAY_RATE = 0.05  # Mass lost per second while pulsing (rotational energy leaving as pulses — near zero).
 NEUTRON_STAR_DEAD_DECAY_RATE = 1.0  # Mass lost per second once dark (matter-cycle concession, see above).
 NEUTRON_STAR_DECAY_THRESHOLD = 0.8  # Mass at which a dead neutron star quietly dissipates into a few cold clouds.
@@ -437,13 +437,16 @@ NEUTRON_STAR_COLOR = (0, 120, 255)  # RGB color of the neutron star (cyan-blue).
 NEUTRON_STAR_JET_LENGTH = 2     # Visual length (pixels) of each polar jet segment.
 NEUTRON_STAR_JET_FLASH_LENGTH = 4  # Jet length (pixels) during the white flash window — the beam pulse stretching out.
 NEUTRON_STAR_JET_WIDTH = 1      # Line width (pixels) for drawing jets.
+NEUTRON_STAR_JET_WOBBLE = 20    # Degrees the polar beam line tilts off vertical, alternating sign on every pulse (tick-tock nutation; which side it starts on is random per star).
 NEUTRON_STAR_DEAD_COLOR = (70, 80, 100)  # Dim slate color of a pulsar that crossed the death line.
-NEUTRON_STAR_PULSE_RATE = 0.015  # Seconds between pulsar pulses. Lower = faster pulsing.
+NEUTRON_STAR_PULSE_RATE = 0.4   # Seconds between ring emissions at age 0 (spin-down stretches it). This is the real cadence: each emission is one ring AND one white flash (they are the same event), so rings sit RIPPLE_SPEED x period apart (~26px young, ~96px near death) and the star blinks at the same rhythm.
+NEUTRON_STAR_PULSE_TRAIN = 16   # Safety bound on concurrent rings per pulsar — NOT the cadence-setter (the period is). Must exceed travel_time/period for typical universes: a lower cap phase-locks into burst-then-pause cycles, because every ring lives exactly as long as its siblings, so the cap fills and releases in lockstep. (The pre-2026-07-22 one-ring gate was the extreme case: cadence was pure travel time.) 16 covers a young pulsar in a ~300px universe.
 NEUTRON_STAR_PULSE_STRENGTH = 7 # Force magnitude of each pulse ripple. Higher = stronger push on nearby entities.
-NEUTRON_STAR_PULSE_COLOR = (0, 140, 255, 90)  # RGBA color of the expanding pulse ring. Alpha kept low: rings overlap and stack additively during wave storms.
+NEUTRON_STAR_PULSE_COLOR = (0, 140, 255, 90)  # RGBA color of the expanding pulse ring. Alpha kept low so storms stay translucent; all rings paint one shared per-universe layer (crossings overwrite, not stack), with _crowd_dim scaling alpha down as ring count grows.
 PULSE_CROWD_REFERENCE = 3  # Number of coexisting wave rings (per universe) shown at full brightness; beyond it each ring's alpha scales by sqrt(reference/count) — loudness normalization, so a lone kilonova ring stays dramatic while a storm of twenty auto-quiets instead of stacking to glare.
 NEUTRON_STAR_PULSE_WIDTH = 2    # Line width (pixels) for drawing pulse rings.
 NEUTRON_STAR_RIPPLE_SPEED = 64  # How fast (pixels/sec) pulse ripples expand outward.
+NEUTRON_STAR_PULSE_RANGE = 100  # Max radius (pixels) a pulsar ripple travels before dissipating — pulsar waves are local; only black-hole merger pulses cross the whole universe. Also bounds shock-triggered star formation from pulsars to their neighborhood (mergers still shock universe-wide). Rings fade out over the last 30% of the range.
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripples exert force on entities.
 NEUTRON_STAR_PULSE_COLOR_DURATION = 0.1  # Seconds the neutron star flashes white after each pulse.
 
@@ -499,6 +502,7 @@ SHOCK_MERGE_CHANCE = 0.5       # Merge probability per frame for overlapping SHO
 
 # ── Pulse Rendering ──
 PULSE_RENDER_POINT_COUNT = 64   # Number of polygon vertices used to draw each pulse ring.
+PULSE_LOD_MIN_ZOOM = 0.5        # Below this zoom, wave rings are not drawn at all: a 2px ring line scales to under a pixel, so the cost (clipping + polygons at world scale) buys nothing visible. Raise to cull earlier, 0 to always draw.
 PULSE_RENDER_MARGIN = 2         # Pixel margin added around pulse bounding boxes when allocating draw surfaces.
 PULSE_BARRIER_CLIP_MARGIN = 4   # Pixels inside the barrier edge where pulse ring points are clipped.
 

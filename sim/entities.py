@@ -56,8 +56,10 @@ class BlackHole:
         # Event horizon: the radius at which matter is actually consumed. Smaller than the
         # drawn disk so clouds can skim the surface and slingshot away instead of being eaten.
         capture_radius = max(BLACK_HOLE_MIN_CAPTURE_RADIUS, self.border_radius * BLACK_HOLE_EVENT_HORIZON_FACTOR)
-        # Disk/influence radius scales with mass, so massive holes organize entities from much farther out.
-        swirl_radius = BLACK_HOLE_SWIRL_RADIUS * (self.mass / BLACK_HOLE_SWIRL_REFERENCE_MASS)
+        # Disk/influence radius scales with sqrt(mass): young holes still get a readable disk
+        # (a newborn 42-mass hole reaches ~65% of the reference radius, not 42%) while a
+        # mass-capped hole lands within a few percent of where the linear scaling put it.
+        swirl_radius = BLACK_HOLE_SWIRL_RADIUS * math.sqrt(self.mass / BLACK_HOLE_SWIRL_REFERENCE_MASS)
 
         for black_hole in universe.black_holes:
             if black_hole is not self and black_hole not in bh_to_remove:
@@ -273,6 +275,11 @@ class NeutronStar:
         self.active_pulses = []
         self.pulse_color_state = 0  # 0: normal color, 1: white during pulse
         self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION  # Duration of white color in seconds
+        # Nutation strobe: the upright jet cross tilts NEUTRON_STAR_JET_WOBBLE degrees off
+        # vertical, flipping sides on every flash — so the wobble rate rides the pulse
+        # cadence, slows with spin-down, and freezes at the death line.
+        self.jet_wobble_sign = 1.0 if random.random() < 0.5 else -1.0
+        self.jet_angle = self.jet_wobble_sign * math.radians(NEUTRON_STAR_JET_WOBBLE)
 
     def apply_gravity(self, universe, delta_time):
         clouds = universe.clouds
@@ -396,18 +403,23 @@ class NeutronStar:
                         black_hole.vx += (dx / distance) * force * delta_time * 0.2
                         black_hole.vy += (dy / distance) * force * delta_time * 0.2
 
-            if new_radius > float(ring.radii.max()):
+            # Pulsar ripples are local: they dissipate at PULSE_RANGE (or at the wall if the
+            # universe is smaller than that). Only BH merger pulses cross the whole universe.
+            if new_radius > float(ring.radii.max()) or new_radius > NEUTRON_STAR_PULSE_RANGE:
                 pulses_to_remove.append(i)
 
         for i in sorted(pulses_to_remove, reverse=True):
             if i < len(self.active_pulses):
                 self.active_pulses.pop(i)
 
-        if not self.is_dead and self.time_since_last_pulse >= self.pulse_rate and len(self.active_pulses) == 0:
+        if (not self.is_dead and self.time_since_last_pulse >= self.pulse_rate
+                and len(self.active_pulses) < NEUTRON_STAR_PULSE_TRAIN):
             self.active_pulses.append(0.0)
             self.time_since_last_pulse = 0
             self.pulse_color_state = 1  # Set to white during pulse
             self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION  # Reset duration
+            self.jet_wobble_sign = -self.jet_wobble_sign
+            self.jet_angle = self.jet_wobble_sign * math.radians(NEUTRON_STAR_JET_WOBBLE)
 
     def decay(self, delta_time):
         # Active pulsars barely lose mass (death comes from spin-down, not evaporation); dead

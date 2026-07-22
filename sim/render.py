@@ -237,27 +237,16 @@ def draw_clouds(screen, clouds, offset_x=0, offset_y=0):
 
 # ── Pulses / compact objects ────────────────────────────────────────────────────────────────
 
-def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_pts=PULSE_RENDER_POINT_COUNT, offset_x=0, offset_y=0):
-    """Vectorized over the ring points (the old per-point/per-pulse Python loops were a top
-    frame cost once many pulses coexist). Pulses are still applied in list order — each
-    point's clamp sequence is unchanged, so the geometry is the same math as the scalar loop."""
+def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, num_pts=PULSE_RENDER_POINT_COUNT, offset_x=0, offset_y=0):
+    """Ring polygon clipped against the barrier only. Waves superpose: rings pass through
+    each other unchanged (gravitational waves are linear — interference adds, it never
+    deflects a wavefront), so there is no ring-vs-ring pass. That pass was also the frame
+    cost that scaled quadratically with ring count once pulse trains made storms dense."""
     cx = ring.center[0] + offset_x
     cy = ring.center[1] + offset_y
     theta = (2 * math.pi / num_pts) * np.arange(num_pts)
     px = origin_x + pulse_radius * np.cos(theta)
     py = origin_y + pulse_radius * np.sin(theta)
-
-    for ox, oy, o_radius in all_pulses:
-        if abs(ox - origin_x) < 0.1 and abs(oy - origin_y) < 0.1:
-            continue
-        dx_op = px - ox
-        dy_op = py - oy
-        dist = np.hypot(dx_op, dy_op)
-        inside = (dist < o_radius) & (dist > 0)
-        if inside.any():
-            scale = o_radius / dist[inside]
-            px[inside] = ox + dx_op[inside] * scale
-            py[inside] = oy + dy_op[inside] * scale
 
     dxc = px - cx
     dyc = py - cy
@@ -342,7 +331,8 @@ def _crowd_dim(all_pulses):
     return math.sqrt(min(1.0, PULSE_CROWD_REFERENCE / max(1, len(all_pulses))))
 
 
-def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0, show_gravity_waves=True):
+def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0,
+                      pulse_layer=None, layer_x=0, layer_y=0):
     draw_x = int(ns.x + offset_x)
     draw_y = int(ns.y + offset_y)
     pulse_ox = ns.x + offset_x
@@ -353,8 +343,14 @@ def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0, show
         flashing = ns.pulse_color_state == 1
         jet_color = (255, 255, 255) if flashing else NEUTRON_STAR_COLOR
         jet_length = NEUTRON_STAR_JET_FLASH_LENGTH if flashing else NEUTRON_STAR_JET_LENGTH
-        pygame.draw.line(screen, jet_color, (draw_x, draw_y - jet_length),
-                          (draw_x, draw_y + jet_length), NEUTRON_STAR_JET_WIDTH)
+        # Single polar beam line through the center at the star's wobble tilt (flipped once
+        # per flash in update_pulse), so the beam rocks side to side as the pulsar spins.
+        ux = math.sin(ns.jet_angle)
+        uy = -math.cos(ns.jet_angle)
+        pygame.draw.line(screen, jet_color,
+                         (draw_x - ux * jet_length, draw_y - uy * jet_length),
+                         (draw_x + ux * jet_length, draw_y + uy * jet_length),
+                         NEUTRON_STAR_JET_WIDTH)
 
     # pygame.draw.circle at radius 1 rasterizes as a 2px blob offset from (draw_x, draw_y),
     # which would visibly throw off the jet's alignment through the core — a symmetric square
@@ -362,27 +358,24 @@ def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0, show
     core_size = ns.radius * 2 + 1
     pygame.draw.rect(screen, current_color, (draw_x - ns.radius, draw_y - ns.radius, core_size, core_size))
 
-    if not show_gravity_waves:
+    if pulse_layer is None:  # gravity waves hidden this frame
+        return
+    base_alpha = NEUTRON_STAR_PULSE_COLOR[3] * _crowd_dim(all_pulses)
+    if base_alpha < 1:
         return
     for pulse_radius in ns.active_pulses:
         if pulse_radius <= 1:
             continue
-        alpha = max(0, min(255, int(NEUTRON_STAR_PULSE_COLOR[3] * _crowd_dim(all_pulses))))
+        # Dissipation: alpha ramps to zero over the last 30% of the ripple's range, so the
+        # ring melts away instead of popping out where physics removes it.
+        fade = min(1.0, (NEUTRON_STAR_PULSE_RANGE - pulse_radius) / (NEUTRON_STAR_PULSE_RANGE * 0.3))
+        alpha = max(0, min(255, int(base_alpha * fade)))
         if alpha == 0:
             continue
-        points = _clip_pulse_points(pulse_ox, pulse_oy, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
         color = (NEUTRON_STAR_PULSE_COLOR[0], NEUTRON_STAR_PULSE_COLOR[1], NEUTRON_STAR_PULSE_COLOR[2], alpha)
-        min_x = min(p[0] for p in points) - PULSE_RENDER_MARGIN
-        min_y = min(p[1] for p in points) - PULSE_RENDER_MARGIN
-        max_x = max(p[0] for p in points) + PULSE_RENDER_MARGIN
-        max_y = max(p[1] for p in points) + PULSE_RENDER_MARGIN
-        w = max_x - min_x
-        h = max_y - min_y
-        if w > 0 and h > 0:
-            pulse_surface = pygame.Surface((w, h), pygame.SRCALPHA)
-            local_points = [(p[0] - min_x, p[1] - min_y) for p in points]
-            pygame.draw.polygon(pulse_surface, color, local_points, NEUTRON_STAR_PULSE_WIDTH)
-            screen.blit(pulse_surface, (min_x, min_y))
+        points = _clip_pulse_points(pulse_ox, pulse_oy, pulse_radius, ring, offset_x=offset_x, offset_y=offset_y)
+        local_points = [(p[0] - layer_x, p[1] - layer_y) for p in points]
+        pygame.draw.polygon(pulse_layer, color, local_points, NEUTRON_STAR_PULSE_WIDTH)
 
 
 def draw_magnetar(screen, mag, offset_x=0, offset_y=0):
@@ -414,36 +407,40 @@ def draw_universe(screen, universe, offset_x=0, offset_y=0, show_barrier=True, s
     for pulse in universe.black_hole_pulses:
         all_pulses.append((pulse[0] + offset_x, pulse[1] + offset_y, pulse[2]))
 
-    if show_gravity_waves:
+    # All wave rings paint one shared per-universe alpha layer (blitted once at the end)
+    # instead of allocating a surface per ring — the per-ring churn was the top render cost
+    # in wave storms. Within the layer, polygon pixels overwrite rather than blend, so ring
+    # crossings no longer double-brighten; _crowd_dim owns storm loudness.
+    pulse_layer = None
+    layer_x = layer_y = 0
+    if show_gravity_waves and all_pulses:
+        reach = float(ring.radii.max()) + PULSE_RENDER_MARGIN
+        layer_x = int(ring.center[0] + offset_x - reach)
+        layer_y = int(ring.center[1] + offset_y - reach)
+        side = int(2 * reach) + 2
+        pulse_layer = pygame.Surface((side, side), pygame.SRCALPHA)
         for pulse in universe.black_hole_pulses:
             x, y, pulse_radius, consumed_mass = pulse
             if pulse_radius > 1:
-                draw_x = x + offset_x
-                draw_y = y + offset_y
                 pulse_width = max(2, int(consumed_mass / 20))
-                points = _clip_pulse_points(draw_x, draw_y, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
-                min_x = min(p[0] for p in points) - PULSE_RENDER_MARGIN
-                min_y = min(p[1] for p in points) - PULSE_RENDER_MARGIN
-                max_x = max(p[0] for p in points) + PULSE_RENDER_MARGIN
-                max_y = max(p[1] for p in points) + PULSE_RENDER_MARGIN
-                w = max_x - min_x
-                h = max_y - min_y
-                if w > 0 and h > 0:
-                    pulse_surface = pygame.Surface((w, h), pygame.SRCALPHA)
-                    local_points = [(p[0] - min_x, p[1] - min_y) for p in points]
-                    merge_color = (*BLACK_HOLE_MERGE_COLOR[:3],
-                                   int(BLACK_HOLE_MERGE_COLOR[3] * _crowd_dim(all_pulses)))
-                    pygame.draw.polygon(pulse_surface, merge_color, local_points, pulse_width)
-                    screen.blit(pulse_surface, (min_x, min_y))
+                points = _clip_pulse_points(x + offset_x, y + offset_y, pulse_radius, ring, offset_x=offset_x, offset_y=offset_y)
+                local_points = [(p[0] - layer_x, p[1] - layer_y) for p in points]
+                merge_color = (*BLACK_HOLE_MERGE_COLOR[:3],
+                               int(BLACK_HOLE_MERGE_COLOR[3] * _crowd_dim(all_pulses)))
+                pygame.draw.polygon(pulse_layer, merge_color, local_points, pulse_width)
 
     for white_dwarf in universe.white_dwarfs:
         draw_white_dwarf(screen, white_dwarf, offset_x, offset_y)
     for black_hole in universe.black_holes:
         draw_black_hole(screen, black_hole, offset_x, offset_y)
     for neutron_star in universe.neutron_stars:
-        draw_neutron_star(screen, neutron_star, ring, all_pulses, offset_x, offset_y, show_gravity_waves)
+        draw_neutron_star(screen, neutron_star, ring, all_pulses, offset_x, offset_y,
+                          pulse_layer, layer_x, layer_y)
     for magnetar in universe.magnetars:
         draw_magnetar(screen, magnetar, offset_x, offset_y)
+
+    if pulse_layer is not None:
+        screen.blit(pulse_layer, (layer_x, layer_y))
 
 
 # ── World renderer (bounded surface + culling + visible-rect blit) ──────────────────────────
@@ -483,6 +480,10 @@ class WorldRenderer:
         visible_rect = pygame.Rect(view_left, view_top, view_w, view_h)
 
         self.world_surface.fill(BACKGROUND_COLOR)
+        # LOD: below this zoom a 2px ring line downscales to under a pixel, so wave rings are
+        # invisible noise that still costs full-size clipping and polygons on the world
+        # surface. Skip them; everything else still draws.
+        draw_waves = show_gravity_waves and zoom >= PULSE_LOD_MIN_ZOOM
         for universe in state.universes:
             # Cull universes entirely outside the view — off-screen universes cost nothing.
             bcx = universe.barrier.center[0] + wox
@@ -491,7 +492,7 @@ class WorldRenderer:
             if (bcx + reach < view_left or bcx - reach > view_left + view_w or
                     bcy + reach < view_top or bcy - reach > view_top + view_h):
                 continue
-            draw_universe(self.world_surface, universe, wox, woy, show_barrier, show_gravity_waves)
+            draw_universe(self.world_surface, universe, wox, woy, show_barrier, draw_waves)
 
         if zoom == 1.0:
             screen.blit(self.world_surface, (0, 0), area=visible_rect)
