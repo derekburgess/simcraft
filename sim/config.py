@@ -98,9 +98,9 @@ CMB_DENSITY_CONTRAST = 0.8     # How strongly barrier shape biases initial cloud
                                 # clustering in dented regions (can leave large voids elsewhere).
 
 # ── Barrier (cosmic boundary ring) ──
-BARRIER_POINT_COUNT = 240       # Number of vertices defining the barrier ring. More = smoother circle, but slower (drawing + deformation + contact all scale with this, per universe).
+BARRIER_POINT_COUNT = 240       # Number of vertices defining the barrier ring. More = smoother circle and finer deformation. NOT a performance lever: deformation is vectorized (~0.03 ms/universe at any count) and draw cost is dominated by the ring's pixel size, not its vertices — measured 240 vs 120 saves ~0.03 ms/universe.
 MOLECULAR_CLOUD_MAX_PER_UNIVERSE = 800  # Hard cap on clouds in a single universe. Bounds per-frame physics AND rendering cost so the sim doesn't degrade as matter regenerates. Excess (lowest-mass) clouds are trimmed.
-MULTIVERSE_MAX_CLOUDS = 10000   # Hard cap on total clouds across ALL universes — bounds the whole frame regardless of how many universes spawn. Lowest-mass clouds are trimmed globally.
+MULTIVERSE_MAX_CLOUDS = 15000   # Hard cap on total clouds across ALL universes — bounds the whole frame regardless of how many universes spawn. Lowest-mass clouds are trimmed globally. Also the multiverse's carrying capacity: quenched universes die by losing the global competition for these slots, so raising it stretches the late-game eras.
 BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
 BARRIER_GRAVITY_CONSTANT = 70 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Reduced so it contains without out-competing black holes for nearby clumping.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
@@ -252,7 +252,7 @@ def star_class_name(mass, elem=None):
 # subset of those is "in its WR phase" (tagged off the star's own random sprite offsets —
 # per-star-stable across row compaction, no physics state added).
 WOLF_RAYET_MASS = 46            # Mass floor for the WR flavor (top of the O band, where the cap pile-up lives).
-WOLF_RAYET_FRACTION = 8         # 1-in-N of eligible (enriched, top-band) stars renders the shell. At 3 an evolved scene still showed ~19 shells (rings everywhere); 8 puts a mature multiverse at a handful — rare enough to point at.
+WOLF_RAYET_FRACTION = 12        # 1-in-N of eligible (enriched, top-band) stars renders the shell. At 3 an evolved scene still showed ~19 shells (rings everywhere); 8 put a mature multiverse at a handful. Raised to 12 (alongside the 15k cloud cap, which grows the star population) so shells stay a genuine rarity — real WR stars number ~1000 in the whole Milky Way.
 WOLF_RAYET_SHELL_COLOR = (255, 200, 150)  # Warm ejected-envelope color for the expanding shell ring.
 WOLF_RAYET_SHELL_RANGE = 5      # Pixels the shell ring expands beyond the star before wrapping (continuous shedding).
 WOLF_RAYET_SHED_SPEED = 3.0     # Shell expansion speed (pixels/sec of wall time — stateless, like the civ flicker).
