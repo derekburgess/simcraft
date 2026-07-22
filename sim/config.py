@@ -274,7 +274,7 @@ BROWN_DWARF_COLOR = (130, 70, 50)  # Dim maroon ember.
 # unchanged and the roll seals the star's fate: while swollen it is merge-exempt and
 # emission-exempt (it left the matter pipeline the moment it won the roll, exactly as the
 # instantly-retired star did) — the phase is a visible exit, not extra lifetime.
-RED_GIANT_DURATION = 6.0        # Seconds spent swollen before the nebula/white-dwarf ending fires.
+RED_GIANT_DURATION = 4.0        # Seconds spent swollen before the nebula/white-dwarf ending fires. Also the giant's exposure window to black-hole capture — shorter means more giants live to shed their nebula (at 6.0 roughly a fifth were eaten mid-swell).
 RED_GIANT_COLOR = (255, 90, 40)   # Deep orange-red, hotter-looking than an M dwarf's color.
 RED_GIANT_DRAW_SIZE = 8         # Draw size while swollen — visibly bloated past every main-sequence class.
 
