@@ -48,7 +48,7 @@ class CloudField:
     object version had."""
 
     __slots__ = ('n', 'cap', 'x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count',
-                 'is_star', 'has_civ', 'size', 'shock', 'offsets', 'sprites', 'sprite_keys')
+                 'is_star', 'has_civ', 'size', 'shock', 'giant', 'offsets', 'sprites', 'sprite_keys')
 
     def __init__(self, cap=256):
         self.n = 0
@@ -64,6 +64,7 @@ class CloudField:
         self.has_civ = np.zeros(cap, dtype=bool)  # rare Dyson-swarm civilization on this star
         self.size = np.zeros(cap)
         self.shock = np.zeros(cap)   # seconds of "compressed by a wavefront" remaining (triggered star formation)
+        self.giant = np.zeros(cap)   # seconds of red-giant phase remaining; 0 = main sequence (set when the WD retirement roll hits)
         self.offsets = np.zeros((cap, 7, 2))
         self.sprites = [None] * cap      # cached pygame sprites, draw-only
         # Visual cache key per row: (size, r, g, b, opacity) as int64, -1 = stale/no sprite.
@@ -101,6 +102,10 @@ class CloudField:
     def SHOCK(self): return self.shock[:self.n]
     @SHOCK.setter
     def SHOCK(self, v): self.shock[:self.n] = v
+    @property
+    def GIANT(self): return self.giant[:self.n]
+    @GIANT.setter
+    def GIANT(self, v): self.giant[:self.n] = v
 
     def _ensure(self, extra):
         need = self.n + extra
@@ -109,7 +114,7 @@ class CloudField:
         new_cap = self.cap
         while new_cap < need:
             new_cap *= 2
-        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'has_civ', 'size', 'shock'):
+        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'has_civ', 'size', 'shock', 'giant'):
             old = getattr(self, name)
             grown = np.zeros(new_cap, dtype=old.dtype)
             grown[:self.n] = old[:self.n]
@@ -152,6 +157,7 @@ class CloudField:
         self.has_civ[k] = False
         self.size[k] = self._size_for(mass, self.is_star[k])
         self.shock[k] = 0.0
+        self.giant[k] = 0.0
         self.offsets[k] = offs
         self.sprites[k] = None
         self.sprite_keys[k] = -1
@@ -189,6 +195,7 @@ class CloudField:
                               [PROTOSTAR_HIGH_SIZE, PROTOSTAR_MEDIUM_SIZE], PROTOSTAR_LOW_SIZE)
         self.size[k0:k1] = np.where(is_star, star_size, cloud_size)
         self.shock[k0:k1] = 0.0
+        self.giant[k0:k1] = 0.0
         r = np.random.uniform(0.05, 0.22, (m, 7))
         th = np.random.uniform(0.0, 2.0 * math.pi, (m, 7))
         self.offsets[k0:k1, :, 0] = r * np.cos(th)
@@ -247,7 +254,7 @@ class CloudField:
         n = self.n
         idx = np.asarray(idx, dtype=np.int64)
         m = len(idx)
-        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'has_civ', 'size', 'shock'):
+        for name in ('x', 'y', 'vx', 'vy', 'mass', 'elem', 'emission_count', 'is_star', 'has_civ', 'size', 'shock', 'giant'):
             arr = getattr(self, name)
             arr[:m] = arr[:n][idx]
         self.offsets[:m] = self.offsets[:n][idx]
@@ -290,6 +297,7 @@ class CloudField:
             dst.has_civ[k] = self.has_civ[r]
             dst.size[k] = self.size[r]
             dst.shock[k] = self.shock[r]
+            dst.giant[k] = self.giant[r]
             dst.offsets[k] = self.offsets[r]
             dst.sprites[k] = self.sprites[r]
             dst.sprite_keys[k] = self.sprite_keys[r]

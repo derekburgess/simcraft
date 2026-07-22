@@ -203,11 +203,80 @@ SUPERNOVA_EJECTA_MAX_MASS_FRACTION = 0.35    # Maximum ejecta mass as a fraction
 PROTOSTAR_THRESHOLD = 28        # Mass at which a cloud becomes a protostar (changes appearance and behavior).
 
 # Star tiers are set by MASS (as in reality: mass determines a star's temperature, color, and
-# fate), not by element. Color runs cool-red (small) → warm white (sun-like) → blue (massive),
-# the real temperature sequence. Only high-tier stars can collapse or supernova; the rest
-# eventually fade into white dwarfs.
+# fate), not by element. Only high-tier stars can collapse or supernova; the rest eventually
+# fade into white dwarfs. These two are FATE GATES, not display bands: STAR_TIER_MEDIUM_MASS
+# gates civilization eligibility and the collision-size step, STAR_TIER_HIGH_MASS gates
+# violent death. They also feed CloudField._size_for's collision sizes (2/4/6).
 STAR_TIER_MEDIUM_MASS = 34      # Mass at or above which a star is mid tier (sun-like).
 STAR_TIER_HIGH_MASS = 42        # Mass at or above which a star is a blue giant. Kept aligned with BLACK_HOLE_THRESHOLD: exactly the massive stars are the ones that can die violently.
+
+# ── Spectral classes (DISPLAY taxonomy — colors, draw sizes, ticker names) ──
+# The visual ladder is deliberately decoupled from the fate gates above: these bands NEST
+# inside the frozen thresholds (28 ignition / 34 civ+size / 42 violent death / 48 cap) and
+# never move them. Draw size here is what the renderer paints; the collision AABB stays
+# CloudField._size_for's 2/4/6, so merge rates — the star-formation pipeline the whole
+# matter cycle hangs off — are untouched by anything in this table. The 42 boundary is a
+# class boundary on purpose: "only blue stars die violently" stays visually true.
+# Rows are (mass_min, ticker name with article, RGB color, draw size), descending mass.
+STAR_CLASSES = [
+    (45, "a blue supergiant",    (150, 190, 255), 6),  # O — the old high-tier blue (Wolf-Rayet is a flavor on top, not a mass band — see below)
+    (42, "a blue-white giant",   (190, 215, 255), 5),  # B — violent-death boundary, exactly 42
+    (40, "a white star",         (235, 240, 255), 4),  # A — pristine ignition boost lands Pop III stars here
+    (37, "a yellow-white star",  (255, 250, 235), 4),  # F — the Cepheid instability strip
+    (34, "a yellow dwarf",       (255, 240, 200), 4),  # G — the old medium-tier sun-like white
+    (31, "an orange dwarf",      (255, 175, 95),  3),  # K
+    (0,  "a red dwarf",          (255, 120, 70),  2),  # M — the old low-tier red
+]
+
+
+def star_class_name(mass, elem=None):
+    """Ticker display name (with article) for a star of the given mass. Pass the star's
+    element too and enriched top-band stars die under the Wolf-Rayet name — massive stars
+    pass through a WR phase before core collapse, so the obituary is earned even when the
+    star wasn't in the (rarer) shell-rendered subset."""
+    if elem is not None and mass >= WOLF_RAYET_MASS and elem >= STAR_ENRICHED_ELEMENT_MIN:
+        return "a Wolf-Rayet star"
+    for mass_min, name, _color, _size in STAR_CLASSES:
+        if mass >= mass_min:
+            return name
+    return STAR_CLASSES[-1][1]
+
+
+# ── Star flavor variants (all render-only, gated on state that already exists) ──
+# Wolf-Rayet gating: the mass cap is an absorbing boundary for the merge random walk, and the
+# pristine +12 ignition boost injects stars straight into it, so the 46-48 band holds most of
+# the star population (measured ~78%) — a mass-only gate lit up the whole pile. Two extra
+# conditions make shells rare: the star must be metal-ENRICHED (real WR envelopes are stripped
+# by metal-line-driven winds; Population III giants never become WRs — so young pristine
+# universes show no shells and they appear as chemistry matures), and only a stable 1-in-N
+# subset of those is "in its WR phase" (tagged off the star's own random sprite offsets —
+# per-star-stable across row compaction, no physics state added).
+WOLF_RAYET_MASS = 46            # Mass floor for the WR flavor (top of the O band, where the cap pile-up lives).
+WOLF_RAYET_FRACTION = 8         # 1-in-N of eligible (enriched, top-band) stars renders the shell. At 3 an evolved scene still showed ~19 shells (rings everywhere); 8 puts a mature multiverse at a handful — rare enough to point at.
+WOLF_RAYET_SHELL_COLOR = (255, 200, 150)  # Warm ejected-envelope color for the expanding shell ring.
+WOLF_RAYET_SHELL_RANGE = 5      # Pixels the shell ring expands beyond the star before wrapping (continuous shedding).
+WOLF_RAYET_SHED_SPEED = 3.0     # Shell expansion speed (pixels/sec of wall time — stateless, like the civ flicker).
+
+CEPHEID_MASS_MIN = 37           # F-band bounds: yellow-white stars pulse (the real instability strip).
+CEPHEID_MASS_MAX = 40
+CEPHEID_STEP = 0.4              # Wall seconds per brightness step of the three-level light curve.
+CEPHEID_LEVELS = (1.0, 0.8, 0.6)  # Brightness cycle; quantized so the sprite cache stays small. The dip is deep on purpose — at 1-2px star scale a subtle dim reads as nothing.
+
+CARBON_STAR_ELEMENT = 3         # Element index (Carbon) that turns a cool M/K star deep ruby.
+CARBON_STAR_COLOR = (200, 45, 45)  # Ruby-red — real carbon stars are strikingly redder than their temperature says.
+
+BROWN_DWARF_MASS_MIN = 24       # Clouds at/above this (but below ignition at 28) render as failed-star embers. Matches the BH-evaporation cloud band (24-28), so a dead universe's recollapse era reads as a brown-dwarf graveyard.
+BROWN_DWARF_COLOR = (130, 70, 50)  # Dim maroon ember.
+
+# ── Red giant phase (the one physics-touching addition; A/B probe-validated) ──
+# A star that wins its white-dwarf retirement roll swells into a red giant for a few seconds
+# before shedding the nebula, instead of vanishing in the same frame. The retirement RATE is
+# unchanged and the roll seals the star's fate: while swollen it is merge-exempt and
+# emission-exempt (it left the matter pipeline the moment it won the roll, exactly as the
+# instantly-retired star did) — the phase is a visible exit, not extra lifetime.
+RED_GIANT_DURATION = 6.0        # Seconds spent swollen before the nebula/white-dwarf ending fires.
+RED_GIANT_COLOR = (255, 90, 40)   # Deep orange-red, hotter-looking than an M dwarf's color.
+RED_GIANT_DRAW_SIZE = 8         # Draw size while swollen — visibly bloated past every main-sequence class.
 
 # ── Civilizations (rare Dyson-swarm dimming on stable, non-violent, metal-enriched stars) ──
 CIVILIZATION_CHANCE = 0.0001    # Per-frame chance an eligible medium-tier star develops one, at Z=0.
@@ -227,11 +296,10 @@ STAR_ENRICHED_ELEMENT_MIN = 3   # Element index at or above which a cloud counts
 PROTOSTAR_PRISTINE_MASS_BOOST = 12  # Ignition boost for pristine (H/He/O) clouds — first stars are giants.
 PROTOSTAR_ENRICHED_MASS_BOOST = 4   # Ignition boost for metal-enriched clouds.
 
-PROTOSTAR_LOW_COLOR = (255, 120, 70)       # Red dwarf — cool, dim, effectively immortal.
+# COLLISION sizes per fate tier (the AABB the merge pass sees). Display colors/sizes moved
+# to STAR_CLASSES; these numbers are physics and stay put.
 PROTOSTAR_LOW_SIZE = 2
-PROTOSTAR_MEDIUM_COLOR = (255, 240, 200)   # Sun-like — warm white.
 PROTOSTAR_MEDIUM_SIZE = 4
-PROTOSTAR_HIGH_COLOR = (150, 190, 255)     # Blue giant — hot, massive, short-lived.
 PROTOSTAR_HIGH_SIZE = 6
 
 # Collapse odds scale steeply with mass (fate is a knife-edge function of mass in reality).

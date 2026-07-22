@@ -225,14 +225,26 @@ def _triggered_mergers(universe):
         clouds.keep(~removed[:n])
 
 
-def update_entities(universe):
+def update_entities(universe, delta_time):
     """Collisions, star transitions, and the per-cloud random events (collapse to BH/NS,
-    supernova, white-dwarf retirement, emission). Fate follows MASS, as in reality: only
-    stars above BLACK_HOLE_THRESHOLD can die violently; everything below quietly becomes a
-    white dwarf. The event loop stays scalar: events are rare and branchy."""
+    supernova, red-giant swelling → white-dwarf retirement, emission). Fate follows MASS,
+    as in reality: only stars above BLACK_HOLE_THRESHOLD can die violently; everything below
+    swells into a red giant and then quietly becomes a white dwarf. The event loop stays
+    scalar: events are rare and branchy."""
+    clouds = universe.clouds
+    # Red giants are merge-exempt: the retirement roll already sealed their fate, and the
+    # phase is a visible exit, not extra lifetime. Left in the merge pool they kept growing
+    # past the violent-death line — the A/B probe showed retirements funneling into the
+    # supernova track (nebulae 64→1 per run) instead of white dwarfs. The sentinel must be
+    # STRONGLY negative, not zero: the AABB test is `x[i] < x[j]+size[j] and x[i]+size[i] >
+    # x[j]`, so a size-0 giant is a point that still overlaps any box it sits inside; at
+    # -1e9 its clause fails in both roles of the test, in both merge passes and both code
+    # paths. refresh() below recomputes every row's size from mass, healing it right after.
+    giant_rows = np.nonzero(clouds.GIANT > 0.0)[0]
+    if len(giant_rows):
+        clouds.size[giant_rows] = -1e9
     handle_collisions(universe)
     _triggered_mergers(universe)
-    clouds = universe.clouds
     clouds.refresh()
 
     # The old scalar loop rolled `random.random()` per cloud per frame. Restructured into
@@ -267,13 +279,13 @@ def update_entities(universe):
                 # black-hole formation rate (which drives the matter cycle) is untouched.
                 if random.random() < MAGNETAR_CHANCE:
                     universe.magnetars.append(Magnetar(clouds.x[k], clouds.y[k], mass[k]))
-                    universe.event_log.append("CORE COLLAPSE — a magnetar is born")
+                    universe.event_log.append(f"CORE COLLAPSE — {star_class_name(mass[k], elem[k])} collapses; a magnetar is born")
                 else:
                     universe.neutron_stars.append(NeutronStar(clouds.x[k], clouds.y[k], mass[k]))
-                    universe.event_log.append("CORE COLLAPSE — a pulsar is born")
+                    universe.event_log.append(f"CORE COLLAPSE — {star_class_name(mass[k], elem[k])} collapses; a pulsar is born")
             else:
                 universe.black_holes.append(BlackHole(clouds.x[k], clouds.y[k], mass[k]))
-                universe.event_log.append("CORE COLLAPSE — star implodes into a black hole")
+                universe.event_log.append(f"CORE COLLAPSE — {star_class_name(mass[k], elem[k])} implodes into a black hole")
             to_remove[k] = True
         elif random.random() < MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE * mass_ratio ** SUPERNOVA_LIFETIME_MASS_EXPONENT:
             # Core-collapse supernova: the star resets to a light gas cloud and ejects
@@ -291,16 +303,18 @@ def update_entities(universe):
                 spawns.append((ex, ey, emass, child_elem,
                                math.cos(offset_angle) * offset_dist * 0.5,
                                math.sin(offset_angle) * offset_dist * 0.5))
-            # The row survives as gas, so the civ flag must be cleared here — otherwise it
-            # lingers invisibly on the cloud and "resurrects" if the gas ever re-ignites.
+            # The row survives as gas, so per-star flags must be cleared here — a lingering
+            # civ flag "resurrects" if the gas re-ignites, and a lingering giant timer would
+            # shed a phantom nebula from the newborn cloud.
             if clouds.has_civ[k]:
                 clouds.has_civ[k] = False
                 universe.event_log.append("CIVILIZATION LOST — vaporized by its star's supernova")
+            universe.event_log.append(f"SUPERNOVA (TYPE II) — {star_class_name(mass[k], elem[k])} explodes, seeding metals")
             mass[k] = MOLECULAR_CLOUD_START_MASS
             clouds.is_star[k] = False
+            clouds.giant[k] = 0.0
             clouds.size[k] = MOLECULAR_CLOUD_START_SIZE
             universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_SUPERNOVA)
-            universe.event_log.append("SUPERNOVA (TYPE II) — massive star explodes, seeding metals")
 
     # ── Civilizations: rare Dyson-swarm emergence on stable, non-violent, metal-enriched stars ──
     # Rocky planets and biochemistry need real metals, not just H/He/O, so a pristine
@@ -310,7 +324,8 @@ def update_entities(universe):
     # formation also makes the stars that do form better odds for hosting something.
     civ_idx = np.nonzero(clouds.IS_STAR & (clouds.M >= STAR_TIER_MEDIUM_MASS)
                           & (clouds.M < STAR_TIER_HIGH_MASS) & ~clouds.HAS_CIV
-                          & (clouds.ELEM >= STAR_ENRICHED_ELEMENT_MIN))[0]
+                          & (clouds.ELEM >= STAR_ENRICHED_ELEMENT_MIN)
+                          & (clouds.GIANT <= 0.0))[0]  # nothing arises around a star already dying
     if len(civ_idx):
         civ_chance = CIVILIZATION_CHANCE * (1.0 + universe.metallicity * CIVILIZATION_Z_BOOST)
         hits = civ_idx[np.random.random(len(civ_idx)) < civ_chance]
@@ -318,14 +333,19 @@ def update_entities(universe):
             clouds.has_civ[hits] = True
             universe.event_log.append("CIVILIZATION EMERGES — a world lights its star's shadow")
 
-    # ── Sub-massive stars: white-dwarf retirement (one vectorized roll over all stars) ──
-    star_idx = np.nonzero(clouds.IS_STAR & (clouds.M < STAR_TIER_HIGH_MASS))[0]
-    if len(star_idx):
-        wd_chance = (WHITE_DWARF_CHANCE
-                     * (clouds.M[star_idx] / STAR_TIER_HIGH_MASS) ** WHITE_DWARF_LIFETIME_MASS_EXPONENT)
-        star_idx = star_idx[np.random.random(len(star_idx)) < wd_chance]
-    for k in star_idx:
-        # The common stellar ending: no explosion. The star sheds its envelope as a
+    # ── Red giants: tick the swell; expiry sheds the planetary nebula ──
+    # The retirement roll below no longer removes the star in the same frame — it starts a
+    # red-giant phase (a swollen, visible ending). The RATE of retirement is the roll's,
+    # unchanged; only the exit is delayed by RED_GIANT_DURATION.
+    giant_rows = np.nonzero(clouds.GIANT > 0.0)[0]
+    for k in giant_rows:
+        clouds.giant[k] -= delta_time
+        if clouds.giant[k] > 0.0:
+            continue
+        clouds.giant[k] = 0.0
+        if mass[k] >= STAR_TIER_HIGH_MASS:
+            continue  # merged past the violent-death line while swollen — the heavy pass owns it now
+        # The common stellar ending: no explosion. The giant sheds its envelope as a
         # planetary nebula (light elements drift back to the cloud sea) and the core
         # remains as a white dwarf that will spend a long time cooling.
         for _ in range(PLANETARY_NEBULA_EJECTA_COUNT):
@@ -344,14 +364,28 @@ def update_entities(universe):
         universe.white_dwarfs.append(wd)
         to_remove[k] = True
         universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_NEBULA)
+        universe.event_log.append("PLANETARY NEBULA — the giant sheds its envelope; a white dwarf remains")
+
+    # ── Sub-massive stars: retirement roll (one vectorized roll over all main-sequence stars) ──
+    star_idx = np.nonzero(clouds.IS_STAR & (clouds.M < STAR_TIER_HIGH_MASS)
+                          & (clouds.GIANT <= 0.0) & ~to_remove)[0]
+    if len(star_idx):
+        wd_chance = (WHITE_DWARF_CHANCE
+                     * (clouds.M[star_idx] / STAR_TIER_HIGH_MASS) ** WHITE_DWARF_LIFETIME_MASS_EXPONENT)
+        star_idx = star_idx[np.random.random(len(star_idx)) < wd_chance]
+    for k in star_idx:
+        clouds.giant[k] = RED_GIANT_DURATION
         if clouds.has_civ[k]:
-            universe.event_log.append("CIVILIZATION LOST — swallowed by its dying star")
-        universe.event_log.append("PLANETARY NEBULA — a star retires as a white dwarf")
+            # Earth's actual fate: the swelling star engulfs its worlds long before the nebula.
+            clouds.has_civ[k] = False
+            universe.event_log.append("CIVILIZATION LOST — engulfed by its swelling star")
+        universe.event_log.append(f"RED GIANT — {star_class_name(mass[k], elem[k])} swells off the main sequence")
 
     # ── Emission: clouds shed small daughter clouds (one vectorized roll over eligibles) ──
     eligible = ((clouds.M >= MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS)
                 & (clouds.emission_count[:n] < MOLECULAR_CLOUD_EMISSION_COUNT)
-                & ~to_remove & ~a_entered)
+                & ~to_remove & ~a_entered
+                & (clouds.GIANT <= 0.0))  # dying stars shed their nebula at expiry, not daughters now — the retired star emitted nothing either
     c_idx = np.nonzero(eligible)[0]
     if len(c_idx):
         c_idx = c_idx[np.random.random(len(c_idx)) < MOLECULAR_CLOUD_EMISSION_CHANCE]
@@ -479,7 +513,7 @@ def step(universe, ring, delta_time):
         clouds.VX += fx * (universe.local.g * delta_time)
         clouds.VY += fy * (universe.local.g * delta_time)
 
-    update_entities(universe)
+    update_entities(universe, delta_time)
 
     ring.apply_gravity(universe, delta_time)
     ring.enforce(universe, delta_time)

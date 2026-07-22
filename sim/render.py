@@ -17,9 +17,11 @@ RNG_DIGITS = len(str(RNG_MAX))  # HUD cell width follows the actual output range
 
 _START_COLOR_LUT = np.array(MOLECULAR_CLOUD_START_COLORS, dtype=float)
 _END_COLOR = np.array(MOLECULAR_CLOUD_END_COLOR, dtype=float)
-_STAR_COLOR_LUT = (np.array(PROTOSTAR_LOW_COLOR, dtype=float),
-                   np.array(PROTOSTAR_MEDIUM_COLOR, dtype=float),
-                   np.array(PROTOSTAR_HIGH_COLOR, dtype=float))
+# Spectral-class LUTs from config.STAR_CLASSES (descending mass_min order preserved).
+_CLASS_BOUNDS = [c[0] for c in STAR_CLASSES]
+_CLASS_COLORS = np.array([c[2] for c in STAR_CLASSES], dtype=float)
+_CLASS_DRAW_SIZES = np.array([c[3] for c in STAR_CLASSES], dtype=np.int64)
+_CEPHEID_LEVELS = np.array(CEPHEID_LEVELS, dtype=float)
 
 
 def interpolate_color(start_color, end_color, factor):
@@ -78,7 +80,10 @@ def draw_barrier(screen, barrier, offset_x=0, offset_y=0):
 # ── Clouds ──────────────────────────────────────────────────────────────────────────────────
 
 def _cloud_visuals(clouds):
-    """Vectorized size/color/opacity, same formulas the object version computed per cloud."""
+    """Vectorized draw-size/color/opacity. The returned size is the DRAW size: for clouds it
+    equals the collision size (as always), for stars it comes from the STAR_CLASSES display
+    table and is deliberately decoupled from the 2/4/6 collision AABB the merge pass uses —
+    richer visuals with bit-identical physics."""
     n = clouds.n
     mass = clouds.M
     size = clouds.SIZE.astype(np.int64)
@@ -92,12 +97,35 @@ def _cloud_visuals(clouds):
     start = _START_COLOR_LUT[elem]
     f2 = (1.0 - (size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4))[:, None]
     color = np.where((size <= 4)[:, None], _END_COLOR, start + f2 * (_END_COLOR - start))
-    # Star color follows MASS — the real temperature sequence: small red, sun-like white, massive blue.
-    tier = np.select([mass >= STAR_TIER_HIGH_MASS, mass >= STAR_TIER_MEDIUM_MASS],
-                     [2, 1], 0)
-    star_color = np.stack(_STAR_COLOR_LUT)[tier]
+    # Brown dwarfs: heavy not-quite-stars (incl. the whole BH-evaporation cloud band) glow as
+    # dim maroon embers instead of element colors — failed stars, visibly so.
+    ember = ~is_star & (mass >= BROWN_DWARF_MASS_MIN) & (mass < PROTOSTAR_THRESHOLD)
+    color = np.where(ember[:, None], np.array(BROWN_DWARF_COLOR, dtype=float), color)
+
+    # Star color/draw-size follow MASS through the spectral-class ladder (M→K→G→F→A→B→O),
+    # the real temperature sequence at finer grain than the three fate tiers.
+    cls = np.select([mass >= b for b in _CLASS_BOUNDS[:-1]],
+                    list(range(len(_CLASS_BOUNDS) - 1)), len(_CLASS_BOUNDS) - 1)
+    star_color = _CLASS_COLORS[cls]
+    star_draw = _CLASS_DRAW_SIZES[cls]
+    # Carbon stars: cool M/K stars made of carbon read far redder than their temperature.
+    carbon = is_star & (mass < STAR_TIER_MEDIUM_MASS) & (elem == CARBON_STAR_ELEMENT)
+    star_color = np.where(carbon[:, None], np.array(CARBON_STAR_COLOR, dtype=float), star_color)
+    # Cepheids: F-band stars ride a stepped three-level light curve (stateless, like the civ
+    # flicker: row-index phase + wall-clock bucket; quantized so the sprite cache stays small).
+    cepheid = is_star & (mass >= CEPHEID_MASS_MIN) & (mass < CEPHEID_MASS_MAX)
+    if cepheid.any():
+        bucket = int(time.time() / CEPHEID_STEP)
+        level = _CEPHEID_LEVELS[(np.arange(n) * 7 + bucket) % len(_CEPHEID_LEVELS)]
+        star_color = np.where(cepheid[:, None], star_color * level[:, None], star_color)
+    # Red giants override everything: a retiring star swells huge and deep orange-red.
+    giant = clouds.GIANT > 0.0
+    star_color = np.where(giant[:, None], np.array(RED_GIANT_COLOR, dtype=float), star_color)
+    star_draw = np.where(giant, RED_GIANT_DRAW_SIZE, star_draw)
+
     color = np.where(is_star[:, None], star_color, color).astype(np.int64)
-    return size, color, opacity
+    draw_size = np.where(is_star, star_draw, size)
+    return draw_size, color, opacity
 
 
 # Stars are solid squares: tiny (size, color) cardinality, so their surfaces are shared from
@@ -179,6 +207,32 @@ def draw_clouds(screen, clouds, offset_x=0, offset_y=0):
             # This is the piece that flickers.
             disc_radius = int(size[k] * 0.5) + CIVILIZATION_DISC_PADDING
             pygame.draw.circle(screen, CIVILIZATION_DISC_COLOR, (cx, cy), disc_radius)
+
+    # Wolf-Rayet shells: enriched top-band stars shedding their envelope as a continuously
+    # expanding ring — stateless (wall clock + row phase), fading as it grows, then wrapping:
+    # perpetual shedding. Foreshadowing, not physics. Only a stable 1-in-N subset renders the
+    # shell (see config): the tag hashes the star's own sprite offsets, which are random at
+    # spawn and travel with the row through every compaction — so it's the SAME stars shelled
+    # frame to frame, unlike a row-index hash, which would reshuffle on every keep()/select().
+    wr_mask = (is_star & (clouds.M >= WOLF_RAYET_MASS)
+               & (clouds.ELEM >= STAR_ENRICHED_ELEMENT_MIN) & (clouds.GIANT <= 0.0))
+    if wr_mask.any():
+        tag = (np.abs(clouds.offsets[:n, :, 0]).sum(axis=1) * 1e4).astype(np.int64)
+        wr_mask &= (tag % WOLF_RAYET_FRACTION) == 0
+    wr_idx = np.nonzero(wr_mask)[0]
+    if len(wr_idx):
+        t = time.time()
+        for k in wr_idx:
+            cx = int(px[k] + size[k] * 0.5)
+            cy = int(py[k] + size[k] * 0.5)
+            frac = ((t * WOLF_RAYET_SHED_SPEED + int(k) * 1.7) % WOLF_RAYET_SHELL_RANGE) / WOLF_RAYET_SHELL_RANGE
+            r = int(size[k] * 0.5) + 2 + int(frac * WOLF_RAYET_SHELL_RANGE)
+            alpha = int(200 * (1.0 - frac))
+            if alpha <= 0:
+                continue
+            shell = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+            pygame.draw.circle(shell, (*WOLF_RAYET_SHELL_COLOR, alpha), (r + 1, r + 1), r, 1)
+            screen.blit(shell, (cx - r - 1, cy - r - 1))
 
 
 # ── Pulses / compact objects ────────────────────────────────────────────────────────────────

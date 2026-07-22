@@ -54,8 +54,8 @@ def serialize_state(state_obj):
     versioned, so the packed fields never collide between states — but coverage is
     deliberately partial, not injective over the full sim: the chaotic bulk (positions,
     velocities, masses, membrane state) is all here, while slow or cosmetic state
-    (shock timers, civ flags, emission counters, pulse lists, NS spin-down age,
-    wormhole links, sprite caches) is left out. The hash's job is entropy, and those
+    (shock timers, civ flags, red-giant timers, emission counters, pulse lists,
+    NS spin-down age, wormhole links, sprite caches) is left out. The hash's job is entropy, and those
     fields add nothing a few frames of the included state doesn't already carry.
 
     Global header: _HEADER — version, universe count, total clouds/holes/stars/magnetars/
