@@ -1,5 +1,5 @@
 """All drawing. Reads the simulation state (arrays + compact objects) and never mutates
-physics — except black_hole.border_radius, which has always been refreshed at draw time.
+physics.
 
 The world surface is sized to the view plus a margin (capped by MULTIVERSE_RENDER_MAX), never
 to the full extent of the multiverse, and universes fully outside the view are culled.
@@ -90,7 +90,7 @@ def _cloud_visuals(clouds):
     opacity = np.where(is_star, 255, opacity)
 
     start = _START_COLOR_LUT[elem]
-    f2 = np.clip(1.0 - (size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4), None, None)[:, None]
+    f2 = (1.0 - (size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4))[:, None]
     color = np.where((size <= 4)[:, None], _END_COLOR, start + f2 * (_END_COLOR - start))
     # Star color follows MASS — the real temperature sequence: small red, sun-like white, massive blue.
     tier = np.select([mass >= STAR_TIER_HIGH_MASS, mass >= STAR_TIER_MEDIUM_MASS],
@@ -193,7 +193,7 @@ def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_p
     px = origin_x + pulse_radius * np.cos(theta)
     py = origin_y + pulse_radius * np.sin(theta)
 
-    for ox, oy, o_radius, _ in all_pulses:
+    for ox, oy, o_radius in all_pulses:
         if abs(ox - origin_x) < 0.1 and abs(oy - origin_y) < 0.1:
             continue
         dx_op = px - ox
@@ -222,8 +222,7 @@ def _clip_pulse_points(origin_x, origin_y, pulse_radius, ring, all_pulses, num_p
 def draw_black_hole(screen, bh, offset_x=0, offset_y=0):
     draw_x = int(bh.x + offset_x)
     draw_y = int(bh.y + offset_y)
-    radius = int(bh.mass // BLACK_HOLE_RADIUS)
-    bh.border_radius = radius
+    radius = bh.border_radius  # refreshed by BlackHole.decay — physics owns it, draw only reads
     pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (draw_x, draw_y), radius)
     pygame.draw.circle(screen, BLACK_HOLE_COLOR, (draw_x, draw_y), radius - 2)
 
@@ -283,11 +282,10 @@ def draw_neutron_star(screen, ns, ring, all_pulses, offset_x=0, offset_y=0, show
 
     if not show_gravity_waves:
         return
-    for pulse in ns.active_pulses:
-        pulse_radius, _, fade = pulse
+    for pulse_radius in ns.active_pulses:
         if pulse_radius <= 1:
             continue
-        alpha = max(0, min(255, int(NEUTRON_STAR_PULSE_COLOR[3] * fade * _crowd_dim(all_pulses))))
+        alpha = max(0, min(255, int(NEUTRON_STAR_PULSE_COLOR[3] * _crowd_dim(all_pulses))))
         if alpha == 0:
             continue
         points = _clip_pulse_points(pulse_ox, pulse_oy, pulse_radius, ring, all_pulses, offset_x=offset_x, offset_y=offset_y)
@@ -329,10 +327,10 @@ def draw_universe(screen, universe, offset_x=0, offset_y=0, show_barrier=True, s
 
     all_pulses = []
     for ns in universe.neutron_stars:
-        for pulse in ns.active_pulses:
-            all_pulses.append((ns.x + offset_x, ns.y + offset_y, pulse[0], pulse[2]))
+        for pulse_radius in ns.active_pulses:
+            all_pulses.append((ns.x + offset_x, ns.y + offset_y, pulse_radius))
     for pulse in universe.black_hole_pulses:
-        all_pulses.append((pulse[0] + offset_x, pulse[1] + offset_y, pulse[2], 1.0))
+        all_pulses.append((pulse[0] + offset_x, pulse[1] + offset_y, pulse[2]))
 
     if show_gravity_waves:
         for pulse in universe.black_hole_pulses:
@@ -436,22 +434,6 @@ def format_years(years):
     return f"{int(years)}"
 
 
-def format_year_display(current_year):
-    return f"TIME(YEARS): {format_years(current_year)}"
-
-
-def draw_static_key(screen, font, zoom):
-    screen_h = screen.get_height()
-    snapshot_pos = (UI_LABEL_X, screen_h - UI_ZOOM_Y_OFFSET)
-    if zoom != 1.0:
-        zoom_text = f'[SCROLL] ZOOM: {zoom:.1f}x'
-    else:
-        zoom_text = '[SCROLL] ZOOM'
-    screen.blit(font.render(zoom_text, True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-    snapshot_pos = (UI_LABEL_X, screen_h - UI_EXIT_Y_OFFSET)
-    screen.blit(font.render('[Q] EXIT', True, LABEL_COLOR), (snapshot_pos[0], snapshot_pos[1]))
-
-
 _stats_font = None
 _stats_rng_font = None
 
@@ -518,12 +500,6 @@ def draw_stats(screen, fps, current_year, universe_count, entity_count, rng_numb
     screen.blit(surf, (x + UI_STATS_CELL_PAD_X,
                        row_top + (row_h - surf.get_height()) // 2))
     pygame.draw.rect(screen, UI_STATS_GRID_COLOR, (table_left, row_top, table_w, row_h), 1)
-
-
-def draw_ui(screen, font, current_year, zoom=1.0):
-    draw_static_key(screen, font, zoom)
-    year_text = font.render(format_year_display(current_year), True, LABEL_COLOR)
-    screen.blit(year_text, (UI_LABEL_X, screen.get_height() - UI_TEXT_Y_OFFSET))
 
 
 # ── Event ticker (readout row of the stats table) ───────────────────────────────────────────

@@ -9,20 +9,15 @@ SCREEN_WIDTH = 1920             # Initial window width in pixels; rendering foll
 SCREEN_HEIGHT = 1080             # Initial window height in pixels; rendering follows the live window size.
 
 # ── UI ──
-LABEL_COLOR = (60, 60, 200)    # RGB color for UI text labels.
-
 UI_LABEL_X = 30                 # X position (pixels from left) for all HUD text labels.
 UI_STATS_FONT = 'notosans'      # Sans-serif font for the stats readout.
 UI_STATS_FONT_SIZE = 14         # Point size for the stats readout table cells.
 UI_STATS_RNG_FONT_SIZE = 24     # Point size for the RNG output cell — larger than the rest of the row.
-UI_STATS_COLOR = (110, 110, 245)  # Stats readout text color — brighter than LABEL_COLOR for contrast on the dark background.
+UI_STATS_COLOR = (110, 110, 245)  # Stats readout text color — bright for contrast on the dark background.
 UI_STATS_GRID_COLOR = (60, 60, 140)  # Stats table cell-separator color — dimmer than the text.
 UI_STATS_BOTTOM_MARGIN = 24     # Gap (pixels) between the stats table row and the bottom of the screen.
 UI_STATS_CELL_PAD_X = 14        # Horizontal padding inside each stats table cell.
 UI_STATS_CELL_PAD_Y = 6         # Vertical padding inside the stats table row.
-UI_ZOOM_Y_OFFSET = 140          # Y offset from bottom of screen for the zoom label.
-UI_EXIT_Y_OFFSET = 110          # Y offset from bottom of screen for the exit/quit label.
-UI_TEXT_Y_OFFSET = 40           # Y offset from bottom of screen for the year counter display.
 
 # ── Event ticker (readout panel above the stats row, toggled with [L]) ──
 # Styling (font, colors, padding) comes from the UI_STATS_* constants above so the two rows
@@ -125,11 +120,11 @@ BARRIER_SECTION_SEARCH_RANGE = 3  # Angular step multiplier when searching for n
 BARRIER_LINE_WIDTH = 3          # Line width (pixels) for drawing the barrier ring polygon and flash segments.
 
 # ── Barrier Interaction (how different entities interact with the barrier) ──
-MOLECULAR_CLOUD_BARRIER_GRAVITY_FACTOR = 0.001  # Gravity multiplier for clouds vs barrier. Very weak — clouds drift inward gently.
+# The barrier's gravity acts on black holes only (see Barrier.apply_gravity); everything else
+# interacts through deformation and containment.
 MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 0.3   # How strongly massive clouds dent the barrier on approach. Tuned for the recollapse era: a dead universe packed with evaporation clouds grinds down to its Big Crunch in ~6-7 minutes (at 6 it imploded in seconds). This dial was dead code until BARRIER_DEFORM_CLOUD_MASS gave clouds their own gate, so no historical behavior depended on the old value.
 BARRIER_DEFORM_CLOUD_MASS = 24  # Mass at which a cloud starts denting the barrier. Below PROTOSTAR_THRESHOLD (28) on purpose: the deform gate used to reuse the star threshold, which made this factor dead code — anything heavy enough to dent became a star first. 24 matches the black-hole evaporation clouds ("these are heavy!"), so a dead universe full of them recollapses under its own weight toward the Big Crunch — a closed universe doing what closed universes do.
 
-STAR_BARRIER_GRAVITY_FACTOR = 0.005    # Gravity multiplier for ignited stars vs barrier. Stronger than clouds.
 STAR_BARRIER_DEFORM_FACTOR = 10        # How strongly stars dent the barrier on approach.
 
 BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.025  # Gravity multiplier for black holes vs barrier (the only thing the barrier attracts). Gentle so holes stay central and their disks don't overhang the barrier edge (overhanging clouds get pinned to the edge by enforce()).
@@ -137,7 +132,6 @@ BLACK_HOLE_BARRIER_DEFORM_FACTOR = 40    # How strongly black holes dent the bar
 BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.01  # How much nearby mass weakens containment for black holes. Higher = escapes more easily.
 BLACK_HOLE_BARRIER_PUSH_STRENGTH = 10    # Base push force applied to black holes hitting the barrier boundary.
 
-NEUTRON_STAR_BARRIER_GRAVITY_FACTOR = 0.001   # Gravity multiplier for neutron stars vs barrier. Strongest pull.
 NEUTRON_STAR_BARRIER_DEFORM_FACTOR = 10     # How strongly neutron stars dent the barrier.
 NEUTRON_STAR_BARRIER_WEAKENING_FACTOR = 0.7  # How much nearby mass weakens containment for neutron stars (0=no effect, 1=full escape).
 NEUTRON_STAR_BARRIER_PUSH_STRENGTH = 6   # Base push force applied to neutron stars hitting the barrier boundary.
@@ -176,13 +170,7 @@ MOLECULAR_CLOUD_START_COLORS = [
     (50, 130, 70),   # Chromium - Deep Green (CrI)
     (110, 70, 160),  # Titanium - Violet-Blue (TiI)
 ]
-# Element names, index-aligned with MOLECULAR_CLOUD_START_COLORS (used by the HUD legend).
-ELEMENT_NAMES = [
-    "Hydrogen", "Helium", "Oxygen", "Carbon", "Neon", "Nitrogen", "Iron", "Silicon",
-    "Gold", "Sulfur", "Magnesium", "Phosphorus", "Lithium", "Platinum", "Cobalt",
-    "Calcium", "Sodium", "Nickel", "Chromium", "Titanium",
-]
-# Periodic table abbreviations, index-aligned with ELEMENT_NAMES (used by the HUD element row).
+# Periodic table abbreviations, index-aligned with MOLECULAR_CLOUD_START_COLORS (used by the HUD element row).
 ELEMENT_SYMBOLS = [
     "H", "He", "O", "C", "Ne", "N", "Fe", "Si",
     "Au", "S", "Mg", "P", "Li", "Pt", "Co",
@@ -213,8 +201,6 @@ SUPERNOVA_EJECTA_MAX_MASS_FRACTION = 0.35    # Maximum ejecta mass as a fraction
 
 # ── Protostars (clouds that reach enough mass to ignite) ──
 PROTOSTAR_THRESHOLD = 28        # Mass at which a cloud becomes a protostar (changes appearance and behavior).
-PROTOSTAR_EJECTA_COUNT = 4     # Number of ejecta pieces produced during protostar formation events.
-PROTOSTAR_EJECTA_SPREAD = 14    # Max spawn distance (pixels) of ejecta from the parent star.
 
 # Star tiers are set by MASS (as in reality: mass determines a star's temperature, color, and
 # fate), not by element. Color runs cool-red (small) → warm white (sun-like) → blue (massive),
@@ -276,7 +262,7 @@ TYPE_IA_EJECTA_SPREAD = 30      # Max spawn radius (pixels) of Type Ia ejecta.
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse (kept equal to STAR_TIER_HIGH_MASS: only blue giants die violently).
 BLACK_HOLE_CHANCE = 0.0001      # Base per-frame collapse probability AT the threshold; scales as (mass/threshold)^COLLAPSE_MASS_EXPONENT. Very rare.
-BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead).
+BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead); heavy kilonova remnants past the cap leave magnetars instead.
 
 # ── Multiverse (each black-hole birth opens a new universe outside the current ones) ──
 UNIVERSE_MAX_COUNT = max(2, os.cpu_count() or 4)  # Cap coexisting universes at the machine's core count — one core per universe when stepped in parallel.
@@ -376,7 +362,6 @@ NEUTRON_STAR_PULSE_WIDTH = 2    # Line width (pixels) for drawing pulse rings.
 NEUTRON_STAR_RIPPLE_SPEED = 64  # How fast (pixels/sec) pulse ripples expand outward.
 NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24  # Width (pixels) of the zone where ripples exert force on entities.
 NEUTRON_STAR_PULSE_COLOR_DURATION = 0.1  # Seconds the neutron star flashes white after each pulse.
-NEUTRON_STAR_PULSE_FADE_RATE = 1.5  # Rate multiplier for pulse fade once the wavefront reaches the barrier.
 
 # ── Magnetars (rare neutron-star births with an extreme magnetic field) ──
 MAGNETAR_CHANCE = 0.15          # Probability a neutron-star birth is a magnetar instead of a plain NS.
@@ -431,7 +416,6 @@ SHOCK_MERGE_CHANCE = 0.5       # Merge probability per frame for overlapping SHO
 # ── Pulse Rendering ──
 PULSE_RENDER_POINT_COUNT = 64   # Number of polygon vertices used to draw each pulse ring.
 PULSE_RENDER_MARGIN = 2         # Pixel margin added around pulse bounding boxes when allocating draw surfaces.
-PULSE_COLLISION_FADE_RATE = 4 # Rate at which overlapping pulse wavefronts fade each other out.
 PULSE_BARRIER_CLIP_MARGIN = 4   # Pixels inside the barrier edge where pulse ring points are clipped.
 
 # ── Elemental abundance tables (cumulative probability ranges over the 20 elements above) ──

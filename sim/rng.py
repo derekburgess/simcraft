@@ -43,25 +43,32 @@ import numpy as np
 MIN = 10 ** 41              # Lower bound of RNG output range (42-digit minimum)
 MAX = 10 ** 42 - 1          # Upper bound of RNG output range (42-digit maximum)
 
-SERIALIZE_VERSION = 4
+SERIALIZE_VERSION = 5
 _HKDF_INFO = b'simcraft-rng-v1'       # domain separation for output derivation
 _POOL_PERSON = b'simcraft-pool-v1'    # blake2b personalization (16-byte max)
-_HEADER = struct.Struct('<B6I')       # version, n_universes, mc, bh, ns, mag, barrier_pts
+_HEADER = struct.Struct('<B7I')       # version, n_universes, mc, bh, ns, mag, wd, barrier_pts
 
 
 def serialize_state(state_obj):
     """Pack live SimulationState into bytes for hashing. The encoding is framed and
-    versioned so it is injective: no two distinct states produce the same bytes.
+    versioned, so the packed fields never collide between states — but coverage is
+    deliberately partial, not injective over the full sim: the chaotic bulk (positions,
+    velocities, masses, membrane state) is all here, while slow or cosmetic state
+    (shock timers, civ flags, emission counters, pulse lists, NS spin-down age,
+    wormhole links, sprite caches) is left out. The hash's job is entropy, and those
+    fields add nothing a few frames of the included state doesn't already carry.
 
-    Global header: _HEADER — version, universe count, total clouds/holes/stars/magnetars,
-    total barrier points. Then per universe:
-      frame     — struct.pack('<5I', n_clouds, n_holes, n_stars, n_magnetars, n_barrier_points)
+    Global header: _HEADER — version, universe count, total clouds/holes/stars/magnetars/
+    white dwarfs, total barrier points. Then per universe:
+      frame     — '<6I' n_clouds, n_holes, n_stars, n_magnetars, n_white_dwarfs, n_barrier_points
       physics   — '<4d' metallicity Z + local dials (g, fusion, collapse): dynamical state
-                  that shapes the future, so injectivity requires it (v4)
+                  that shapes the future (v4)
       clouds    — (n, 5) float64 [x, y, vx, vy, mass] + (n,) int64 element indices
       holes     — per hole '<7d' x, y, vx, vy, mass, angular_momentum, accretion_mass
       stars     — per star '<6d' x, y, vx, vy, mass, time_since_last_pulse
       magnetars — per magnetar '<7d' x, y, vx, vy, mass, field_time, color_phase
+      dwarfs    — per white dwarf '<6d' x, y, vx, vy, mass, age (v5 — WDs gravitate,
+                  detonate, and get eaten like any compact object, so they belong here)
       barrier   — '<2d' center + (num_points,) float64 radii + radii velocities
 
     The cloud field serializes straight from the SoA arrays (no per-row packing), and the
@@ -75,15 +82,16 @@ def serialize_state(state_obj):
     bh_count = sum(len(u.black_holes) for u in universes)
     ns_count = sum(len(u.neutron_stars) for u in universes)
     mag_count = sum(len(u.magnetars) for u in universes)
+    wd_count = sum(len(u.white_dwarfs) for u in universes)
     barrier_points = sum(len(u.barrier.radii) for u in universes)
 
     parts = [_HEADER.pack(SERIALIZE_VERSION, len(universes),
-                          mc_count, bh_count, ns_count, mag_count, barrier_points)]
+                          mc_count, bh_count, ns_count, mag_count, wd_count, barrier_points)]
 
     for u in universes:
         c = u.clouds
-        parts.append(struct.pack('<5I', c.n, len(u.black_holes), len(u.neutron_stars),
-                                 len(u.magnetars), len(u.barrier.radii)))
+        parts.append(struct.pack('<6I', c.n, len(u.black_holes), len(u.neutron_stars),
+                                 len(u.magnetars), len(u.white_dwarfs), len(u.barrier.radii)))
         parts.append(struct.pack('<4d', u.metallicity, u.local.g, u.local.fusion, u.local.collapse))
         if c.n:
             block = np.empty((c.n, 5))
@@ -103,12 +111,14 @@ def serialize_state(state_obj):
         for e in u.magnetars:
             parts.append(struct.pack('<7d', e.x, e.y, e.vx, e.vy, e.mass,
                                      e.field_time, e.color_phase))
+        for e in u.white_dwarfs:
+            parts.append(struct.pack('<6d', e.x, e.y, e.vx, e.vy, e.mass, e.age))
         b = u.barrier
         parts.append(struct.pack('<2d', b.center[0], b.center[1]))
         parts.append(b.radii.astype('<f8', copy=False).tobytes())
         parts.append(b.radii_vel.astype('<f8', copy=False).tobytes())
 
-    entity_count = mc_count + bh_count + ns_count + mag_count
+    entity_count = mc_count + bh_count + ns_count + mag_count + wd_count
     return b''.join(parts), entity_count
 
 
@@ -116,10 +126,10 @@ def _parse_header(state_bytes):
     """Return (entity_count, entropy_bits_estimate) from serialized state bytes."""
     if len(state_bytes) < _HEADER.size:
         return 0, 0
-    version, _, mc, bh, ns, mag, barrier_points = _HEADER.unpack_from(state_bytes)
+    version, _, mc, bh, ns, mag, wd, barrier_points = _HEADER.unpack_from(state_bytes)
     if version != SERIALIZE_VERSION:
         return 0, 0
-    entity_count = mc + bh + ns + mag
+    entity_count = mc + bh + ns + mag + wd
     # ~64 bits/entity (5+ chaotic doubles), ~16 bits/barrier point (radius + velocity).
     return entity_count, entity_count * 64 + barrier_points * 16
 
@@ -158,9 +168,10 @@ class EntropyPool:
         parts = [struct.pack('<QIi', self.folds, tick_ms & 0xFFFFFFFF, raw_frame_ms)]
         for u in state_obj.universes:
             c = u.clouds
-            parts.append(struct.pack('<5I3d',
+            parts.append(struct.pack('<6I3d',
                                      c.n, len(u.black_holes), len(u.neutron_stars),
-                                     len(u.magnetars), len(u.black_hole_pulses),
+                                     len(u.magnetars), len(u.white_dwarfs),
+                                     len(u.black_hole_pulses),
                                      float(u.barrier.radii.sum()),
                                      float(u.barrier.radii_vel.sum()),
                                      float(c.M.sum()) if c.n else 0.0))

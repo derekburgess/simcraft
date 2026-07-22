@@ -191,20 +191,19 @@ class Barrier:
             out = dist >= barrier_r
             if out.any():
                 # Pin to just inside the ring and cancel any outward radial velocity component.
+                # (dist >= barrier_r >= 1 here — the radii floor in update_deformation — so
+                # the division below is always safe.)
                 X[out] = cx + barrier_r[out] * 0.99 * np.cos(angle[out])
                 Y[out] = cy + barrier_r[out] * 0.99 * np.sin(angle[out])
-                d = dist[out]
-                moving = d > 0
-                if moving.any():
-                    oi = np.nonzero(out)[0][moving]
-                    dxo, dyo, do = dx[oi], dy[oi], dist[oi]
-                    radial = (VX[oi] * dxo + VY[oi] * dyo) / do
-                    outward = radial > 0
-                    oi = oi[outward]
-                    if len(oi):
-                        dxo, dyo, do, radial = dxo[outward], dyo[outward], do[outward], radial[outward]
-                        VX[oi] -= (dxo / do) * radial
-                        VY[oi] -= (dyo / do) * radial
+                oi = np.nonzero(out)[0]
+                dxo, dyo, do = dx[oi], dy[oi], dist[oi]
+                radial = (VX[oi] * dxo + VY[oi] * dyo) / do
+                outward = radial > 0
+                oi = oi[outward]
+                if len(oi):
+                    dxo, dyo, do, radial = dxo[outward], dyo[outward], do[outward], radial[outward]
+                    VX[oi] -= (dxo / do) * radial
+                    VY[oi] -= (dyo / do) * radial
 
         compact_angles_masses = []
         for bh in universe.black_holes:

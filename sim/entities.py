@@ -77,10 +77,11 @@ class BlackHole:
                     if total_mass > 0:
                         self.vx = (self.mass * self.vx + black_hole.mass * black_hole.vx) / total_mass
                         self.vy = (self.mass * self.vy + black_hole.mass * black_hole.vy) / total_mass
-                    self.accretion_mass += black_hole.mass
+                    # The eaten hole's undigested backlog comes along too, not just its mass.
+                    self.accretion_mass += black_hole.mass + black_hole.accretion_mass
                     universe.black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
                     universe.event_log.append("BLACK HOLE MERGER — gravitational waves ripple out")
-                elif distance > 0:
+                else:
                     soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                     force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (soft_dist ** 2)
                     black_hole.vx += (dx / soft_dist) * force * delta_time
@@ -233,6 +234,10 @@ class BlackHole:
         self.mass -= rate * delta_time
         self.accretion_mass = max(0.0, self.accretion_mass - rate * delta_time)
         self._prev_accretion_mass = self.accretion_mass
+        # Refreshed here, in physics, so the capture radius (attract reads border_radius) never
+        # depends on whether this hole's universe was drawn this frame — the renderer culls
+        # off-view universes, and a draw-time refresh would freeze culled holes' capture ranges.
+        self.border_radius = int(self.mass // BLACK_HOLE_RADIUS)
 
 
 class NeutronStar:
@@ -281,6 +286,11 @@ class NeutronStar:
                 self.vy += float((fy * clouds.M).sum()) / self.mass
 
         for black_hole in universe.black_holes:
+            # Second half of a double-applied pair: BlackHole.attract already pulled this star
+            # (softened, at the much stronger BH constant) and took its recoil; this pass adds
+            # a further ~7% at the NS constant, unsoftened. Both halves are baked into the
+            # orbit/anchoring tuning, so neither can be removed without shifting every NS
+            # trajectory near a hole. (White dwarfs get only the BH-side pass.)
             dx = black_hole.x - self.x
             dy = black_hole.y - self.y
             distance = max(math.hypot(dx, dy), 1)
@@ -316,15 +326,15 @@ class NeutronStar:
 
         clouds = universe.clouds
         pulses_to_remove = []
-        for i, pulse in enumerate(self.active_pulses):
-            radius, time_alive, fade = pulse
+        # active_pulses holds one radius per ring: pulses stay fully visible all the way to
+        # the barrier (only their physical effect fades, below), so there is no per-pulse
+        # fade or age state to carry.
+        for i, radius in enumerate(self.active_pulses):
             new_radius = radius + (NEUTRON_STAR_RIPPLE_SPEED * delta_time)
-            new_time = time_alive + delta_time
-            new_fade = 1.0  # visual only — pulse stays fully visible all the way to barrier
             effect_fade_start = ring.rest_radius * 0.75
             effect_fade = max(0.0, 1.0 - max(0.0, new_radius - effect_fade_start) / (ring.rest_radius * 0.25))
 
-            self.active_pulses[i] = [new_radius, new_time, new_fade]
+            self.active_pulses[i] = new_radius
 
             # Barrier ring: flash and push the vertices the wavefront is crossing.
             cx, cy = ring.center
@@ -341,12 +351,12 @@ class NeutronStar:
                 dx = clouds.X - self.x
                 dy = clouds.Y - self.y
                 dist_sq = dx * dx + dy * dy
-                r_inner = max(0, radius - NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
-                r_outer = radius + NEUTRON_STAR_RIPPLE_EFFECT_WIDTH
+                r_inner = max(0, new_radius - NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)
+                r_outer = new_radius + NEUTRON_STAR_RIPPLE_EFFECT_WIDTH
                 in_annulus = (dist_sq >= r_inner * r_inner) & (dist_sq <= r_outer * r_outer)
                 if in_annulus.any():
                     distance = np.sqrt(np.where(in_annulus, dist_sq, 1.0))
-                    ripple = np.abs(distance - radius)
+                    ripple = np.abs(distance - new_radius)
                     apply = in_annulus & (ripple < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH) & (distance > 0)
                     if apply.any():
                         effect = 1.0 - ripple / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH
@@ -362,7 +372,7 @@ class NeutronStar:
                 dy = black_hole.y - self.y
                 distance = math.hypot(dx, dy)
 
-                ripple_dist = abs(distance - radius)
+                ripple_dist = abs(distance - new_radius)
                 if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH:
                     effect_factor = (1.0 - (ripple_dist / NEUTRON_STAR_RIPPLE_EFFECT_WIDTH)) * 0.3
                     force = self.pulse_strength * effect_factor / ((ripple_dist + 1) ** 1.2)
@@ -379,7 +389,7 @@ class NeutronStar:
                 self.active_pulses.pop(i)
 
         if not self.is_dead and self.time_since_last_pulse >= self.pulse_rate and len(self.active_pulses) == 0:
-            self.active_pulses.append([0, 0, 1.0])
+            self.active_pulses.append(0.0)
             self.time_since_last_pulse = 0
             self.pulse_color_state = 1  # Set to white during pulse
             self.pulse_color_duration = NEUTRON_STAR_PULSE_COLOR_DURATION  # Reset duration
@@ -445,8 +455,11 @@ class Magnetar(NeutronStar):
 
         # No flares while latched onto the barrier: the field's energy goes into the grip.
         # (A point-blank flare's barrier wave-push would blow the ring outward far faster
-        # than the grip reels it in.)
-        if not self.latched and random.random() < MAGNETAR_FLARE_CHANCE:
+        # than the grip reels it in.) A flare also needs enough mass to pay its cost — a
+        # nearly-dissipated magnetar (light kilonova remnants decay fast) must not flare
+        # itself into negative mass.
+        if (not self.latched and self.mass > MAGNETAR_FLARE_MASS_COST
+                and random.random() < MAGNETAR_FLARE_CHANCE):
             universe.black_hole_pulses.append([self.x, self.y, 0, MAGNETAR_FLARE_ENERGY])
             self.mass -= MAGNETAR_FLARE_MASS_COST
             self.pulse_color_state = 1

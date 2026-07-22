@@ -5,7 +5,7 @@ Frame order per universe (matches the historical update_simulation_state exactly
   gravity+containment → tracer spin → merger pulses → black-hole pass (attract/decay/rip/
   evaporate) → neutron-star pass (gravity/pulses/spin-down/decay) → magnetar pass (gravity/
   magnetism/flares/field decay→settle into NS) → white-dwarf pass (cooling/Type Ia) →
-  kilonova mergers → pulse collisions → removals & spawns → integration.
+  kilonova mergers → removals & spawns → integration.
 Captured clouds stay in the arrays until the end-of-step removal (the neutron-star pass sees
 them, as it always did); streamed clouds get their position rewritten at capture and the row
 moves to the child universe at the end of the step — visible before the child steps.
@@ -255,6 +255,10 @@ def update_entities(universe):
         # Fate is a steep function of mass: the heaviest stars collapse soonest.
         mass_ratio = mass[k] / BLACK_HOLE_THRESHOLD
         if random.random() < BLACK_HOLE_CHANCE * universe.local.collapse * mass_ratio ** COLLAPSE_MASS_EXPONENT:
+            # A civilization can ride its star up here: a medium-tier host can merge past the
+            # violent-death threshold, and its end deserves a ticker line like the quiet one.
+            if clouds.has_civ[k]:
+                universe.event_log.append("CIVILIZATION LOST — its star collapses in an instant")
             # The star's own metallicity biases the remnant: metal-rich stars shed mass
             # in winds and tend to leave neutron stars; metal-poor ones collapse to holes.
             bias = COLLAPSE_NS_METALLICITY_BIAS if elem[k] >= STAR_ENRICHED_ELEMENT_MIN else -COLLAPSE_NS_METALLICITY_BIAS
@@ -287,6 +291,11 @@ def update_entities(universe):
                 spawns.append((ex, ey, emass, child_elem,
                                math.cos(offset_angle) * offset_dist * 0.5,
                                math.sin(offset_angle) * offset_dist * 0.5))
+            # The row survives as gas, so the civ flag must be cleared here — otherwise it
+            # lingers invisibly on the cloud and "resurrects" if the gas ever re-ignites.
+            if clouds.has_civ[k]:
+                clouds.has_civ[k] = False
+                universe.event_log.append("CIVILIZATION LOST — vaporized by its star's supernova")
             mass[k] = MOLECULAR_CLOUD_START_MASS
             clouds.is_star[k] = False
             clouds.size[k] = MOLECULAR_CLOUD_START_SIZE
@@ -388,11 +397,11 @@ def _update_bh_pulses(universe, ring, delta_time):
             dx = clouds.X - x
             dy = clouds.Y - y
             dist_sq = dx * dx + dy * dy
-            r_inner = max(0, radius - bh_ew)
-            r_outer = radius + bh_ew
+            r_inner = max(0, new_radius - bh_ew)
+            r_outer = new_radius + bh_ew
             in_annulus = (dist_sq >= r_inner * r_inner) & (dist_sq <= r_outer * r_outer)
             distance = np.sqrt(np.where(in_annulus, dist_sq, 1.0))
-            ripple = np.abs(distance - radius)
+            ripple = np.abs(distance - new_radius)
             band = in_annulus & (ripple < bh_ew) & (distance > 0)
             force = np.where(band,
                              NEUTRON_STAR_PULSE_STRENGTH * 3 * (1.0 - ripple / bh_ew) * entity_mass_scale
@@ -414,7 +423,7 @@ def _update_bh_pulses(universe, ring, delta_time):
             dx = black_hole.x - x
             dy = black_hole.y - y
             distance = math.hypot(dx, dy)
-            ripple_dist = abs(distance - radius)
+            ripple_dist = abs(distance - new_radius)
             if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4:
                 effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 4))
                 force = NEUTRON_STAR_PULSE_STRENGTH * 2 * effect_factor * entity_mass_scale / ((ripple_dist + 1) ** 2)
@@ -429,7 +438,7 @@ def _update_bh_pulses(universe, ring, delta_time):
             dx = neutron_star.x - x
             dy = neutron_star.y - y
             distance = math.hypot(dx, dy)
-            ripple_dist = abs(distance - radius)
+            ripple_dist = abs(distance - new_radius)
             if ripple_dist < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3:
                 effect_factor = 1.0 - (ripple_dist / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 3))
                 force = NEUTRON_STAR_PULSE_STRENGTH * 2.5 * effect_factor * entity_mass_scale / ((ripple_dist + 1) ** 1.8)
@@ -456,29 +465,6 @@ def _update_bh_pulses(universe, ring, delta_time):
     for i in sorted(pulses_to_remove, reverse=True):
         if i < len(universe.black_hole_pulses):
             universe.black_hole_pulses.pop(i)
-
-
-def resolve_pulse_collisions(universe, delta_time):
-    all_pulses = []
-    for ns in universe.neutron_stars:
-        for i, pulse in enumerate(ns.active_pulses):
-            all_pulses.append((ns, i))
-
-    for a in range(len(all_pulses)):
-        ns_a, idx_a = all_pulses[a]
-        pulse_a = ns_a.active_pulses[idx_a]
-        r_a = pulse_a[0]
-        for b in range(a + 1, len(all_pulses)):
-            ns_b, idx_b = all_pulses[b]
-            pulse_b = ns_b.active_pulses[idx_b]
-            r_b = pulse_b[0]
-            d = math.hypot(ns_a.x - ns_b.x, ns_a.y - ns_b.y)
-            wavefront_gap = d - r_a - r_b
-            if wavefront_gap < NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2:
-                overlap = 1.0 - max(wavefront_gap, 0) / (NEUTRON_STAR_RIPPLE_EFFECT_WIDTH * 2)
-                fade_rate = PULSE_COLLISION_FADE_RATE * overlap
-                pulse_a[2] -= fade_rate * delta_time
-                pulse_b[2] -= fade_rate * delta_time
 
 
 def step(universe, ring, delta_time):
@@ -573,8 +559,8 @@ def step(universe, ring, delta_time):
         magnetar.decay(delta_time)
         if magnetar.field_time <= 0 or magnetar.mass <= NEUTRON_STAR_DECAY_THRESHOLD:
             # The field dies: the magnetar settles into a plain neutron star. (If mass is
-            # already below the NS decay threshold, the NS pass turns it into a kilonova
-            # next frame — no duplicated ejecta path here.)
+            # already below the NS decay threshold, the NS pass quietly dissipates it into
+            # cold clouds next frame — no duplicated ejecta path here.)
             ns_to_remove.add(magnetar)
             settled = NeutronStar(magnetar.x, magnetar.y, magnetar.mass)
             settled.vx, settled.vy = magnetar.vx, magnetar.vy
@@ -676,10 +662,14 @@ def step(universe, ring, delta_time):
                 universe.black_hole_pulses.append([cx, cy, 0, combined_mass])
                 universe.metallicity = min(1.0, universe.metallicity + METALLICITY_PER_KILONOVA)
                 # The remnant depends on the combined mass (the GW170817 lesson): light pairs
-                # leave a hypermassive magnetar, heavy pairs collapse straight to a black hole.
+                # leave a hypermassive magnetar, heavy pairs collapse straight to a black hole
+                # — unless the hole cap is full, in which case the merger leaves a magnetar
+                # too (the same cap the core-collapse path obeys; without this check kilonova
+                # remnants would quietly break BLACK_HOLE_MAX_COUNT's "hard cap" promise).
                 rem_vx = (ns_a.mass * ns_a.vx + ns_b.mass * ns_b.vx) / combined_mass
                 rem_vy = (ns_a.mass * ns_a.vy + ns_b.mass * ns_b.vy) / combined_mass
-                if combined_mass < KILONOVA_MAGNETAR_REMNANT_MAX:
+                if (combined_mass < KILONOVA_MAGNETAR_REMNANT_MAX
+                        or len(universe.black_holes) >= BLACK_HOLE_MAX_COUNT):
                     remnant = Magnetar(cx, cy, combined_mass)
                     remnant.vx, remnant.vy = rem_vx, rem_vy
                     universe.magnetars.append(remnant)
@@ -690,8 +680,6 @@ def step(universe, ring, delta_time):
                     universe.black_holes.append(new_bh)
                     universe.event_log.append("KILONOVA — neutron stars merge; gold forged, black hole left")
                 break
-
-    resolve_pulse_collisions(universe, delta_time)
 
     # ── Removals, wormhole streams, event spawns ──
     if stream_moves:

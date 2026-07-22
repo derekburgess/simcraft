@@ -9,7 +9,7 @@ import pygame
 from sim.config import *
 from sim import physics
 from sim import render
-from sim.render import WorldRenderer, draw_ui, draw_stats, draw_ticker, draw_elements, draw_hotkeys, hotkeys_alpha
+from sim.render import WorldRenderer, draw_stats, draw_ticker, draw_elements, draw_hotkeys, hotkeys_alpha
 from sim.rng import generate, MIN as RNG_MIN, MAX as RNG_MAX
 
 
@@ -89,7 +89,7 @@ def handle_input(zoom, view_center_x, view_center_y, target_zoom, target_center_
             reset_requested, copy_rng)
 
 
-def run_simulation(screen, font, state):
+def run_simulation(screen, state):
     try:
         running = True
         clock = pygame.time.Clock()
@@ -232,8 +232,6 @@ def run_simulation(screen, font, state):
                 else:
                     draw_hotkeys(screen, alpha)
 
-            #draw_ui(screen, font, current_year, zoom)
-
             # Log-time cosmic clock: dy = ln10/decade * (y + 1000) dt integrates to a fixed
             # wall-time per factor-of-10 of years (see COSMIC_DECADE_SECONDS in config). That
             # rate has no ceiling on its own — it compounds forever, so it never stops feeling
@@ -271,12 +269,11 @@ def main():
     # fullscreening any aspect ratio fills the window edge-to-edge — no letterbox bars.
     # SCREEN_WIDTH x SCREEN_HEIGHT is only the initial window size.
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-    font = pygame.font.SysFont('Monospace', 14)
     print("Populating space with molecular clouds")
     state = physics.initialize_state()
 
     print("Starting simulation")
-    run_simulation(screen, font, state)
+    run_simulation(screen, state)
 
 
 if __name__ == "__main__":
