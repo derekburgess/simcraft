@@ -103,7 +103,7 @@ def run_simulation(screen, state):
         target_center_x = view_center_x
         target_center_y = view_center_y
         renderer = WorldRenderer()
-        show_ticker = True
+        show_ticker = False  # start quiet; [L] brings the event log up
         show_barrier = True
         show_gravity_waves = True
         show_hotkeys = True
@@ -217,13 +217,14 @@ def run_simulation(screen, state):
                 print(f"HUD RNG failed: {rng_err}")
                 rng_number = None
 
-            draw_elements(screen, state.present_elements())
             if show_ticker:
                 draw_ticker(screen, ticker)
             draw_stats(screen, clock.get_fps(), current_year, len(state.universes),
                        state.entity_count(), rng_number,
                        state.mean_metallicity(), rng_flash)
 
+            # Help overlay: hotkeys + entity key (top right) and the element inventory row
+            # (above the stats table) show and fade together.
             if show_hotkeys:
                 hotkeys_age += delta_time
                 alpha = hotkeys_alpha(hotkeys_age)
@@ -231,6 +232,7 @@ def run_simulation(screen, state):
                     show_hotkeys = False
                 else:
                     draw_hotkeys(screen, alpha)
+                    draw_elements(screen, state.present_elements(), alpha)
 
             # Log-time cosmic clock: dy = ln10/decade * (y + 1000) dt integrates to a fixed
             # wall-time per factor-of-10 of years (see COSMIC_DECADE_SECONDS in config). That

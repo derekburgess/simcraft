@@ -627,14 +627,14 @@ def _get_elements_font():
     return _elements_font
 
 
-def draw_elements(screen, present_elements):
+def draw_elements(screen, present_elements, alpha=1.0):
     """Element inventory row: one color block per element currently present anywhere in the
     multiverse, sitting directly above the stats table (the ticker's fixed-height panel floats
     higher and is ignored here, so this row stays pinned to the table regardless of how many
     log lines are actually showing). Blocks are laid out right to left, starting flush with
     the table's right edge, so the row grows leftward as the chemistry of the universe
-    diversifies."""
-    if not present_elements:
+    diversifies. Shown with the help panel and fades with its `alpha`."""
+    if not present_elements or alpha <= 0:
         return
     font = _get_elements_font()
     stats_row_h = _get_stats_fonts()[1].get_height() + 2 * UI_STATS_CELL_PAD_Y
@@ -643,18 +643,23 @@ def draw_elements(screen, present_elements):
     row_top = row_bottom - UI_ELEMENTS_BLOCK_SIZE
     table_right = screen.get_width() - UI_LABEL_X
 
-    x = table_right - UI_ELEMENTS_BLOCK_SIZE
+    row_w = (UI_ELEMENTS_BLOCK_SIZE + UI_ELEMENTS_BLOCK_GAP) * len(present_elements)
+    row = pygame.Surface((row_w, UI_ELEMENTS_BLOCK_SIZE), pygame.SRCALPHA)
+    x = row_w - UI_ELEMENTS_BLOCK_SIZE
     for elem in reversed(present_elements):
         color = MOLECULAR_CLOUD_START_COLORS[elem]
-        rect = pygame.Rect(x, row_top, UI_ELEMENTS_BLOCK_SIZE, UI_ELEMENTS_BLOCK_SIZE)
-        pygame.draw.rect(screen, color, rect)
+        rect = pygame.Rect(x, 0, UI_ELEMENTS_BLOCK_SIZE, UI_ELEMENTS_BLOCK_SIZE)
+        pygame.draw.rect(row, color, rect)
         # Contrast the symbol against its own block: light text on dark blocks, dark on light.
         luminance = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
         text_color = (20, 20, 20) if luminance > 140 else (235, 235, 235)
         surf = font.render(ELEMENT_SYMBOLS[elem], True, text_color)
-        screen.blit(surf, (rect.centerx - surf.get_width() // 2,
-                           rect.centery - surf.get_height() // 2))
+        row.blit(surf, (rect.centerx - surf.get_width() // 2,
+                        rect.centery - surf.get_height() // 2))
         x -= UI_ELEMENTS_BLOCK_SIZE + UI_ELEMENTS_BLOCK_GAP
+    if alpha < 1.0:
+        row.fill((255, 255, 255, int(255 * alpha)), special_flags=pygame.BLEND_RGBA_MULT)
+    screen.blit(row, (table_right - row_w, row_top))
 
 
 # ── Hotkey cheat sheet (top-right corner, shown on start, toggled with [H]) ─────────────────
@@ -680,6 +685,113 @@ _HOTKEY_ROWS = [
     ("CLICK", "Copy RNG output"),
 ]
 
+# Entity key shown under the hotkeys: (tag, label). Each tag draws a native-size miniature
+# of the entity in _draw_entity_mini, built from the same config constants as the real
+# renderers so the key can't drift out of sync with what's on screen.
+_ENTITY_KEY_ROWS = [
+    ("clouds", "Molecular clouds"),
+    ("stars", "Stars (M to O)"),
+    ("red_giant", "Red giant"),
+    ("carbon", "Carbon star"),
+    ("brown", "Brown dwarf"),
+    ("wr", "Wolf-Rayet"),
+    ("wd", "White dwarf"),
+    ("pulsar", "Pulsar"),
+    ("dead", "Dead pulsar"),
+    ("magnetar", "Magnetar"),
+    ("bh", "Black hole"),
+    ("civ", "Dyson Sphere"),
+]
+
+
+def _draw_entity_mini(panel, tag, cx, cy, a):
+    """Miniature recreation of an entity at native sim scale, centered at (cx, cy), with
+    per-pixel alpha `a` so it fades with the help panel. Each mini follows the entity's real
+    draw recipe (same constants), just without the live state behind it."""
+    if tag == "clouds":
+        # Three overlapping block-cluster clouds at different sizes, same recipe as
+        # draw_clouds (block count grows as size shrinks, translucent element colors) with
+        # fixed offsets standing in for the per-cloud random block layout.
+        cloud_specs = [  # (size, element index, center dx, dy, fixed block offsets)
+            (12, 0, -5, -1, [(0.0, -0.14), (0.18, 0.08), (-0.16, 0.10), (0.08, 0.20), (-0.06, -0.06)]),
+            (8, 1, 3, 2,    [(-0.12, -0.16), (0.16, 0.0), (0.0, 0.18), (-0.18, 0.08), (0.10, 0.12)]),
+            (5, 3, 9, -3,   [(0.14, -0.10), (-0.12, -0.04), (0.04, 0.16), (0.18, 0.10), (-0.06, 0.20), (0.0, 0.0)]),
+        ]
+        for s, elem, dx, dy, offs in cloud_specs:
+            col = MOLECULAR_CLOUD_START_COLORS[elem]
+            block_r = max(1, int(s * 0.3))
+            rgba = (*col, int(MOLECULAR_CLOUD_OPACITY * a / 255))
+            num_blocks = min(3 + (MOLECULAR_CLOUD_START_SIZE - s) // 4, len(offs))
+            for ox, oy in offs[:num_blocks]:
+                bx = int(cx + dx + ox * s)
+                by = int(cy + dy + oy * s)
+                pygame.draw.rect(panel, rgba, (bx - block_r, by - block_r, block_r * 2, block_r * 2))
+    elif tag == "stars":
+        sizes = [s for _m, _n, _c, s in reversed(STAR_CLASSES)]
+        colors = [c for _m, _n, c, _s in reversed(STAR_CLASSES)]
+        total_w = sum(sizes) + 2 * (len(sizes) - 1)
+        x = cx - total_w // 2
+        for size, color in zip(sizes, colors):  # bottom-aligned ladder, M up to O
+            pygame.draw.rect(panel, (*color, a), (x, cy + 3 - size, size, size))
+            x += size + 2
+    elif tag == "red_giant":
+        s = RED_GIANT_DRAW_SIZE
+        pygame.draw.rect(panel, (*RED_GIANT_COLOR, a), (cx - s // 2, cy - s // 2, s, s))
+    elif tag == "carbon":
+        pygame.draw.rect(panel, (*CARBON_STAR_COLOR, a), (cx - 1, cy - 1, 3, 3))
+    elif tag == "brown":
+        pygame.draw.rect(panel, (*BROWN_DWARF_COLOR, a), (cx - 1, cy - 1, 3, 3))
+    elif tag == "wr":
+        size = STAR_CLASSES[0][3]  # the O-class square the shell sheds from
+        pygame.draw.rect(panel, (*STAR_CLASSES[0][2], a), (cx - size // 2, cy - size // 2, size, size))
+        pygame.draw.circle(panel, (*WOLF_RAYET_SHELL_COLOR, a), (cx, cy), size + 2, 1)
+    elif tag == "wd":
+        pygame.draw.circle(panel, (*WHITE_DWARF_COLOR, a), (cx, cy), WHITE_DWARF_RADIUS)
+    elif tag in ("pulsar", "dead"):
+        color = NEUTRON_STAR_COLOR if tag == "pulsar" else NEUTRON_STAR_DEAD_COLOR
+        if tag == "pulsar":  # mid-flash, as drawn on a live pulsar: white stretched beam at the wobble tilt
+            jl = NEUTRON_STAR_JET_FLASH_LENGTH
+            ux = math.sin(math.radians(NEUTRON_STAR_JET_WOBBLE))
+            uy = -math.cos(math.radians(NEUTRON_STAR_JET_WOBBLE))
+            pygame.draw.line(panel, (255, 255, 255, a), (cx - ux * jl, cy - uy * jl),
+                             (cx + ux * jl, cy + uy * jl), NEUTRON_STAR_JET_WIDTH)
+        core = NEUTRON_STAR_RADIUS * 2 + 1
+        pygame.draw.rect(panel, (*color, a),
+                         (cx - NEUTRON_STAR_RADIUS, cy - NEUTRON_STAR_RADIUS, core, core))
+    elif tag == "magnetar":
+        pygame.draw.circle(panel, (*MAGNETAR_COLOR_A, min(a, int(MAGNETAR_GLOW_ALPHA))),
+                           (cx, cy), MAGNETAR_RADIUS + 3)
+        pygame.draw.circle(panel, (*MAGNETAR_COLOR_A, a), (cx, cy), MAGNETAR_RADIUS)
+    elif tag == "bh":
+        # Feeding state: the heated-horizon crescent from draw_black_hole, frozen at a strong
+        # heat with the meal coming from the right — same segment/falloff math, no live state.
+        r = 5
+        heat, sharp, meal_ang = 0.8, 1.0, 0.0
+        floor = BLACK_HOLE_FLARE_FAR_SIDE_FLOOR
+        step = 2.0 * math.pi / BLACK_HOLE_RING_SEGMENTS
+        mids = [i * step + step * 0.5 for i in range(BLACK_HOLE_RING_SEGMENTS)]
+        profile = [floor + (1.0 - floor) * (0.5 + 0.5 * math.cos(m - meal_ang)) ** BLACK_HOLE_FLARE_CRESCENT_POWER
+                   for m in mids]
+        mean_p = sum(profile) / len(profile)
+        for i in range(BLACK_HOLE_RING_SEGMENTS):
+            a0 = i * step
+            seg_heat = min(1.0, heat * ((1.0 - sharp) + sharp * profile[i] / mean_p))
+            seg_color = interpolate_color(BLACK_HOLE_BORDER_COLOR, BLACK_HOLE_FLARE_COLOR, seg_heat)
+            pygame.draw.line(panel, (*seg_color, a),
+                             (cx + r * math.cos(a0), cy + r * math.sin(a0)),
+                             (cx + r * math.cos(a0 + step), cy + r * math.sin(a0 + step)), 2)
+        pygame.draw.circle(panel, (*BLACK_HOLE_COLOR, a), (cx, cy), r - 2)
+        pygame.draw.circle(panel, (*BLACK_HOLE_DISK_COLOR, a), (cx, cy - r + 1), 1)
+    elif tag == "civ":
+        ring_r = 2 + CIVILIZATION_RING_PADDING  # a G-dwarf's sprite radius + padding
+        for i in range(CIVILIZATION_RING_DOT_COUNT):
+            angle = (2 * math.pi / CIVILIZATION_RING_DOT_COUNT) * i
+            pygame.draw.circle(panel, (*CIVILIZATION_RING_COLOR, a),
+                               (int(cx + ring_r * math.cos(angle)), int(cy + ring_r * math.sin(angle))),
+                               CIVILIZATION_RING_DOT_RADIUS)
+        pygame.draw.circle(panel, (*CIVILIZATION_DISC_COLOR, a), (cx, cy),
+                           2 + CIVILIZATION_DISC_PADDING)
+
 
 def hotkeys_alpha(age):
     """Opacity (1 → 0) for the hotkey panel `age` seconds after it was last shown: fully
@@ -693,19 +805,31 @@ def hotkeys_alpha(age):
 
 
 def draw_hotkeys(screen, alpha):
-    """Hotkey cheat sheet, translucent panel in the top-right corner. `alpha` (1 → 0) fades
-    both the background and the text uniformly as the panel ages out."""
+    """Hotkey cheat sheet plus entity key, one translucent panel in the top-right corner.
+    `alpha` (1 → 0) fades the background, text, and swatches uniformly as the panel ages
+    out."""
     if alpha <= 0:
         return
     font = _get_hotkeys_font()
     key_surfs = [font.render(f"[{key}]", True, UI_HOTKEYS_KEY_COLOR) for key, _ in _HOTKEY_ROWS]
     label_surfs = [font.render(label, True, UI_HOTKEYS_TEXT_COLOR) for _, label in _HOTKEY_ROWS]
     key_w = max(s.get_width() for s in key_surfs)
-    row_w = key_w + UI_HOTKEYS_KEY_GAP + max(s.get_width() for s in label_surfs)
     row_h = font.get_height() + UI_HOTKEYS_ROW_SPACING
 
+    entity_labels = [font.render(label, True, UI_HOTKEYS_TEXT_COLOR)
+                     for _t, label in _ENTITY_KEY_ROWS]
+    # Mini column: as wide as the key column but at least wide enough for the star ladder;
+    # entity rows are a touch taller than text rows so the larger minis (Wolf-Rayet shell,
+    # red giant) don't collide.
+    mini_w = max(key_w, sum(s for _m, _n, _c, s in STAR_CLASSES) + 2 * (len(STAR_CLASSES) - 1))
+    entity_row_h = max(row_h, 18)
+    entity_row_w = max(mini_w + UI_HOTKEYS_KEY_GAP + s.get_width() for s in entity_labels)
+
+    row_w = max(key_w + UI_HOTKEYS_KEY_GAP + max(s.get_width() for s in label_surfs),
+                entity_row_w)
     panel_w = row_w + 2 * UI_HOTKEYS_PAD
-    panel_h = len(_HOTKEY_ROWS) * row_h + 2 * UI_HOTKEYS_PAD
+    panel_h = (len(_HOTKEY_ROWS) * row_h + len(_ENTITY_KEY_ROWS) * entity_row_h
+               + row_h // 2 + 2 * UI_HOTKEYS_PAD)  # half-row divider gap between sections
     panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
     panel.fill((*UI_HOTKEYS_BG[:3], int(UI_HOTKEYS_BG[3] * alpha)))
 
@@ -713,6 +837,7 @@ def draw_hotkeys(screen, alpha):
     # Surface.set_alpha is ignored on per-pixel-alpha surfaces, so a multiply blend is used
     # instead of a flat opacity call.
     fade_mult = (255, 255, 255, int(255 * alpha))
+    swatch_alpha = int(255 * alpha)
     y = UI_HOTKEYS_PAD
     for key_surf, label_surf in zip(key_surfs, label_surfs):
         key_surf.fill(fade_mult, special_flags=pygame.BLEND_RGBA_MULT)
@@ -720,5 +845,14 @@ def draw_hotkeys(screen, alpha):
         panel.blit(key_surf, (UI_HOTKEYS_PAD, y))
         panel.blit(label_surf, (UI_HOTKEYS_PAD + key_w + UI_HOTKEYS_KEY_GAP, y))
         y += row_h
+
+    y += row_h // 2
+    for (tag, _label), label_surf in zip(_ENTITY_KEY_ROWS, entity_labels):
+        _draw_entity_mini(panel, tag, UI_HOTKEYS_PAD + mini_w // 2,
+                          y + entity_row_h // 2 - 1, swatch_alpha)
+        label_surf.fill(fade_mult, special_flags=pygame.BLEND_RGBA_MULT)
+        panel.blit(label_surf, (UI_HOTKEYS_PAD + mini_w + UI_HOTKEYS_KEY_GAP,
+                                y + (entity_row_h - font.get_height()) // 2))
+        y += entity_row_h
 
     screen.blit(panel, (screen.get_width() - panel_w - UI_HOTKEYS_MARGIN, UI_HOTKEYS_MARGIN))
