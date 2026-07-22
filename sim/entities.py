@@ -46,7 +46,9 @@ class BlackHole:
         self.tracer_angle = random.uniform(0, 2 * math.pi)
         self.angular_momentum = 0.0  # Spin from off-center accretion
         self.child_universe = None  # the universe this hole ripped open and streams matter into (None until it rips)
-        self.flare_length = 0.0  # Current quasar jet length (pixels) — spikes per meal, decays back down
+        self.flare_length = 0.0  # Quasar flare swing amplitude (pixels) — spikes per meal, decays back down
+        self.flare_dir_x = 0.0   # Cosmetic: mass-weighted direction of recent meals (decays; newest dominates)
+        self.flare_dir_y = 0.0
         self.is_flaring = False
         self._prev_accretion_mass = 0.0  # last frame's post-drain backlog, to detect fresh captures
 
@@ -79,6 +81,9 @@ class BlackHole:
                         self.vy = (self.mass * self.vy + black_hole.mass * black_hole.vy) / total_mass
                     # The eaten hole's undigested backlog comes along too, not just its mass.
                     self.accretion_mass += black_hole.mass + black_hole.accretion_mass
+                    # Cosmetic: the flare glow points where the meal came from.
+                    self.flare_dir_x += (-dx / distance) * black_hole.mass
+                    self.flare_dir_y += (-dy / distance) * black_hole.mass
                     universe.black_hole_pulses.append([self.x, self.y, 0, black_hole.mass])
                     universe.event_log.append("BLACK HOLE MERGER — gravitational waves ripple out")
                 else:
@@ -110,6 +115,9 @@ class BlackHole:
                     self.vx = (self.mass * self.vx + entity.mass * entity.vx) / total_mass
                     self.vy = (self.mass * self.vy + entity.mass * entity.vy) / total_mass
                 self.accretion_mass += entity.mass
+                # Cosmetic: the flare glow points where the meal came from.
+                self.flare_dir_x += (-dx / distance) * entity.mass
+                self.flare_dir_y += (-dy / distance) * entity.mass
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
@@ -166,6 +174,9 @@ class BlackHole:
                     self.vx = (self.mass * self.vx + M[k] * VX[k]) / total_mass
                     self.vy = (self.mass * self.vy + M[k] * VY[k]) / total_mass
                 self.accretion_mass += M[k]
+                # Cosmetic: the flare glow points where the meal came from.
+                self.flare_dir_x += (-dx[k] / dist[k]) * M[k]
+                self.flare_dir_y += (-dy[k] / dist[k]) * M[k]
         if not alive.any():
             return
         soft_dist = np.sqrt(dist * dist + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
@@ -220,6 +231,10 @@ class BlackHole:
         self.flare_length = max(0.0, self.flare_length - BLACK_HOLE_FLARE_DECAY_PER_SEC * delta_time)
         self.flare_length = min(BLACK_HOLE_FLARE_MAX_LENGTH, self.flare_length
                                  + captured_this_frame * (1.0 - throttle) * BLACK_HOLE_FLARE_PX_PER_MASS)
+        # The meal-direction vector fades so the glow tracks the newest feeding side.
+        dir_keep = BLACK_HOLE_FLARE_DIR_DECAY ** delta_time
+        self.flare_dir_x *= dir_keep
+        self.flare_dir_y *= dir_keep
 
         was_flaring = self.is_flaring
         self.is_flaring = self.flare_length >= BLACK_HOLE_FLARE_THRESHOLD

@@ -384,12 +384,28 @@ BLACK_HOLE_DISK_SIZE = 1                   # Visual size in pixels of the accret
 BLACK_HOLE_DISK_ROTATION = 10            # Base rotation speed (rad/s) of the accretion disk tracer. Spin adds to this.
 
 # ── Quasar Flares (Eddington-choked accretion bursts, see BlackHole.decay) ──
-BLACK_HOLE_FLARE_THRESHOLD = 0.96     # Minimum flare_length (pixels) before jets render/log.
-BLACK_HOLE_FLARE_PX_PER_MASS = 0.64   # Jet length (pixels) granted per unit of mass captured, at full choke.
-BLACK_HOLE_FLARE_DECAY_PER_SEC = 10   # How fast (pixels/sec) a flare shrinks back down between meals.
-BLACK_HOLE_FLARE_MAX_LENGTH = 11.52   # Cap on jet length (pixels) so one huge capture doesn't paint off-screen beams.
-BLACK_HOLE_FLARE_COLOR = (255, 245, 200)  # Hot white-yellow, distinct from the disk tracer's soft red.
-BLACK_HOLE_FLARE_BASE_FRACTION = 0.18  # Cone base half-width as a fraction of the hole's own radius, so it visibly touches the hole.
+# Visual: the HORIZON RING is the flare. A quiescent hole keeps the dark-red border; while
+# feeding, the ring heats toward hot white-yellow with the glow distributed as a CRESCENT —
+# hottest at the meal angle, a floored ember on the far side (the Doppler-bright feeding
+# side, EHT-style). Direction lives IN the ring's light, not in any extra element: no beads,
+# no dots — the only dot on a hole stays the orbiting disk tracer. Crescent sharpness scales
+# with the meal-direction vector's magnitude, so consistent one-sided feeding focuses a tight
+# bright arc while chaotic all-sky feeding smears toward a uniform glow (which is what that
+# geometry deserves). flare_length (impulse per meal, decays between meals) drives the heat;
+# flare_dir_x/y (mass-weighted recent-meal direction, decays so the newest meal dominates)
+# aims the crescent. All cosmetic.
+BLACK_HOLE_FLARE_THRESHOLD = 0.96     # Minimum flare_length before the QUASAR FLARE ticker event logs (display is continuous, no threshold).
+BLACK_HOLE_FLARE_PX_PER_MASS = 0.64   # Heat units granted per unit of mass captured, at full choke.
+BLACK_HOLE_FLARE_DECAY_PER_SEC = 10   # How fast (units/sec) the heat decays back down between meals.
+BLACK_HOLE_FLARE_MAX_LENGTH = 11.52   # Heat at which the ring reaches full flare color (also caps the stored value).
+BLACK_HOLE_FLARE_COLOR = (255, 245, 200)  # Hot white-yellow the ring heats toward, distinct from the disk tracer's soft red.
+BLACK_HOLE_FLARE_OSC_RATE = 9.0       # Seethe speed (rad/s of wall time, ~1.4 Hz) of the heated ring's pulse; per-hole phase from its id.
+BLACK_HOLE_FLARE_PULSE_DEPTH = 0.3    # Fraction of the heat that oscillates — the seethe. 0 = steady glow, 1 = full on/off strobe.
+BLACK_HOLE_RING_SEGMENTS = 16         # Segments the heated ring is drawn in (the crescent's angular resolution). Quiescent rings stay one cheap circle.
+BLACK_HOLE_FLARE_CRESCENT_POWER = 2.0 # Cosine-falloff exponent from the meal angle. Higher = tighter, more focused crescent.
+BLACK_HOLE_FLARE_FAR_SIDE_FLOOR = 0.35  # The far side glows at this fraction of the crescent's heat — asymmetry survives even a full blaze.
+BLACK_HOLE_FLARE_DIR_REFERENCE = 15.0 # Meal-direction vector magnitude at which the crescent reaches full sharpness (a few same-side meals' worth).
+BLACK_HOLE_FLARE_DIR_DECAY = 0.5      # Per-second retention of the meal-direction vector — recent meals dominate the crescent angle.
 BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION = 0.999  # Per-second dissipation rate for black hole angular momentum (spin-down).
 BLACK_HOLE_PULSE_SPEED_MULTIPLIER = 1.5  # Speed multiplier applied to BH merger pulses relative to NS ripple speed.
 BLACK_HOLE_PULSE_MASS_SCALE = 3.5      # Divisor for consumed mass when scaling merger pulse force on the BARRIER. Lower = stronger barrier ripple on a merger.

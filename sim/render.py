@@ -277,20 +277,48 @@ def draw_black_hole(screen, bh, offset_x=0, offset_y=0):
     draw_x = int(bh.x + offset_x)
     draw_y = int(bh.y + offset_y)
     radius = bh.border_radius  # refreshed by BlackHole.decay — physics owns it, draw only reads
-    pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (draw_x, draw_y), radius)
-    pygame.draw.circle(screen, BLACK_HOLE_COLOR, (draw_x, draw_y), radius - 2)
 
-    if bh.is_flaring:
-        jet_length = bh.flare_length
-        base_half = max(1, radius * BLACK_HOLE_FLARE_BASE_FRACTION)
-        for sign in (1, -1):
-            y_base = draw_y + sign * radius
-            y_tip = draw_y + sign * (radius + jet_length)
-            pygame.draw.polygon(screen, BLACK_HOLE_FLARE_COLOR, [
-                (draw_x - base_half, y_base),
-                (draw_x + base_half, y_base),
-                (draw_x, y_tip),
-            ])
+    # The horizon ring IS the flare readout: dark red when quiescent, heated toward hot
+    # white-yellow by feeding (flare_length), seething with a stateless wall-clock pulse.
+    # Direction rides in the ring's light as a crescent — hottest at the meal angle, floored
+    # ember opposite — never as a separate bead/dot, which the strobing tracer camouflaged.
+    # Whole-ring color is the only accretion signal big enough to read at these hole sizes.
+    heat = min(1.0, bh.flare_length / BLACK_HOLE_FLARE_MAX_LENGTH)
+    if heat > 0.0:
+        osc = 0.5 - 0.5 * math.cos(time.time() * BLACK_HOLE_FLARE_OSC_RATE + bh.id)
+        heat *= 1.0 - BLACK_HOLE_FLARE_PULSE_DEPTH * osc
+    if heat <= 0.0 or radius < 2:
+        # Quiescent (or too small to subdivide): the classic one-circle dark ring.
+        pygame.draw.circle(screen, BLACK_HOLE_BORDER_COLOR, (draw_x, draw_y), radius)
+    else:
+        # Crescent sharpness follows the meal-direction vector's magnitude: consistent
+        # one-sided feeding focuses a tight arc, chaotic feeding smears toward uniform.
+        dir_mag = math.hypot(bh.flare_dir_x, bh.flare_dir_y)
+        sharp = min(1.0, dir_mag / BLACK_HOLE_FLARE_DIR_REFERENCE)
+        meal_ang = math.atan2(bh.flare_dir_y, bh.flare_dir_x)
+        floor = BLACK_HOLE_FLARE_FAR_SIDE_FLOOR
+        # Underfill at the ring's coolest (far-side) color so no background speckles leak
+        # between the segment lines and the black interior.
+        base_heat = heat * ((1.0 - sharp) + sharp * floor)
+        pygame.draw.circle(screen, interpolate_color(BLACK_HOLE_BORDER_COLOR, BLACK_HOLE_FLARE_COLOR, base_heat),
+                           (draw_x, draw_y), radius)
+        step = 2.0 * math.pi / BLACK_HOLE_RING_SEGMENTS
+        # Beaming concentrates rather than redistributes: normalize the crescent profile so
+        # its ring-average equals the heat — the meal side then runs HOTTER than a uniform
+        # blaze would (~1.7x at full sharpness), so direction stays legible even at low heat.
+        mids = [i * step + step * 0.5 for i in range(BLACK_HOLE_RING_SEGMENTS)]
+        profile = [floor + (1.0 - floor) * (0.5 + 0.5 * math.cos(m - meal_ang)) ** BLACK_HOLE_FLARE_CRESCENT_POWER
+                   for m in mids]
+        mean_p = sum(profile) / len(profile)
+        for i in range(BLACK_HOLE_RING_SEGMENTS):
+            a0 = i * step
+            a1 = a0 + step
+            seg_heat = min(1.0, heat * ((1.0 - sharp) + sharp * profile[i] / mean_p))
+            seg_color = interpolate_color(BLACK_HOLE_BORDER_COLOR, BLACK_HOLE_FLARE_COLOR, seg_heat)
+            pygame.draw.line(screen, seg_color,
+                             (draw_x + radius * math.cos(a0), draw_y + radius * math.sin(a0)),
+                             (draw_x + radius * math.cos(a1), draw_y + radius * math.sin(a1)), 3)
+    pygame.draw.circle(screen, BLACK_HOLE_COLOR, (draw_x, draw_y), radius - 2)
 
     tracer_x = draw_x + bh.border_radius * math.cos(bh.tracer_angle)
     tracer_y = draw_y + bh.border_radius * math.sin(bh.tracer_angle)
