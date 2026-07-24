@@ -628,12 +628,14 @@ def step(universe, ring, delta_time):
             dy = b.y - a.y
             distance = max(math.hypot(dx, dy), 1)
             force = NEUTRON_STAR_GRAVITY_CONSTANT * (a.mass * b.mass) / (distance ** 2)
+            # Newton's 3rd law: equal and opposite impulse, each side's velocity change is that
+            # impulse over its own mass (not the same raw kick applied to both regardless of mass).
             ux, uy = dx / distance, dy / distance
-            kick = force * delta_time
-            a.vx += ux * kick
-            a.vy += uy * kick
-            b.vx -= ux * kick
-            b.vy -= uy * kick
+            impulse = force * delta_time
+            a.vx += ux * impulse / a.mass
+            a.vy += uy * impulse / a.mass
+            b.vx -= ux * impulse / b.mass
+            b.vy -= uy * impulse / b.mass
 
     alive_wd = [wd for wd in universe.white_dwarfs if wd not in ns_to_remove]
     for i in range(len(alive_wd)):

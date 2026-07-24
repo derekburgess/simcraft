@@ -90,9 +90,13 @@ class BlackHole:
                     universe.event_log.append("BLACK HOLE MERGER — gravitational waves ripple out")
                 else:
                     soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
-                    force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (soft_dist ** 2)
-                    black_hole.vx += (dx / soft_dist) * force * delta_time
-                    black_hole.vy += (dy / soft_dist) * force * delta_time
+                    # Acceleration on black_hole, independent of its own mass (equivalence
+                    # principle) — self.mass cancels out of F/black_hole.mass, so this is just
+                    # G*self.mass/d^2. (The pair is visited from both sides across the outer
+                    # loop, so black_hole gets its own reaction when self/black_hole swap.)
+                    accel = BLACK_HOLE_GRAVITY_CONSTANT * self.mass / (soft_dist ** 2)
+                    black_hole.vx += (dx / soft_dist) * accel * delta_time
+                    black_hole.vy += (dy / soft_dist) * accel * delta_time
 
         self._attract_clouds(universe, delta_time, alive, stream_moves, capture_radius, swirl_radius)
 
@@ -123,14 +127,15 @@ class BlackHole:
             else:
                 soft_dist = math.sqrt(distance * distance + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
                 force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * entity.mass) / (soft_dist ** 2)
-                # Newton's 3rd law with inertia: NS takes the full kick, BH recoil scaled by mass ratio.
+                # Newton's 3rd law: equal and opposite impulse, each side's velocity change is
+                # that impulse over its OWN mass (equivalence principle for the entity; ordinary
+                # inertia for the much heavier hole).
                 ux, uy = dx / soft_dist, dy / soft_dist
-                kick = force * delta_time
-                entity.vx += ux * kick
-                entity.vy += uy * kick
-                recoil = kick * (entity.mass / self.mass)
-                self.vx -= ux * recoil
-                self.vy -= uy * recoil
+                impulse = force * delta_time
+                entity.vx += ux * impulse / entity.mass
+                entity.vy += uy * impulse / entity.mass
+                self.vx -= ux * impulse / self.mass
+                self.vy -= uy * impulse / self.mass
 
     def _attract_clouds(self, universe, delta_time, alive, stream_moves, capture_radius, swirl_radius):
         """Vectorized cloud interaction: same capture/stream/accrete rules and force/swirl formulas
@@ -182,14 +187,19 @@ class BlackHole:
         if not alive.any():
             return
         soft_dist = np.sqrt(dist * dist + BLACK_HOLE_GRAVITY_SOFTENING * BLACK_HOLE_GRAVITY_SOFTENING)
-        force = BLACK_HOLE_GRAVITY_CONSTANT * (self.mass * M) / (soft_dist * soft_dist)
+        # Acceleration on each cloud, independent of its own mass (equivalence principle) —
+        # self.mass cancels out of F/M, so this is just G*self.mass/d^2. `impulse` (the raw
+        # mutual force*dt, proportional to both masses) is kept separately for the hole's own
+        # recoil below.
+        accel = BLACK_HOLE_GRAVITY_CONSTANT * self.mass / (soft_dist * soft_dist)
         ux = dx / soft_dist
         uy = dy / soft_dist
-        kick = np.where(alive, force * delta_time, 0.0)
+        kick = np.where(alive, accel * delta_time, 0.0)
+        impulse = kick * M
         # Newton's 3rd law recoil, per cloud; the exclusive prefix sum gives each cloud the same
         # sequentially-drifting hole velocity the old loop produced.
-        rec_x = ux * kick * M / self.mass
-        rec_y = uy * kick * M / self.mass
+        rec_x = ux * impulse / self.mass
+        rec_y = uy * impulse / self.mass
         frame_vx = self.vx - (np.cumsum(rec_x) - rec_x)
         frame_vy = self.vy - (np.cumsum(rec_y) - rec_y)
         VX += ux * kick
@@ -200,8 +210,13 @@ class BlackHole:
             swirl_dir = 1.0 if self.angular_momentum >= 0 else -1.0
             tx, ty = -uy, ux
             cur_t = (VX - frame_vx) * tx + (VY - frame_vy) * ty
-            target_t = swirl_dir * np.sqrt(force * dist)
-            blend = np.minimum(1.0, BLACK_HOLE_SWIRL_RATE * (1.0 - dist / swirl_radius) * delta_time)
+            target_t = swirl_dir * np.sqrt(accel * dist)
+            # Falloff shaped to stay near full strength across most of the disk and only taper
+            # sharply in the last stretch before the boundary (exponent < 1 bows the curve up),
+            # instead of the old linear ramp that was ~0 right where infalling clouds first
+            # cross in — that let them fall in almost radially and only orbit once already deep.
+            falloff = np.clip(1.0 - dist / swirl_radius, 0.0, 1.0) ** BLACK_HOLE_SWIRL_FALLOFF_EXPONENT
+            blend = np.minimum(1.0, BLACK_HOLE_SWIRL_RATE * falloff * delta_time)
             dvt = np.where(in_swirl, (target_t - cur_t) * blend, 0.0)
             VX += dvt * tx
             VY += dvt * ty
@@ -210,8 +225,7 @@ class BlackHole:
             # rotation, this makes it last. Damping is partial: the residual inward drift is
             # the viscous accretion that keeps the hole fed.
             cur_r = (VX - frame_vx) * ux + (VY - frame_vy) * uy
-            circ = np.minimum(1.0, BLACK_HOLE_DISK_CIRCULARIZATION
-                              * (1.0 - dist / swirl_radius) * delta_time)
+            circ = np.minimum(1.0, BLACK_HOLE_DISK_CIRCULARIZATION * falloff * delta_time)
             dvr = np.where(in_swirl, -cur_r * circ, 0.0)
             VX += dvr * ux
             VY += dvr * uy
@@ -297,15 +311,17 @@ class NeutronStar:
             if near.any():
                 d2 = np.where(near, dist_sq, 1.0)
                 distance = np.sqrt(d2)
-                force = np.where(near, NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * clouds.M) / d2, 0.0)
-                fx = (dx / distance) * force * delta_time
-                fy = (dy / distance) * force * delta_time
-                clouds.VX -= fx
-                clouds.VY -= fy
+                # Acceleration on each cloud, independent of its own mass (equivalence
+                # principle) — self.mass cancels out of F/M, so this is just G*self.mass/d^2.
+                accel = np.where(near, NEUTRON_STAR_GRAVITY_CONSTANT * self.mass / d2, 0.0)
+                kx = (dx / distance) * accel * delta_time
+                ky = (dy / distance) * accel * delta_time
+                clouds.VX -= kx
+                clouds.VY -= ky
                 # Newton's 3rd law with inertia (same convention as BlackHole._attract_clouds):
-                # recoil scaled by mass ratio, so the dense star anchors while clouds fall in.
-                self.vx += float((fx * clouds.M).sum()) / self.mass
-                self.vy += float((fy * clouds.M).sum()) / self.mass
+                # the star's own recoil uses the impulse (kick * cloud mass), not the kick itself.
+                self.vx += float((kx * clouds.M).sum()) / self.mass
+                self.vy += float((ky * clouds.M).sum()) / self.mass
 
         for black_hole in universe.black_holes:
             # Second half of a double-applied pair: BlackHole.attract already pulled this star
@@ -319,14 +335,14 @@ class NeutronStar:
 
             force = NEUTRON_STAR_GRAVITY_CONSTANT * (self.mass * black_hole.mass) / (distance**2)
 
-            # Newton's 3rd law with inertia: NS takes the full kick, BH recoil scaled by mass ratio.
+            # Newton's 3rd law: equal and opposite impulse, each side's velocity change is that
+            # impulse over its own mass.
             ux, uy = dx / distance, dy / distance
-            kick = force * delta_time
-            self.vx += ux * kick
-            self.vy += uy * kick
-            recoil = kick * (self.mass / black_hole.mass)
-            black_hole.vx -= ux * recoil
-            black_hole.vy -= uy * recoil
+            impulse = force * delta_time
+            self.vx += ux * impulse / self.mass
+            self.vy += uy * impulse / self.mass
+            black_hole.vx -= ux * impulse / black_hole.mass
+            black_hole.vy -= uy * impulse / black_hole.mass
 
     def update_pulse(self, universe, ring, delta_time):
         self.time_since_last_pulse += delta_time
@@ -458,15 +474,16 @@ class Magnetar(NeutronStar):
         d2 = np.where(near, dist_sq, 1.0)
         distance = np.sqrt(d2)
         # 1/d falloff (not 1/d^2): a magnet-like grip that stays strong out to the field edge.
-        force = np.where(near, MAGNETAR_MAGNETIC_CONSTANT * (self.mass * clouds.M) / distance, 0.0)
-        fx = (dx / distance) * force * delta_time
-        fy = (dy / distance) * force * delta_time
-        clouds.VX -= fx
-        clouds.VY -= fy
-        # Newton's 3rd law with inertia: mass-scaled recoil — the magnet holds its ground
-        # and reels the iron in, rather than lunging at it.
-        self.vx += float((fx * clouds.M).sum()) / self.mass
-        self.vy += float((fy * clouds.M).sum()) / self.mass
+        # Acceleration on each cloud, independent of its own mass (equivalence principle).
+        accel = np.where(near, MAGNETAR_MAGNETIC_CONSTANT * self.mass / distance, 0.0)
+        kx = (dx / distance) * accel * delta_time
+        ky = (dy / distance) * accel * delta_time
+        clouds.VX -= kx
+        clouds.VY -= ky
+        # Newton's 3rd law with inertia: recoil uses the impulse (kick * cloud mass) — the
+        # magnet holds its ground and reels the iron in, rather than lunging at it.
+        self.vx += float((kx * clouds.M).sum()) / self.mass
+        self.vy += float((ky * clouds.M).sum()) / self.mass
 
     def update_field(self, universe, delta_time):
         """Advance the color oscillation, tick down the field lifetime, and roll for a
@@ -533,10 +550,12 @@ class WhiteDwarf:
             return
         d2 = np.where(near, dist_sq, 1.0)
         distance = np.sqrt(d2)
-        force = np.where(near, WHITE_DWARF_GRAVITY_CONSTANT * (self.mass * clouds.M) / d2, 0.0)
-        fx = (dx / distance) * force * delta_time
-        fy = (dy / distance) * force * delta_time
-        clouds.VX -= fx
-        clouds.VY -= fy
-        self.vx += float((fx * clouds.M).sum()) / self.mass
-        self.vy += float((fy * clouds.M).sum()) / self.mass
+        # Acceleration on each cloud, independent of its own mass (equivalence principle).
+        accel = np.where(near, WHITE_DWARF_GRAVITY_CONSTANT * self.mass / d2, 0.0)
+        kx = (dx / distance) * accel * delta_time
+        ky = (dy / distance) * accel * delta_time
+        clouds.VX -= kx
+        clouds.VY -= ky
+        # Newton's 3rd law with inertia: recoil uses the impulse (kick * cloud mass).
+        self.vx += float((kx * clouds.M).sum()) / self.mass
+        self.vy += float((ky * clouds.M).sum()) / self.mass

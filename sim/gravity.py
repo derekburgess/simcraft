@@ -134,12 +134,24 @@ def forces_local(x, y, gm):
 
 
 def cloud_forces(x, y, mass, is_star):
-    """Backend dispatch. Returns (fx, fy) acceleration-force arrays for v += f*dt."""
+    """Backend dispatch. Returns (ax, ay) acceleration arrays for v += a*dt.
+
+    Backends sum pairwise F = G*gm_i*gm_j/d^2 (gravitational "charge" gm, tiered by
+    STAR_GRAVITY_MULTIPLIER), which is proportional to the receiver's own charge — dividing by
+    the receiver's physical mass here converts that into acceleration. Since gm = mass * tier,
+    this leaves exactly one surviving factor of `tier`, so a star still free-falls tier-times
+    faster than a cloud (the intended charge asymmetry), but acceleration no longer also scales
+    with the receiver's raw mass on top of that (which would make heavy clouds/stars runaway-
+    accelerate through every close encounter).
+    """
     gm = grav_masses(mass, is_star)
     if GPU_GRAVITY_ENABLED and _init_gpu():
-        return forces_gpu(x, y, gm)
-    if BARNES_HUT_ENABLED:
+        fx, fy = forces_gpu(x, y, gm)
+    elif BARNES_HUT_ENABLED:
         if _fastphysics is not None and hasattr(_fastphysics, 'bh_forces'):
-            return forces_barnes_hut(x, y, gm)
-        return forces_brute(x, y, gm)  # same long-range physics, exact
-    return forces_local(x, y, gm)
+            fx, fy = forces_barnes_hut(x, y, gm)
+        else:
+            fx, fy = forces_brute(x, y, gm)  # same long-range physics, exact
+    else:
+        fx, fy = forces_local(x, y, gm)
+    return fx / mass, fy / mass
