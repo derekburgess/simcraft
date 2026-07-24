@@ -65,19 +65,14 @@ class Barrier:
 
     # ── physics ──
     def apply_gravity(self, universe, delta_time):
-        # The barrier only pulls on black holes. Clouds and other matter are organized purely by
-        # black-hole gravity, so they clump into galaxies that get carried along as the barrier
-        # tugs each hole around. (Containment of clouds is still handled separately by enforce().)
-        cx, cy = self.center
-        for bh in universe.black_holes:
-            angle, dist, dx, dy = self._entity_angle_and_dist(bh)
-            barrier_r = self.get_radius_at_angle(angle)
-            target_dx = cx + barrier_r * math.cos(angle) - bh.x
-            target_dy = cy + barrier_r * math.sin(angle) - bh.y
-            target_dist = max(math.hypot(target_dx, target_dy), 1)
-            force = (BARRIER_GRAVITY_CONSTANT * math.sqrt(bh.mass) / (target_dist ** 2)) * BLACK_HOLE_BARRIER_GRAVITY_FACTOR
-            bh.vx += (target_dx / target_dist) * force * delta_time
-            bh.vy += (target_dy / target_dist) * force * delta_time
+        # The barrier no longer pulls on anything. Black holes are pure rotational anchors —
+        # organizing their universe's orbit/swirl without being tugged by the wall — while
+        # expansion comes from pulses (BARRIER_WAVE_PUSH) and contraction comes from stars and
+        # magnetars denting the wall inward (see update_deformation). This used to pull black
+        # holes outward toward the wall (a deliberately weak "losing battle" nudge), but that
+        # pull fed back with the hole's own denting of the same stretch of wall it was aiming
+        # at, producing erratic drift instead of a stable anchor.
+        pass
 
     def _accum_deformation_scalar(self, entity, mass_accum, step, proximity_threshold, factor):
         angle, dist, _, _ = self._entity_angle_and_dist(entity)
@@ -121,8 +116,8 @@ class Barrier:
                     np.add.at(mass_accum, i0, eff * (1 - t))
                     np.add.at(mass_accum, i1, eff * t)
 
-        for bh in universe.black_holes:
-            self._accum_deformation_scalar(bh, mass_accum, step, proximity_threshold, BLACK_HOLE_BARRIER_DEFORM_FACTOR)
+        # Black holes don't dent the wall — contraction is a stars/magnetars role now, so holes
+        # stay purely rotational anchors (see apply_gravity).
         for ns in (*universe.neutron_stars, *universe.magnetars):
             self._accum_deformation_scalar(ns, mass_accum, step, proximity_threshold, NEUTRON_STAR_BARRIER_DEFORM_FACTOR)
 

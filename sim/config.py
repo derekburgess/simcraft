@@ -102,33 +102,32 @@ BARRIER_POINT_COUNT = 240       # Number of vertices defining the barrier ring. 
 MOLECULAR_CLOUD_MAX_PER_UNIVERSE = 900  # Hard cap on clouds in a single universe. Bounds per-frame physics AND rendering cost so the sim doesn't degrade as matter regenerates. Excess (lowest-mass) clouds are trimmed. Raised from the original 800: trimming keeps the highest-mass rows (a mass-sort, top-N), so once a universe pins at the cap every freshly-spawned low-mass cloud is competing at the very bottom and gets evicted almost immediately — a ratchet toward star-heavy populations no merge-chance tuning can fix on its own. Backed off further — modest headroom over original rather than a big multiple.
 MULTIVERSE_MAX_CLOUDS = 15500   # Hard cap on total clouds across ALL universes — bounds the whole frame regardless of how many universes spawn. Lowest-mass clouds are trimmed globally. Also the multiverse's carrying capacity: quenched universes die by losing the global competition for these slots, so raising it stretches the late-game eras. Raised alongside the per-universe cap for the same reason (see above), backed off further.
 BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
-BARRIER_GRAVITY_CONSTANT = 70 * GRAVITY_SCALE  # Base gravitational pull of the barrier on entities. Reduced so it contains without out-competing black holes for nearby clumping.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
 BARRIER_BASE_OPACITY = 120      # Transparency of the barrier at rest (0=invisible, 255=opaque).
 BARRIER_FLASH_COLOR = (0, 184, 106)  # RGB color the barrier flashes when deformed (green).
 BARRIER_FLASH_OPACITY = 175     # Peak opacity during a barrier flash (0-255). Below full: during wave storms many segments flash at once, and at 255 the ring strobes.
 BARRIER_FLASH_DECAY = 4      # How fast barrier flashes fade per second. Higher = faster fade.
-BARRIER_WAVE_PUSH = 200      # Force magnitude when pulses hit the barrier. Higher = more barrier wobble/expansion per merger. Raised from 60 for more visible expansion on mature universes — the newborn-universe blowout this was cut for is about a tiny barrier getting the pulse's whole (fixed-width) effect band at once, not the push value being wrong in general, so there's room to bring some back. Re-verify with pulse_probe.py before pushing further.
+BARRIER_WAVE_PUSH = 60      # Force magnitude when pulses hit the barrier. Higher = more barrier wobble/expansion per merger. Raised from 60 for more visible expansion on mature universes — the newborn-universe blowout this was cut for is about a tiny barrier getting the pulse's whole (fixed-width) effect band at once, not the push value being wrong in general, so there's room to bring some back. Re-verify with pulse_probe.py before pushing further.
 BARRIER_DAMPING = 0.04          # Damping factor for barrier deformation velocity. Lower = more oscillation.
-BARRIER_TENSION = 8.0           # Membrane tension: per second, each barrier vertex relaxes this strongly toward its neighbours' average radius. Keeps the ring smooth (no spikes/web) — but too high erases contact dents, so kept moderate. 0 = no smoothing.
+BARRIER_TENSION = 7.0           # Membrane tension: per second, each barrier vertex relaxes this strongly toward its neighbours' average radius. Keeps the ring smooth (no spikes/web) — but too high erases contact dents, so kept moderate. 0 = no smoothing.
 BARRIER_DEFORM_THRESHOLD = 0.1  # Minimum radius change (pixels) to trigger a flash effect.
 BARRIER_HEAVY_MASS_THRESHOLD = 100  # Combined mass near a barrier section that weakens containment. Higher = harder to break out.
-BARRIER_SMOOTHING_PASSES = 5    # Number of smoothing iterations when drawing the barrier. More = smoother shape.
-BARRIER_SMOOTHING_WINDOW = 9    # Window size for the smoothing algorithm (must be odd). Larger = smoother but less detail.
+BARRIER_SMOOTHING_PASSES = 6    # Number of smoothing iterations when drawing the barrier. More = smoother shape.
+BARRIER_SMOOTHING_WINDOW = 7    # Window size for the smoothing algorithm (must be odd). Larger = smoother but less detail.
 BARRIER_DEFORMATION_PROXIMITY_FACTOR = 0.3  # Fraction of rest radius used as proximity threshold for deformation accumulation.
 BARRIER_SECTION_SEARCH_RANGE = 3  # Angular step multiplier when searching for nearby compact objects at a barrier section.
 BARRIER_LINE_WIDTH = 3          # Line width (pixels) for drawing the barrier ring polygon and flash segments.
 
 # ── Barrier Interaction (how different entities interact with the barrier) ──
-# The barrier's gravity acts on black holes only (see Barrier.apply_gravity); everything else
-# interacts through deformation and containment.
-MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 0.12   # How strongly massive clouds dent the barrier on approach. Was tuned for the recollapse era at 0.3 (a dead universe packed with evaporation clouds grinds down to its Big Crunch in ~6-7 minutes, at 6 it imploded in seconds) — lowered alongside the other deform factors, so watch Big Crunch pacing if it comes up.
+# Black holes are pure rotational anchors — no barrier gravity pull, no wall denting (see
+# Barrier.apply_gravity / update_deformation). Expansion comes from merger pulses
+# (BARRIER_WAVE_PUSH); contraction comes from stars, clouds, and magnetars/neutron stars
+# denting the wall inward below. Everything still interacts through containment (enforce()).
+MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 0.08   # How strongly massive clouds dent the barrier on approach. Was tuned for the recollapse era at 0.3 (a dead universe packed with evaporation clouds grinds down to its Big Crunch in ~6-7 minutes, at 6 it imploded in seconds) — lowered alongside the other deform factors, so watch Big Crunch pacing if it comes up.
 BARRIER_DEFORM_CLOUD_MASS = 24  # Mass at which a cloud starts denting the barrier. Below PROTOSTAR_THRESHOLD (28) on purpose: the deform gate used to reuse the star threshold, which made this factor dead code — anything heavy enough to dent became a star first. 24 matches the black-hole evaporation clouds ("these are heavy!"), so a dead universe full of them recollapses under its own weight toward the Big Crunch — a closed universe doing what closed universes do.
 
 STAR_BARRIER_DEFORM_FACTOR = 4        # How strongly stars dent the barrier on approach.
 
-BLACK_HOLE_BARRIER_GRAVITY_FACTOR = 0.025  # Gravity multiplier for black holes vs barrier (the only thing the barrier attracts). Gentle so holes stay central and their disks don't overhang the barrier edge (overhanging clouds get pinned to the edge by enforce()).
-BLACK_HOLE_BARRIER_DEFORM_FACTOR = 16    # How strongly black holes dent the barrier.
 BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.01  # How much nearby mass weakens containment for black holes. Higher = escapes more easily.
 BLACK_HOLE_BARRIER_PUSH_STRENGTH = 10    # Base push force applied to black holes hitting the barrier boundary.
 
@@ -329,7 +328,7 @@ TYPE_IA_EJECTA_SPREAD = 30      # Max spawn radius (pixels) of Type Ia ejecta.
 
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse (kept equal to STAR_TIER_HIGH_MASS: only blue giants die violently).
-BLACK_HOLE_CHANCE = 0.0001      # Base per-frame collapse probability AT the threshold; scales as (mass/threshold)^COLLAPSE_MASS_EXPONENT. Very rare.
+BLACK_HOLE_CHANCE = 0.00005      # Base per-frame collapse probability AT the threshold; scales as (mass/threshold)^COLLAPSE_MASS_EXPONENT. Very rare.
 BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead); heavy kilonova remnants past the cap leave magnetars instead.
 
 # ── Multiverse (each black-hole birth opens a new universe outside the current ones) ──
@@ -376,7 +375,7 @@ BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equa
 # Dynamical friction: a massive hole plowing through the cloud sea is gravitationally braked.
 # Modeled as strong extra velocity damping (per second) so holes act as near-stationary anchors
 # instead of being dragged along by accretion and bulk flows. 1.0 = no extra braking.
-BLACK_HOLE_VELOCITY_DAMPING = 0.15    # Per-second velocity retention for black holes. Strong anchor so a hole drifts SLOWER than its disk rotates — otherwise the disk smears into a comet instead of a visible swirl. Higher = roams more (smears the swirl).
+BLACK_HOLE_VELOCITY_DAMPING = 0.08    # Per-second velocity retention for black holes. Strong anchor so a hole drifts SLOWER than its disk rotates — otherwise the disk smears into a comet instead of a visible swirl. Higher = roams more (smears the swirl). Tightened now that the barrier no longer pulls or dents holes at all (they're pure rotational anchors) — nothing external should be nudging them, so any residual drift should now come only from BH-BH/capture recoil, which this keeps reined in.
 BLACK_HOLE_COLOR = (0,0,0)      # RGB fill color of the black hole (black).
 BLACK_HOLE_BORDER_COLOR = (100, 0, 0)  # RGB color of the event horizon ring (dark red).
 BLACK_HOLE_MERGE_COLOR = (0, 60, 180, 110)  # RGBA color of the gravitational wave pulse from BH mergers. Brighter than pulsar rings on purpose (rarer, weightier events); crowd-dimming applies to these too.
