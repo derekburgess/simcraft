@@ -99,8 +99,8 @@ CMB_DENSITY_CONTRAST = 0.8     # How strongly barrier shape biases initial cloud
 
 # ── Barrier (cosmic boundary ring) ──
 BARRIER_POINT_COUNT = 240       # Number of vertices defining the barrier ring. More = smoother circle and finer deformation. NOT a performance lever: deformation is vectorized (~0.03 ms/universe at any count) and draw cost is dominated by the ring's pixel size, not its vertices — measured 240 vs 120 saves ~0.03 ms/universe.
-MOLECULAR_CLOUD_MAX_PER_UNIVERSE = 900  # Hard cap on clouds in a single universe. Bounds per-frame physics AND rendering cost so the sim doesn't degrade as matter regenerates. Excess (lowest-mass) clouds are trimmed. Raised from the original 800: trimming keeps the highest-mass rows (a mass-sort, top-N), so once a universe pins at the cap every freshly-spawned low-mass cloud is competing at the very bottom and gets evicted almost immediately — a ratchet toward star-heavy populations no merge-chance tuning can fix on its own. Backed off further — modest headroom over original rather than a big multiple.
-MULTIVERSE_MAX_CLOUDS = 15500   # Hard cap on total clouds across ALL universes — bounds the whole frame regardless of how many universes spawn. Lowest-mass clouds are trimmed globally. Also the multiverse's carrying capacity: quenched universes die by losing the global competition for these slots, so raising it stretches the late-game eras. Raised alongside the per-universe cap for the same reason (see above), backed off further.
+MOLECULAR_CLOUD_MAX_PER_UNIVERSE = 600  # Hard cap on clouds in a single universe. Bounds per-frame physics AND rendering cost so the sim doesn't degrade as matter regenerates. Excess (lowest-mass) clouds are trimmed. Raised from the original 800: trimming keeps the highest-mass rows (a mass-sort, top-N), so once a universe pins at the cap every freshly-spawned low-mass cloud is competing at the very bottom and gets evicted almost immediately — a ratchet toward star-heavy populations no merge-chance tuning can fix on its own. Backed off further — modest headroom over original rather than a big multiple.
+MULTIVERSE_MAX_CLOUDS = 14000   # Hard cap on total clouds across ALL universes — bounds the whole frame regardless of how many universes spawn. Lowest-mass clouds are trimmed globally. Also the multiverse's carrying capacity: quenched universes die by losing the global competition for these slots, so raising it stretches the late-game eras. Raised alongside the per-universe cap for the same reason (see above), backed off further.
 BARRIER_INITIAL_SIZE = 32      # Starting diameter of the barrier ring in pixels.
 BARRIER_COLOR = (30, 60, 220)   # RGB color of the barrier ring at rest.
 BARRIER_BASE_OPACITY = 120      # Transparency of the barrier at rest (0=invisible, 255=opaque).
@@ -123,6 +123,7 @@ BARRIER_LINE_WIDTH = 3          # Line width (pixels) for drawing the barrier ri
 # Barrier.apply_gravity / update_deformation). Expansion comes from merger pulses
 # (BARRIER_WAVE_PUSH); contraction comes from stars, clouds, and magnetars/neutron stars
 # denting the wall inward below. Everything still interacts through containment (enforce()).
+BARRIER_CLOUD_GRAVITY_CONSTANT = 0.3  # Outward pull of the barrier on raw (non-star) clouds — the tug-of-war: loose gas drifts toward the wall unless a black hole organizes it into an orbit first. Exempts stars (IS_STAR) entirely, so anything a hole has ignited belongs to the hole from then on, win condition for the black hole.
 MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 0.08   # How strongly massive clouds dent the barrier on approach. Was tuned for the recollapse era at 0.3 (a dead universe packed with evaporation clouds grinds down to its Big Crunch in ~6-7 minutes, at 6 it imploded in seconds) — lowered alongside the other deform factors, so watch Big Crunch pacing if it comes up.
 BARRIER_DEFORM_CLOUD_MASS = 24  # Mass at which a cloud starts denting the barrier. Below PROTOSTAR_THRESHOLD (28) on purpose: the deform gate used to reuse the star threshold, which made this factor dead code — anything heavy enough to dent became a star first. 24 matches the black-hole evaporation clouds ("these are heavy!"), so a dead universe full of them recollapses under its own weight toward the Big Crunch — a closed universe doing what closed universes do.
 
@@ -145,7 +146,7 @@ MOLECULAR_CLOUD_GROWTH_RATE = 0.06  # How fast clouds visually shrink as they ga
 MOLECULAR_CLOUD_START_MASS = 1  # Initial mass of each cloud.
 MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0015 * GRAVITY_SCALE  # Base gravitational attraction for the diffuse cloud/star field. Weak: clouds barely self-organize — they condense onto denser objects (stars, black holes).
 STAR_GRAVITY_MULTIPLIER = 5.0   # Extra gravitational "charge" a star carries beyond its raw mass, making it a moderate condensation seed (a distinct tier between weak clouds and strong black holes).
-MOLECULAR_CLOUD_MERGE_CHANCE = 0.005  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging. Lowered to keep universes cloud-heavy rather than star-heavy — slows mass accumulation toward PROTOSTAR_THRESHOLD without touching that (frozen) threshold itself.
+MOLECULAR_CLOUD_MERGE_CHANCE = 0.00005  # Probability (0-1) of two colliding clouds merging per frame. Higher = faster merging. Lowered to keep universes cloud-heavy rather than star-heavy — slows mass accumulation toward PROTOSTAR_THRESHOLD without touching that (frozen) threshold itself.
 MOLECULAR_CLOUD_MAX_MASS = 48   # Maximum mass a cloud/star can reach. Caps growth.
 MOLECULAR_CLOUD_START_COLORS = [
     (140, 20, 20),   # Hydrogen - Red (H-alpha)
@@ -292,7 +293,7 @@ CIVILIZATION_FLICKER_GAP_CHANCE = 4  # 1-in-N steps the star's own disc blinks o
 # Ignition mass boost depends on the cloud's own metallicity: pristine hydrogen/helium clouds
 # fragment less and ignite as monsters (Population III), enriched clouds ignite smaller.
 STAR_ENRICHED_ELEMENT_MIN = 3   # Element index at or above which a cloud counts as metal-enriched (beyond H/He/O).
-PROTOSTAR_PRISTINE_MASS_BOOST = 6  # Ignition boost for pristine (H/He/O) clouds — first stars are giants. Halved: a newly-ignited pristine cloud used to jump straight from 28 to 40, well into mid/high tier in one step, which was part of why universes read star-heavy.
+PROTOSTAR_PRISTINE_MASS_BOOST = 3  # Ignition boost for pristine (H/He/O) clouds — first stars are giants. Was 12 originally; a newly-ignited pristine cloud used to jump straight from 28 to 40, well into mid/high tier in one step — cut further so freshly-formed stars start closer to the ignition threshold instead of leaping toward top tier immediately.
 PROTOSTAR_ENRICHED_MASS_BOOST = 4   # Ignition boost for metal-enriched clouds.
 
 # COLLISION sizes per fate tier (the AABB the merge pass sees). Display colors/sizes moved
@@ -328,7 +329,7 @@ TYPE_IA_EJECTA_SPREAD = 30      # Max spawn radius (pixels) of Type Ia ejecta.
 
 # ── Black Holes ──
 BLACK_HOLE_THRESHOLD = 42       # Mass above which a star can collapse (kept equal to STAR_TIER_HIGH_MASS: only blue giants die violently).
-BLACK_HOLE_CHANCE = 0.0001      # Base per-frame collapse probability AT the threshold; scales as (mass/threshold)^COLLAPSE_MASS_EXPONENT. Very rare.
+BLACK_HOLE_CHANCE = 0.0008      # Base per-frame collapse probability AT the threshold; scales as (mass/threshold)^COLLAPSE_MASS_EXPONENT. Very rare.
 BLACK_HOLE_MAX_COUNT = 5        # Hard cap on coexisting black holes. Keeps holes sparse (so disks can swirl without being flung) while leaving formation frequent enough to drive the cloud matter cycle. Stars that would collapse past the cap stay stars (and supernova instead); heavy kilonova remnants past the cap leave magnetars instead.
 
 # ── Multiverse (each black-hole birth opens a new universe outside the current ones) ──
@@ -351,10 +352,11 @@ BARRIER_CONTACT_DEFORM = 0.4    # How strongly barriers flatten each other where
 BARRIER_SEPARATION_SHARE = 0.15  # Of the penetration when two barriers press, this fraction is resolved by pushing them apart; the rest by flattening (denting) the contact faces. Low = balloon-like (they stay in contact and visibly flatten rather than shoving apart).
 MULTIVERSE_RENDER_MAX = 5000    # Max pixels per side of the off-screen surface used to draw the whole multiverse before scaling to the window.
 UNIVERSE_CULL_MARGIN = 100      # Extra pixels beyond a universe's barrier radius still treated as on-view when culling off-screen universes from rendering (covers entities/pulses that momentarily poke past the barrier).
-BLACK_HOLE_RADIUS = 14           # Visual radius divisor — smaller value = larger drawn black hole (mass / this). Shrinks the drawn disk and event horizon without changing gravitational mass.
-BLACK_HOLE_MAX_MASS = 115       # Maximum mass a black hole can accumulate. Capped lower so no single hole grows into an overwhelming dominant one.
+BLACK_HOLE_RADIUS = 28           # Visual radius divisor — smaller value = larger drawn black hole (mass / this). Shrinks the drawn disk and event horizon without changing gravitational mass. Raised alongside BLACK_HOLE_MAX_MASS (115->200): the old 14 gave a max-mass hole a drawn radius of 14 (vs 8 pre-cap-raise); 28 brings it down to ~7, smaller than the original.
+BLACK_HOLE_MAX_MASS = 200       # Maximum mass a black hole can accumulate. Was 115 — capped low so no single hole grows into an overwhelming dominant one — but that also meant genuinely "supermassive" growth (driven by eating giants/magnetars/other holes) wasn't reachable. Raised; RIP_MASS_FACTOR and the Eddington throttle are both mass-cap-relative fractions, so they scale automatically.
 BLACK_HOLE_GRAVITY_CONSTANT = 40 * GRAVITY_SCALE  # Gravitational pull strength. Much higher than clouds; raised so disk clouds orbit faster (more visible swirl) and bind tighter.
-BLACK_HOLE_GROWTH_RATE = 1      # Maximum mass gained per second from the accretion buffer, before the Eddington throttle below. (Raw decay at max mass is only ~0.24/s — the old "always net-decay" claim here was stale from a lower mass cap; the throttle is what actually keeps fed holes under the cap now.)
+BLACK_HOLE_GROWTH_RATE = 0.4      # Base mass gained per second from the accretion buffer (before the backlog multiplier and Eddington throttle below). (Raw decay at max mass is only ~0.24/s — the old "always net-decay" claim here was stale from a lower mass cap; the throttle is what actually keeps fed holes under the cap now.)
+BLACK_HOLE_GROWTH_BACKLOG_FACTOR = 0.15  # Multiplies GROWTH_RATE by (1 + this * sqrt(accretion backlog)) — a big one-time meal (red giant, magnetar, another black hole) digests several times faster than the base drip, instead of draining at the same flat rate as grazing on ordinary gas. sqrt so it's diminishing returns, not instantaneous.
 BLACK_HOLE_EDDINGTON_EXPONENT = 12  # Accretion efficiency scales by 1-(mass/max)^this — radiation pressure choking accretion near the cap. Steep on purpose: the growth-vs-decay margin is thin around mass 55-70, so a soft throttle there slows rip pacing several-fold. At 12, growth below mass ~95 is effectively untouched; a continuously fed hole settles at ~112 (above rip mass, below the cap) instead of pinning at 115 forever. Starve it and the 1/m^2 Hawking curve wins.
 BLACK_HOLE_DECAY_RATE = 50    # Mass lost per second AT the evaporation threshold (Hawking radiation analog). Actual rate scales as rate*(threshold/mass)^2 — large BHs decay far slower.
 BLACK_HOLE_DECAY_THRESHOLD = 8  # Mass at which a black hole evaporates and releases ejecta.
@@ -367,9 +369,9 @@ BLACK_HOLE_MIN_CAPTURE_RADIUS = 2      # Absolute floor (pixels) for the consume
 # Frame-dragging swirl: near a hole, each cloud's velocity vector is gently rotated, curving
 # straight infall into a rotating accretion disk. Rotation conserves speed (no energy is added),
 # so the swirl can't blow up. Direction follows the hole's spin (angular_momentum).
-BLACK_HOLE_SWIRL_RATE = 42.0           # Relaxation rate (per second) at which disk clouds are driven toward circular-orbit speed; fades to 0 at the swirl radius. Higher = stronger/faster swirl. Raised more than BLACK_HOLE_GRAVITY_CONSTANT's multiple on purpose: infall time only shrinks by ~sqrt(gravity increase), so the correction rate needs to outpace that ratio just to keep the same net effect, let alone improve it.
+BLACK_HOLE_SWIRL_RATE = 130.0           # Relaxation rate (per second) at which disk clouds are driven toward circular-orbit speed; fades to 0 at the swirl radius. Higher = stronger/faster swirl. Raised more than BLACK_HOLE_GRAVITY_CONSTANT's multiple on purpose: infall time only shrinks by ~sqrt(gravity increase), so the correction rate needs to outpace that ratio just to keep the same net effect, let alone improve it.
 BLACK_HOLE_SWIRL_RADIUS = 180         # Disk radius (pixels) at the reference mass below. Scales with sqrt(mass/reference): massive holes still reach farther, but young holes keep a readable disk — a newborn 42-mass hole reaches ~117px instead of the ~76px the old linear scaling gave.
-BLACK_HOLE_DISK_CIRCULARIZATION = 7.0  # Per-second damping of RADIAL motion inside the disk (viscous settling). This is what makes a disk look like a disk: swirl alone sets tangential speed but clouds still plunge through and get eaten in one pass; damping the radial component settles them into persistent orbits. Partial on purpose — the residual radial drift is the viscous accretion that keeps feeding the hole. Raised alongside BLACK_HOLE_SWIRL_RATE for the same reason (see above).
+BLACK_HOLE_DISK_CIRCULARIZATION = 23.0  # Per-second damping of RADIAL motion inside the disk (viscous settling). This is what makes a disk look like a disk: swirl alone sets tangential speed but clouds still plunge through and get eaten in one pass; damping the radial component settles them into persistent orbits. Partial on purpose — the residual radial drift is the viscous accretion that keeps feeding the hole. Raised alongside BLACK_HOLE_SWIRL_RATE for the same reason (see above).
 BLACK_HOLE_SWIRL_FALLOFF_EXPONENT = 0.4  # Shapes how swirl/circularization strength ramps from the disk edge (0) to the center (1) as (1 - dist/swirl_radius)**exponent. 1.0 = linear (was the default: strength was ~0 right at the boundary, so infalling clouds fell in almost straight and only visibly orbited once deep near the hole). <1 keeps strength high across most of the disk and only tapers sharply in the last bit near the boundary, so orbits lock in on approach instead of at the last second.
 BLACK_HOLE_SWIRL_REFERENCE_MASS = 100  # Hole mass at which the disk radius equals BLACK_HOLE_SWIRL_RADIUS. A 2x-mass hole reaches sqrt(2) ≈ 1.4x as far.
 # Dynamical friction: a massive hole plowing through the cloud sea is gravitationally braked.
@@ -418,8 +420,8 @@ BLACK_HOLE_DECAY_CLOUD_MASS_MAX = 28   # Maximum mass of each decay cloud.
 BLACK_HOLE_DECAY_EJECTA_SPREAD = 20    # Max spawn distance (pixels) of decay ejecta from the BH.
 
 # ── Neutron Stars ──
-NEUTRON_STAR_CHANCE = 0.6      # Base probability of a neutron star instead of a black hole on collapse (biased by metallicity, see COLLAPSE_NS_METALLICITY_BIAS).
-NEUTRON_STAR_VELOCITY_DAMPING = 0.35  # Per-second velocity retention for neutron stars AND magnetars. Dense compact objects plow through the cloud sea with heavy dynamical friction, anchoring them like black holes (0.15) but less strongly. 1.0 = no extra braking.
+NEUTRON_STAR_CHANCE = 0.4      # Base probability of a neutron star instead of a black hole on collapse (biased by metallicity, see COLLAPSE_NS_METALLICITY_BIAS).
+NEUTRON_STAR_VELOCITY_DAMPING = 0.65  # Per-second velocity retention for neutron stars, magnetars, AND white dwarfs. Dense compact objects plow through the cloud sea with dynamical friction, anchoring them like black holes but less strongly. 1.0 = no extra braking. Raised from 0.35: measured directly (probe: BH+NS+WD at fixed separation) that at 0.35 the pull toward a black hole was almost entirely canceled by this damping — velocity plateaued at ~0.22 px/s at 100px range, closing under 1px in 4.5s. Direction was always correct, magnitude just wasn't — unlike clouds (which get an active swirl mechanic), these objects only have raw 1/d^2 gravity fighting the damping, so it needs to be far less aggressive for the pull to be visible at all.
 NEUTRON_STAR_RADIUS = 1         # Visual radius in pixels (tiny, as expected).
 NEUTRON_STAR_GRAVITY_CONSTANT = 2 * GRAVITY_SCALE  # Gravitational pull strength. Moderate — between clouds and BHs.
 # Pulsars spin down (as in reality: the period grows until the pulsar crosses the "death line"
@@ -498,7 +500,7 @@ HEAT_DEATH_Z = 0.9              # A universe that dies above this Z earns the he
 # more likely to merge/collapse while the shock lasts — the real mechanism by which star
 # formation propagates in waves through galaxies.
 SHOCK_DURATION = 1.5           # Seconds a cloud stays "shocked" after a wavefront passes it.
-SHOCK_MERGE_CHANCE = 0.02       # Merge probability per frame for overlapping SHOCKED cloud pairs (vs the base rate above). Lowered alongside the base rate — shockwaves are a bigger share of star-forming mergers than steady-state clumping.
+SHOCK_MERGE_CHANCE = 0.012       # Merge probability per frame for overlapping SHOCKED cloud pairs (vs the base rate above). Lowered alongside the base rate — shockwaves are a bigger share of star-forming mergers than steady-state clumping.
 
 # ── Pulse Rendering ──
 PULSE_RENDER_POINT_COUNT = 64   # Number of polygon vertices used to draw each pulse ring.

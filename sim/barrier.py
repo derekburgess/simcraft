@@ -65,14 +65,33 @@ class Barrier:
 
     # ── physics ──
     def apply_gravity(self, universe, delta_time):
-        # The barrier no longer pulls on anything. Black holes are pure rotational anchors —
-        # organizing their universe's orbit/swirl without being tugged by the wall — while
-        # expansion comes from pulses (BARRIER_WAVE_PUSH) and contraction comes from stars and
-        # magnetars denting the wall inward (see update_deformation). This used to pull black
-        # holes outward toward the wall (a deliberately weak "losing battle" nudge), but that
-        # pull fed back with the hole's own denting of the same stretch of wall it was aiming
-        # at, producing erratic drift instead of a stable anchor.
-        pass
+        # Black holes are pure rotational anchors — organizing their universe's orbit/swirl
+        # without being tugged by the wall (this used to pull holes outward and fed back with
+        # their own wall-denting, producing erratic drift instead of a stable anchor).
+        #
+        # Raw clouds ARE pulled outward toward the wall — the tug-of-war is the point: a cloud
+        # left to itself drifts toward the boundary (the universe's expansion "wins"), but once
+        # a black hole's gravity organizes it into an orbit and it ignites into a star, it's
+        # exempted from this pull for good (IS_STAR gates it out below) — the hole has claimed
+        # it. So loose gas feels the barrier; anything a hole has turned into a star belongs to
+        # the hole from then on.
+        cx, cy = self.center
+        clouds = universe.clouds
+        if clouds.n:
+            not_star = ~clouds.IS_STAR
+            if not_star.any():
+                X, Y, VX, VY, M = clouds.X, clouds.Y, clouds.VX, clouds.VY, clouds.M
+                dx = X - cx
+                dy = Y - cy
+                angle = np.arctan2(dy, dx) % (2 * np.pi)
+                barrier_r = self.radius_at(angle)
+                target_dx = cx + barrier_r * np.cos(angle) - X
+                target_dy = cy + barrier_r * np.sin(angle) - Y
+                target_dist = np.maximum(np.hypot(target_dx, target_dy), 1.0)
+                force = np.where(not_star, BARRIER_CLOUD_GRAVITY_CONSTANT * np.sqrt(M) / (target_dist ** 2), 0.0)
+                kick = force * delta_time
+                VX += (target_dx / target_dist) * kick
+                VY += (target_dy / target_dist) * kick
 
     def _accum_deformation_scalar(self, entity, mass_accum, step, proximity_threshold, factor):
         angle, dist, _, _ = self._entity_angle_and_dist(entity)

@@ -258,7 +258,12 @@ class BlackHole:
             universe.event_log.append("QUASAR FLARE — Eddington-choked accretion lights the disk")
 
         if self.accretion_mass > 0:
-            growth = min(BLACK_HOLE_GROWTH_RATE * throttle * delta_time, self.accretion_mass)
+            # A big one-time meal (a red giant, a magnetar, another black hole) should visibly
+            # speed up growth, not just top off a reservoir that drains at the same flat rate as
+            # grazing on ordinary gas. Scales with sqrt(backlog) — diminishing returns, so it's a
+            # meaningful multiplier (several x for a large meal) without being instantaneous.
+            effective_rate = BLACK_HOLE_GROWTH_RATE * (1.0 + BLACK_HOLE_GROWTH_BACKLOG_FACTOR * math.sqrt(self.accretion_mass))
+            growth = min(effective_rate * throttle * delta_time, self.accretion_mass)
             self.mass = min(self.mass + growth, BLACK_HOLE_MAX_MASS)
             self.accretion_mass = max(0.0, self.accretion_mass - growth)
         rate = BLACK_HOLE_DECAY_RATE * (BLACK_HOLE_DECAY_THRESHOLD / self.mass) ** 2
