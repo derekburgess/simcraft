@@ -189,16 +189,28 @@ def run_simulation(screen, state):
 
             # Heat death of the whole multiverse (every universe gone) lingers for
             # HEAT_DEATH_LINGER_DURATION before resetting, so the empty scene isn't a
-            # jump-cut; a manual [R] reset fires the same reset immediately.
+            # jump-cut; a manual [R] reset fires the same reset immediately. An age or
+            # metallicity ceiling (a run that's technically still alive but has been going
+            # very long, or is fully chemically enriched) also fires immediately — there's
+            # nothing to linger on, the multiverse just doesn't have anywhere further to go.
             if not state.universes or state.entity_count() == 0 or state.total_mass() <= 0:
                 heat_death_timer += delta_time
             else:
                 heat_death_timer = 0.0
-            if reset_requested or heat_death_timer >= HEAT_DEATH_LINGER_DURATION:
-                print(f"Manual reset at year {current_year}" if reset_requested
-                      else f"Reset at year {current_year}")
+            age_limit_reached = current_year >= MAX_SIMULATION_YEARS
+            metallicity_limit_reached = state.mean_metallicity() >= MAX_SIMULATION_METALLICITY
+            if reset_requested or age_limit_reached or metallicity_limit_reached or heat_death_timer >= HEAT_DEATH_LINGER_DURATION:
+                if reset_requested:
+                    reason, fold_tag = "Manual reset", b'manual-reset'
+                elif age_limit_reached:
+                    reason, fold_tag = "Age limit reset", b'age-limit-reset'
+                elif metallicity_limit_reached:
+                    reason, fold_tag = "Metallicity limit reset", b'metallicity-limit-reset'
+                else:
+                    reason, fold_tag = "Reset", b'heat-death-reset'
+                print(f"{reason} at year {current_year}")
                 entropy_pool = state.entropy_pool
-                entropy_pool.fold(b'manual-reset' if reset_requested else b'heat-death-reset')
+                entropy_pool.fold(fold_tag)
                 state = physics.initialize_state()
                 state.entropy_pool = entropy_pool  # the pool remembers past universes
                 current_year = 0.0

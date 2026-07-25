@@ -531,13 +531,13 @@ def _get_stats_fonts():
 # Hit-test rect for the RNG cell, refreshed each draw — clicking it copies the number.
 RNG_CELL_RECT = None
 
-# FPS, YEAR, UNIVERSES, ENTITIES, METALLICITY — kept in sync with draw_stats's stat_cells.
+# FPS, TIME, UNIVERSES, ENTITIES, METALLICITY — kept in sync with draw_stats's stat_cells.
 _NUM_STAT_CELLS = 5
 
 
 def _stats_columns(screen):
     """Column geometry for the stats table, shared with the ticker panel above it so the
-    panel's width can lock to the first two columns (FPS, YEAR) instead of the full table."""
+    panel's width can lock to the first two columns (FPS, TIME) instead of the full table."""
     font, rng_font = _get_stats_fonts()
     table_left = UI_LABEL_X
     table_w = screen.get_width() - 2 * UI_LABEL_X
@@ -558,7 +558,7 @@ def draw_stats(screen, fps, current_year, universe_count, entity_count, rng_numb
     font, rng_font = _get_stats_fonts()
     stat_cells = [
         f"FPS: {fps:.0f}",
-        f"YEAR: {format_years(current_year)}",
+        f"TIME: {format_years(current_year)}",
         f"UNIVERSES: {universe_count}",
         f"ENTITIES: {entity_count}",
         f"METALLICITY (Z): {metallicity:.3f}",

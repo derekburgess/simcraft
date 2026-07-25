@@ -77,6 +77,8 @@ COSMIC_DECADE_SECONDS = 9       # Real seconds per factor-of-10 of cosmic years.
 MAX_YEAR_RATE = 2.5e8           # Ceiling (years/sec) on the cosmic clock — growth goes linear past this rate.
 MAX_DELTA_TIME = 0.05          # Maximum physics time step per frame (seconds). Caps dt to prevent instability on lag spikes.
 HEAT_DEATH_LINGER_DURATION = 12.0  # Seconds to display the empty ring after all matter is gone before starting a new universe.
+MAX_SIMULATION_YEARS = 5e11     # Auto-restart the whole multiverse once the cosmic clock passes this age (500 billion years) — a hard ceiling distinct from heat death, so a run that's technically still alive but has run very long doesn't go forever.
+MAX_SIMULATION_METALLICITY = 1.0  # Auto-restart once mean metallicity (Z, the same value shown in the HUD) reaches this — 1.0 is Z's own natural cap, so this fires once the multiverse is fully chemically enriched.
 TARGET_FPS = 60                    # Target frame rate cap for the simulation loop.
 
 # ── Physics ──
