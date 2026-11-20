@@ -1,0 +1,2199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SimCraft</title>
+<link rel="icon" href="data:,">
+<style>
+:root { color-scheme: dark; background: #000a14; color: #b2bdff; font: 16px system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; }
+canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+header, footer, aside, .ticker { position: fixed; }
+header { top: 1rem; left: 1rem; right: 1rem; display: flex; gap: .75rem; align-items: start; justify-content: space-between; pointer-events: none; }
+h1 { margin: 0; font: 650 1.1rem ui-monospace, monospace; color: #e0e5ff; }
+nav { display: flex; gap: .3rem; flex-wrap: wrap; justify-content: end; pointer-events: auto; }
+button { background: #071326; color: inherit; border: 1px solid #303d70; padding: .35rem .55rem; border-radius: .25rem; cursor: pointer; font: inherit; font-size: .875rem; }
+button:hover, button[aria-pressed="true"] { background: #1a2550; color: #e0e5ff; }
+button:focus-visible { outline: 2px solid #aabfff; outline-offset: 2px; }
+footer { bottom: 1rem; left: 1rem; right: 1rem; display: grid; gap: .35rem; justify-items: start; pointer-events: none; }
+.stats { display: flex; flex-wrap: wrap; gap: .25rem 1rem; font-size: .875rem; background: #000a14ed; padding: .35rem .55rem; }
+#number { pointer-events: auto; font: .875rem ui-monospace, monospace; max-width: 100%; overflow-wrap: anywhere; user-select: text; }
+aside { right: 1rem; top: 4rem; background: #000e1cef; border: 1px solid #303d70; padding: .75rem; font-size: .875rem; max-width: calc(100vw - 2rem); }
+aside p { margin: 0 0 .5rem; }
+#elements { display: flex; gap: .2rem; flex-wrap: wrap; }
+#elements span { min-width: 1.6rem; text-align: center; color: #fff; text-shadow: 0 1px 3px #000, 0 0 3px #000; }
+.ticker { left: 1rem; bottom: 5.7rem; max-width: min(45rem, calc(100% - 2rem)); color: #9ba8e9; font: .875rem/1.5 system-ui, sans-serif; pointer-events: none; }
+.ticker div { background: #000a14df; width: fit-content; }
+[hidden] { display: none !important; }
+@media (max-width: 520px) { header { flex-wrap: wrap; } aside { top: 6.5rem; } .ticker { bottom: 7rem; } }
+</style>
+</head>
+<body>
+<canvas id="space" aria-label="Animated SimCraft multiverse"></canvas>
+<header>
+  <h1>SimCraft</h1>
+  <nav aria-label="Simulation controls">
+    <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+    <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+    <button id="barriers" type="button" aria-pressed="true" title="B">Barriers</button>
+    <button id="waves" type="button" aria-pressed="true" title="G">Waves</button>
+    <button id="events" type="button" aria-pressed="false" title="L">Events</button>
+    <button id="help" type="button" aria-pressed="true" title="H">Help</button>
+    <button id="reset" type="button" title="R">Reset</button>
+    <button id="end" type="button" title="Q">End run</button>
+  </nav>
+</header>
+<aside id="legend" aria-label="Controls and entity legend">
+  <p>Scroll or pinch to zoom. Drag to pan.</p>
+  <p>B barriers · G waves · L events · H help · R reset · Q end</p>
+  <p>■ Clouds · ✦ Stars · ● Black holes · ✚ Pulsars<br>◆ Magnetars · ○ White dwarfs</p>
+  <div id="elements" aria-label="Elements present"></div>
+</aside>
+<div id="ticker" class="ticker" hidden></div>
+<footer>
+  <div id="stats" class="stats" aria-label="Simulation statistics"></div>
+  <button id="number" type="button" title="Copy number" aria-label="Copy trajectory number"></button>
+  <span id="status" role="status"></span>
+</footer>
+<noscript>SimCraft requires JavaScript.</noscript>
+<script>
+"use strict";
+
+// Simulation constants and element tables from sim/config.py.
+const BACKGROUND_COLOR = [0, 10, 20];
+const SCREEN_WIDTH = 1920;
+const SCREEN_HEIGHT = 1080;
+const UI_TICKER_LIFETIME = 7.0;
+const UI_HOTKEYS_HOLD_SECONDS = 20.0;
+const UI_HOTKEYS_FADE_SECONDS = 10.0;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 2.0;
+const ZOOM_STEP_FACTOR = 1.15;
+const ZOOM_SMOOTH_RATE = 10.0;
+const SPATIAL_HASH_CELL_SIZE = 40;
+const BARNES_HUT_THETA = 0.7;
+const BARNES_HUT_SOFTENING = 2.0;
+const BARNES_HUT_MAX_DEPTH = 28;
+const COSMIC_DECADE_SECONDS = 9;
+const MAX_YEAR_RATE = 250000000.0;
+const MAX_DELTA_TIME = 0.05;
+const HEAT_DEATH_LINGER_DURATION = 12.0;
+const MAX_SIMULATION_YEARS = 500000000000.0;
+const MAX_SIMULATION_METALLICITY = 1.0;
+const TARGET_FPS = 60;
+const VELOCITY_DAMPING = 0.999;
+const CMB_PERTURBATION_MODES = 3;
+const CMB_PERTURBATION_SCALE = 0.05;
+const CMB_DENSITY_CONTRAST = 0.8;
+const BARRIER_POINT_COUNT = 240;
+const MOLECULAR_CLOUD_MAX_PER_UNIVERSE = 800;
+const MULTIVERSE_MAX_CLOUDS = 16000;
+const BARRIER_INITIAL_SIZE = 32;
+const BARRIER_COLOR = [30, 60, 220];
+const BARRIER_BASE_OPACITY = 120;
+const BARRIER_FLASH_COLOR = [0, 184, 106];
+const BARRIER_FLASH_OPACITY = 175;
+const BARRIER_FLASH_DECAY = 4;
+const BARRIER_WAVE_PUSH = 180;
+const BARRIER_DAMPING = 0.04;
+const BARRIER_TENSION = 7.0;
+const BARRIER_DEFORM_THRESHOLD = 0.1;
+const BARRIER_HEAVY_MASS_THRESHOLD = 100;
+const BARRIER_SMOOTHING_PASSES = 6;
+const BARRIER_SMOOTHING_WINDOW = 7;
+const BARRIER_DEFORMATION_PROXIMITY_FACTOR = 0.3;
+const BARRIER_SECTION_SEARCH_RANGE = 3;
+const BARRIER_LINE_WIDTH = 3;
+const BARRIER_CLOUD_GRAVITY_CONSTANT = 0.3;
+const MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR = 0.08;
+const BARRIER_DEFORM_CLOUD_MASS = 24;
+const STAR_BARRIER_DEFORM_FACTOR = 4;
+const BLACK_HOLE_BARRIER_WEAKENING_FACTOR = 0.01;
+const BLACK_HOLE_BARRIER_PUSH_STRENGTH = 10;
+const NEUTRON_STAR_BARRIER_DEFORM_FACTOR = 4;
+const NEUTRON_STAR_BARRIER_WEAKENING_FACTOR = 0.7;
+const NEUTRON_STAR_BARRIER_PUSH_STRENGTH = 6;
+const BARRIER_CONTAINMENT_THRESHOLD = 0.05;
+const MOLECULAR_CLOUD_COUNT = 1800;
+const MOLECULAR_CLOUD_START_SIZE = 20;
+const MOLECULAR_CLOUD_MIN_SIZE = 6;
+const MOLECULAR_CLOUD_GROWTH_RATE = 0.06;
+const MOLECULAR_CLOUD_START_MASS = 1;
+const MOLECULAR_CLOUD_GRAVITY_CONSTANT = 0.0015;
+const STAR_GRAVITY_MULTIPLIER = 5.0;
+const MOLECULAR_CLOUD_MERGE_CHANCE = 5e-05;
+const MOLECULAR_CLOUD_MAX_MASS = 48;
+const MOLECULAR_CLOUD_START_COLORS = [[140, 20, 20], [140, 130, 0], [20, 140, 20], [20, 20, 140], [160, 100, 0], [80, 20, 140], [150, 150, 150], [140, 90, 40], [140, 120, 20], [180, 60, 80], [100, 170, 200], [40, 140, 150], [160, 40, 130], [210, 210, 230], [60, 90, 160], [200, 120, 50], [220, 170, 40], [120, 120, 100], [50, 130, 70], [110, 70, 160]];
+const ELEMENT_SYMBOLS = ["H", "He", "O", "C", "Ne", "N", "Fe", "Si", "Au", "S", "Mg", "P", "Li", "Pt", "Co", "Ca", "Na", "Ni", "Cr", "Ti"];
+const MOLECULAR_CLOUD_END_COLOR = [225, 255, 255];
+const MOLECULAR_CLOUD_OPACITY = 128;
+const MOLECULAR_CLOUD_MIN_OPACITY = 64;
+const MOLECULAR_CLOUD_EMISSION_CHANCE = 0.2;
+const MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS = 1;
+const MOLECULAR_CLOUD_EMISSION_MASS_MIN = 1;
+const MOLECULAR_CLOUD_EMISSION_MASS_MAX = 4;
+const MOLECULAR_CLOUD_EMISSION_VELOCITY = 0.6;
+const MOLECULAR_CLOUD_EMISSION_SPREAD = 14;
+const MOLECULAR_CLOUD_EMISSION_COUNT = 10;
+const MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE = 0.03;
+const SUPERNOVA_LIFETIME_MASS_EXPONENT = 2;
+const SUPERNOVA_EJECTA_COUNT_BASE = 6;
+const SUPERNOVA_EJECTA_COUNT_PER_MASS = 0.6;
+const SUPERNOVA_EJECTA_SPREAD = 20;
+const SUPERNOVA_EJECTA_MAX_MASS_FRACTION = 0.35;
+const PROTOSTAR_THRESHOLD = 28;
+const STAR_TIER_MEDIUM_MASS = 34;
+const STAR_TIER_HIGH_MASS = 42;
+const STAR_CLASSES = [[45, "a blue supergiant", [150, 190, 255], 6], [42, "a blue-white giant", [190, 215, 255], 5], [40, "a white star", [235, 240, 255], 4], [37, "a yellow-white star", [255, 250, 235], 4], [34, "a yellow dwarf", [255, 240, 200], 4], [31, "an orange dwarf", [255, 175, 95], 3], [0, "a red dwarf", [255, 120, 70], 2]];
+const WOLF_RAYET_MASS = 46;
+const WOLF_RAYET_FRACTION = 12;
+const WOLF_RAYET_SHELL_COLOR = [255, 200, 150];
+const WOLF_RAYET_SHELL_RANGE = 5;
+const WOLF_RAYET_SHED_SPEED = 3.0;
+const CEPHEID_MASS_MIN = 37;
+const CEPHEID_MASS_MAX = 40;
+const CEPHEID_STEP = 0.4;
+const CEPHEID_LEVELS = [1.0, 0.8, 0.6];
+const CARBON_STAR_ELEMENT = 3;
+const CARBON_STAR_COLOR = [200, 45, 45];
+const BROWN_DWARF_MASS_MIN = 24;
+const BROWN_DWARF_COLOR = [130, 70, 50];
+const RED_GIANT_DURATION = 4.0;
+const RED_GIANT_COLOR = [255, 90, 40];
+const RED_GIANT_DRAW_SIZE = 8;
+const CIVILIZATION_CHANCE = 0.0001;
+const CIVILIZATION_Z_BOOST = 4.0;
+const CIVILIZATION_DISC_COLOR = [225, 225, 235];
+const CIVILIZATION_DISC_PADDING = 1;
+const CIVILIZATION_RING_COLOR = [150, 150, 162];
+const CIVILIZATION_RING_PADDING = 3;
+const CIVILIZATION_RING_DOT_COUNT = 8;
+const CIVILIZATION_RING_DOT_RADIUS = 1;
+const CIVILIZATION_FLICKER_STEP = 0.15;
+const CIVILIZATION_FLICKER_GAP_CHANCE = 4;
+const STAR_ENRICHED_ELEMENT_MIN = 3;
+const PROTOSTAR_PRISTINE_MASS_BOOST = 3;
+const PROTOSTAR_ENRICHED_MASS_BOOST = 4;
+const PROTOSTAR_LOW_SIZE = 2;
+const PROTOSTAR_MEDIUM_SIZE = 4;
+const PROTOSTAR_HIGH_SIZE = 6;
+const COLLAPSE_MASS_EXPONENT = 17;
+const COLLAPSE_NS_METALLICITY_BIAS = 0.15;
+const WHITE_DWARF_CHANCE = 0.006;
+const WHITE_DWARF_LIFETIME_MASS_EXPONENT = 4;
+const WHITE_DWARF_MASS_FRACTION = 0.5;
+const WHITE_DWARF_GRAVITY_CONSTANT = 1.0;
+const PLANETARY_NEBULA_EJECTA_COUNT = 6;
+const PLANETARY_NEBULA_SPREAD = 18;
+const WHITE_DWARF_COOL_TIME = 90.0;
+const WHITE_DWARF_RADIUS = 2;
+const WHITE_DWARF_COLOR = [235, 240, 255];
+const WHITE_DWARF_COOL_COLOR = [70, 35, 25];
+const TYPE_IA_COLLISION_DISTANCE = 5;
+const TYPE_IA_EJECTA_COUNT = 14;
+const TYPE_IA_EJECTA_SPREAD = 30;
+const BLACK_HOLE_THRESHOLD = 42;
+const BLACK_HOLE_CHANCE = 0.0008;
+const BLACK_HOLE_MAX_COUNT = 5;
+const BLACK_HOLE_RIP_MASS_FACTOR = 0.9;
+const UNIVERSE_RIP_TRANSFER_FRACTION = 0.5;
+const UNIVERSE_STREAM_FRACTION = 0.6;
+const UNIVERSE_SPAWN_GAP = 4;
+const UNIVERSE_MUTATION_SCALE = 0.03;
+const UNIVERSE_DIAL_MIN = 0.5;
+const UNIVERSE_DIAL_MAX = 2.0;
+const DARK_FLOW_RATE = 0.01;
+const UNIVERSE_COLLAPSE_RADIUS = 8;
+const BARRIER_REPULSION_RATE = 15.0;
+const BARRIER_RESOLVE_ITERATIONS = 4;
+const BARRIER_CONTACT_DEFORM = 0.4;
+const BARRIER_SEPARATION_SHARE = 0.15;
+const UNIVERSE_CULL_MARGIN = 100;
+const BLACK_HOLE_RADIUS = 28;
+const BLACK_HOLE_MAX_MASS = 200;
+const BLACK_HOLE_GRAVITY_CONSTANT = 40.0;
+const BLACK_HOLE_GROWTH_RATE = 0.4;
+const BLACK_HOLE_GROWTH_BACKLOG_FACTOR = 0.15;
+const BLACK_HOLE_EDDINGTON_EXPONENT = 12;
+const BLACK_HOLE_DECAY_RATE = 50;
+const BLACK_HOLE_DECAY_THRESHOLD = 8;
+const BLACK_HOLE_GRAVITY_SOFTENING = 3;
+const BLACK_HOLE_EVENT_HORIZON_FACTOR = 0.4;
+const BLACK_HOLE_MIN_CAPTURE_RADIUS = 2;
+const BLACK_HOLE_SWIRL_RATE = 130.0;
+const BLACK_HOLE_SWIRL_RADIUS = 180;
+const BLACK_HOLE_DISK_CIRCULARIZATION = 23.0;
+const BLACK_HOLE_SWIRL_FALLOFF_EXPONENT = 0.4;
+const BLACK_HOLE_SWIRL_REFERENCE_MASS = 100;
+const BLACK_HOLE_VELOCITY_DAMPING = 0.08;
+const BLACK_HOLE_COLOR = [0, 0, 0];
+const BLACK_HOLE_BORDER_COLOR = [100, 0, 0];
+const BLACK_HOLE_MERGE_COLOR = [0, 60, 180, 110];
+const BLACK_HOLE_DISK_COLOR = [255, 100, 100];
+const BLACK_HOLE_DISK_SIZE = 1;
+const BLACK_HOLE_DISK_ROTATION = 10;
+const BLACK_HOLE_FLARE_THRESHOLD = 0.96;
+const BLACK_HOLE_FLARE_PX_PER_MASS = 0.64;
+const BLACK_HOLE_FLARE_DECAY_PER_SEC = 10;
+const BLACK_HOLE_FLARE_MAX_LENGTH = 11.52;
+const BLACK_HOLE_FLARE_COLOR = [255, 245, 200];
+const BLACK_HOLE_FLARE_OSC_RATE = 9.0;
+const BLACK_HOLE_FLARE_PULSE_DEPTH = 0.3;
+const BLACK_HOLE_RING_SEGMENTS = 16;
+const BLACK_HOLE_FLARE_CRESCENT_POWER = 2.0;
+const BLACK_HOLE_FLARE_FAR_SIDE_FLOOR = 0.35;
+const BLACK_HOLE_FLARE_DIR_REFERENCE = 15.0;
+const BLACK_HOLE_FLARE_DIR_DECAY = 0.5;
+const BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION = 0.999;
+const BLACK_HOLE_PULSE_SPEED_MULTIPLIER = 1.5;
+const BLACK_HOLE_PULSE_MASS_SCALE = 3.5;
+const BLACK_HOLE_PULSE_ENTITY_FACTOR = 0.3;
+const BLACK_HOLE_DECAY_CLOUD_COUNT = 6;
+const BLACK_HOLE_DECAY_CLOUD_MASS_MIN = 24;
+const BLACK_HOLE_DECAY_CLOUD_MASS_MAX = 28;
+const BLACK_HOLE_DECAY_EJECTA_SPREAD = 20;
+const NEUTRON_STAR_CHANCE = 0.4;
+const NEUTRON_STAR_VELOCITY_DAMPING = 0.65;
+const NEUTRON_STAR_RADIUS = 1;
+const NEUTRON_STAR_GRAVITY_CONSTANT = 2.0;
+const NEUTRON_STAR_SPINDOWN_RATE = 0.092;
+const NEUTRON_STAR_DEATH_LINE_PERIOD = 1.5;
+const NEUTRON_STAR_ACTIVE_DECAY_RATE = 0.05;
+const NEUTRON_STAR_DEAD_DECAY_RATE = 1.0;
+const NEUTRON_STAR_DECAY_THRESHOLD = 0.8;
+const PULSAR_REMNANT_CLOUD_COUNT = 6;
+const PULSAR_REMNANT_SPREAD = 14;
+const NEUTRON_STAR_COLOR = [0, 120, 255];
+const NEUTRON_STAR_JET_LENGTH = 2;
+const NEUTRON_STAR_JET_FLASH_LENGTH = 4;
+const NEUTRON_STAR_JET_WIDTH = 1;
+const NEUTRON_STAR_JET_WOBBLE = 20;
+const NEUTRON_STAR_DEAD_COLOR = [70, 80, 100];
+const NEUTRON_STAR_PULSE_RATE = 0.4;
+const NEUTRON_STAR_PULSE_TRAIN = 16;
+const NEUTRON_STAR_PULSE_STRENGTH = 7;
+const NEUTRON_STAR_PULSE_COLOR = [0, 140, 255, 90];
+const PULSE_CROWD_REFERENCE = 3;
+const NEUTRON_STAR_PULSE_WIDTH = 2;
+const NEUTRON_STAR_RIPPLE_SPEED = 64;
+const NEUTRON_STAR_PULSE_RANGE = 100;
+const NEUTRON_STAR_RIPPLE_EFFECT_WIDTH = 24;
+const NEUTRON_STAR_PULSE_COLOR_DURATION = 0.1;
+const MAGNETAR_CHANCE = 0.15;
+const FERROMAGNETIC_ELEMENTS = [6, 14, 17];
+const MAGNETAR_MAGNETIC_CONSTANT = 3.5;
+const MAGNETAR_FIELD_RADIUS = 120;
+const MAGNETAR_FIELD_LIFETIME = 15.0;
+const MAGNETAR_DECAY_RATE = 1;
+const MAGNETAR_FLARE_CHANCE = 0.003;
+const MAGNETAR_FLARE_ENERGY = 25;
+const MAGNETAR_FLARE_MASS_COST = 2;
+const MAGNETAR_RADIUS = 3;
+const MAGNETAR_COLOR_A = [235, 60, 200];
+const MAGNETAR_COLOR_B = [60, 130, 255];
+const MAGNETAR_COLOR_CYCLE_RATE = 3.0;
+const MAGNETAR_GLOW_RADIUS = 9;
+const MAGNETAR_GLOW_ALPHA = 80;
+const MAGNETAR_BARRIER_CONTRACT_FACTOR = 2;
+const MAGNETAR_WALL_STICK = 12;
+const MAGNETAR_BARRIER_ATTRACT_RATE = 1.2;
+const KILONOVA_EJECTA_COUNT = 20;
+const KILONOVA_COLLISION_DISTANCE = 6;
+const KILONOVA_EJECTA_SPREAD = 40;
+const KILONOVA_MAGNETAR_REMNANT_MAX = 70;
+const METALLICITY_PER_SUPERNOVA = 0.0002;
+const METALLICITY_PER_TYPE_IA = 0.002;
+const METALLICITY_PER_KILONOVA = 0.004;
+const METALLICITY_PER_NEBULA = 0.0002;
+const STAR_FORMATION_QUENCH_EXPONENT = 2.0;
+const HEAT_DEATH_Z = 0.9;
+const SHOCK_DURATION = 1.5;
+const SHOCK_MERGE_CHANCE = 0.012;
+const PULSE_LOD_MIN_ZOOM = 0.5;
+const SEED_ELEMENTAL_ABUNDANCE = [[0, 0.75], [0.75, 0.98], [0.98, 1.0]];
+const ELEMENTAL_ABUNDANCE = [[0, 0.35], [0.35, 0.55], [0.55, 0.6], [0.6, 0.64], [0.64, 0.68], [0.68, 0.72], [0.72, 0.77], [0.77, 0.81], [0.81, 0.85], [0.85, 0.9], [0.9, 0.91], [0.91, 0.92], [0.92, 0.93], [0.93, 0.94], [0.94, 0.95], [0.95, 0.96], [0.96, 0.97], [0.97, 0.98], [0.98, 0.99], [0.99, 1.0]];
+const EJECTA_ELEMENTAL_ABUNDANCE = [[0, 0.65], [0.65, 0.88], [0.88, 0.93], [0.93, 0.95], [0.95, 0.95], [0.95, 0.95], [0.95, 0.97], [0.97, 0.98], [0.98, 0.985], [0.985, 0.99], [0.99, 0.993], [0.993, 0.995], [0.995, 0.995], [0.995, 0.996], [0.996, 0.997], [0.997, 0.998], [0.998, 0.999], [0.999, 0.9994], [0.9994, 0.9997], [0.9997, 1.0]];
+const BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE = [[0, 0.08], [0.08, 0.16], [0.16, 0.22], [0.22, 0.28], [0.28, 0.3], [0.3, 0.36], [0.36, 0.52], [0.52, 0.66], [0.66, 0.74], [0.74, 0.8], [0.8, 0.86], [0.86, 0.9], [0.9, 0.93], [0.93, 0.95], [0.95, 0.97], [0.97, 0.98], [0.98, 0.99], [0.99, 0.995], [0.995, 0.998], [0.998, 1.0]];
+const TYPE_IA_ELEMENTAL_ABUNDANCE = [[0, 0.0], [0.0, 0.0], [0.0, 0.06], [0.06, 0.1], [0.1, 0.11], [0.11, 0.11], [0.11, 0.55], [0.55, 0.68], [0.68, 0.68], [0.68, 0.76], [0.76, 0.79], [0.79, 0.8], [0.8, 0.8], [0.8, 0.8], [0.8, 0.84], [0.84, 0.9], [0.9, 0.91], [0.91, 0.97], [0.97, 0.99], [0.99, 1.0]];
+const KILONOVA_ELEMENTAL_ABUNDANCE = [[0, 0.03], [0.03, 0.06], [0.06, 0.09], [0.09, 0.12], [0.12, 0.13], [0.13, 0.18], [0.18, 0.3], [0.3, 0.44], [0.44, 0.56], [0.56, 0.64], [0.64, 0.72], [0.72, 0.78], [0.78, 0.82], [0.82, 0.87], [0.87, 0.91], [0.91, 0.94], [0.94, 0.96], [0.96, 0.98], [0.98, 0.99], [0.99, 1.0]];
+
+const TAU = 2 * Math.PI;
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+const uniform = (low, high) => low + Math.random() * (high - low);
+const normal = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(uniform(0, TAU));
+const wrap = angle => (angle % TAU + TAU) % TAU;
+const ringStep = TAU / BARRIER_POINT_COUNT;
+const universeLimit = Math.max(2, navigator.hardwareConcurrency || 4);
+const cosines = Float64Array.from({length: BARRIER_POINT_COUNT}, (_, i) => Math.cos(i * ringStep));
+const sines = Float64Array.from({length: BARRIER_POINT_COUNT}, (_, i) => Math.sin(i * ringStep));
+const unit = (dx, dy) => Math.sqrt(dx * dx + dy * dy);
+const rgb = (color, alpha = 1) => `rgba(${color.join(",")},${alpha})`;
+const sum = values => values.reduce((total, value) => total + value, 0);
+
+function pickElement(abundance = ELEMENTAL_ABUNDANCE) {
+  const draw = Math.random();
+  const match = abundance.findIndex(([low, high]) => low <= draw && draw < high);
+  return match < 0 ? abundance.length - 1 : match;
+}
+
+function blendAbundance(base, enriched, z) {
+  return base.map(([a, b], i) => [a + z * (enriched[i][0] - a), b + z * (enriched[i][1] - b)]);
+}
+
+function cloudSize(mass) {
+  return Math.max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE -
+    Math.trunc((mass - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE));
+}
+
+function entitySize(mass) {
+  if (mass < PROTOSTAR_THRESHOLD) return cloudSize(mass);
+  if (mass >= STAR_TIER_HIGH_MASS) return PROTOSTAR_HIGH_SIZE;
+  return mass >= STAR_TIER_MEDIUM_MASS ? PROTOSTAR_MEDIUM_SIZE : PROTOSTAR_LOW_SIZE;
+}
+
+const cloudColumns = ["x", "y", "vx", "vy", "mass", "element", "emissions", "star", "civ", "size", "shock", "giant", "pattern"];
+
+class Clouds {
+  constructor(capacity = 256) {
+    this.n = 0;
+    this.capacity = capacity;
+    for (const key of cloudColumns) this[key] = new Float64Array(capacity);
+  }
+
+  reserve(count) {
+    if (count <= this.capacity) return;
+    while (count > this.capacity) this.capacity *= 2;
+    for (const key of cloudColumns) {
+      const grown = new Float64Array(this.capacity);
+      grown.set(this[key]);
+      this[key] = grown;
+    }
+  }
+
+  add(x, y, mass, element, vx = 0, vy = 0) {
+    this.reserve(this.n + 1);
+    const i = this.n++;
+    this.x[i] = x;
+    this.y[i] = y;
+    this.vx[i] = vx;
+    this.vy[i] = vy;
+    this.mass[i] = mass;
+    this.element[i] = element;
+    this.emissions[i] = this.civ[i] = this.shock[i] = this.giant[i] = 0;
+    this.star[i] = +(mass >= PROTOSTAR_THRESHOLD);
+    this.size[i] = entitySize(mass);
+    this.pattern[i] = Math.floor(uniform(0, 256));
+  }
+
+  copyTo(i, destination) {
+    destination.reserve(destination.n + 1);
+    for (const key of cloudColumns) destination[key][destination.n] = this[key][i];
+    destination.n++;
+  }
+
+  keep(keepRow) {
+    let next = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (!keepRow(i)) continue;
+      if (next !== i) for (const key of cloudColumns) this[key][next] = this[key][i];
+      next++;
+    }
+    this.n = next;
+  }
+
+  select(indices) {
+    for (const key of cloudColumns) {
+      const old = this[key];
+      this[key] = new Float64Array(this.capacity);
+      for (let i = 0; i < indices.length; i++) this[key][i] = old[indices[i]];
+    }
+    this.n = indices.length;
+  }
+
+  refresh() {
+    for (let i = 0; i < this.n; i++) {
+      if (this.mass[i] >= PROTOSTAR_THRESHOLD && !this.star[i]) {
+        this.mass[i] += this.element[i] < STAR_ENRICHED_ELEMENT_MIN ?
+          PROTOSTAR_PRISTINE_MASS_BOOST : PROTOSTAR_ENRICHED_MASS_BOOST;
+      }
+      this.mass[i] = Math.min(this.mass[i], MOLECULAR_CLOUD_MAX_MASS);
+      this.star[i] = +(this.mass[i] >= PROTOSTAR_THRESHOLD);
+      this.size[i] = entitySize(this.mass[i]);
+    }
+  }
+}
+
+class Barrier {
+  constructor(x, y, rest = BARRIER_INITIAL_SIZE / 2) {
+    this.x = x;
+    this.y = y;
+    this.rest = rest;
+    this.perturbation = new Float64Array(BARRIER_POINT_COUNT);
+    for (let mode = 1; mode <= CMB_PERTURBATION_MODES; mode++) {
+      const amplitude = normal() * CMB_PERTURBATION_SCALE / mode;
+      const phase = uniform(0, TAU);
+      for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+        this.perturbation[i] += amplitude * Math.sin(mode * i * ringStep + phase);
+      }
+    }
+    this.radii = this.perturbation.map(value => rest * (1 + value));
+    this.velocity = new Float64Array(BARRIER_POINT_COUNT);
+    this.flash = new Float64Array(BARRIER_POINT_COUNT);
+    this.load = new Float64Array(BARRIER_POINT_COUNT);
+    this.smoothed = new Float64Array(BARRIER_POINT_COUNT);
+    this.drawRadii = new Float64Array(BARRIER_POINT_COUNT);
+    this.max = Math.max(...this.radii);
+  }
+
+  radius(angle) {
+    const index = wrap(angle) / ringStep;
+    const low = Math.floor(index);
+    const fraction = index - low;
+    return this.radii[low % BARRIER_POINT_COUNT] * (1 - fraction) +
+      this.radii[(low + 1) % BARRIER_POINT_COUNT] * fraction;
+  }
+
+  dent(x, y, mass, factor, proximity) {
+    const dx = x - this.x;
+    const dy = y - this.y;
+    const angle = wrap(Math.atan2(dy, dx));
+    if (Math.abs(unit(dx, dy) - this.radius(angle)) >= proximity) return;
+    const index = angle / ringStep;
+    const low = Math.floor(index);
+    const fraction = index - low;
+    const load = Math.sqrt(mass) * factor;
+    this.load[low % BARRIER_POINT_COUNT] += load * (1 - fraction);
+    this.load[(low + 1) % BARRIER_POINT_COUNT] += load * fraction;
+  }
+
+  deform(u, dt) {
+    const c = u.clouds;
+    const proximity = this.rest * BARRIER_DEFORMATION_PROXIMITY_FACTOR;
+    this.load.fill(0);
+    for (let i = 0; i < c.n; i++) {
+      if (c.mass[i] >= BARRIER_DEFORM_CLOUD_MASS) {
+        this.dent(c.x[i], c.y[i], c.mass[i], c.star[i] ?
+          STAR_BARRIER_DEFORM_FACTOR : MOLECULAR_CLOUD_BARRIER_DEFORM_FACTOR, proximity);
+      }
+    }
+    for (const body of [...u.pulsars, ...u.magnetars]) {
+      this.dent(body.x, body.y, body.mass, NEUTRON_STAR_BARRIER_DEFORM_FACTOR, proximity);
+    }
+    const natal = BARRIER_INITIAL_SIZE / 2;
+    for (const body of u.magnetars) {
+      const target = Math.max(unit(body.x - this.x, body.y - this.y), natal);
+      let closest = Infinity;
+      let bestX = 0;
+      let bestY = 0;
+      for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+        const dx = this.x + this.radii[i] * cosines[i] - body.x;
+        const dy = this.y + this.radii[i] * sines[i] - body.y;
+        const d = unit(dx, dy);
+        if (d < closest) {
+          closest = d;
+          bestX = dx;
+          bestY = dy;
+        }
+        if (d < MAGNETAR_FIELD_RADIUS) {
+          this.velocity[i] += (target - this.radii[i]) * MAGNETAR_BARRIER_ATTRACT_RATE *
+            (1 - d / MAGNETAR_FIELD_RADIUS) * dt;
+        }
+      }
+      if (closest < MAGNETAR_FIELD_RADIUS) {
+        const grip = MAGNETAR_WALL_STICK * (1 - closest / MAGNETAR_FIELD_RADIUS) * dt /
+          Math.max(closest, 1e-9);
+        body.vx += bestX * grip;
+        body.vy += bestY * grip;
+      }
+      body.latched = closest < proximity;
+      if (body.latched) {
+        const contraction = Math.sqrt(body.mass) * MAGNETAR_BARRIER_CONTRACT_FACTOR * dt;
+        for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+          if (this.radii[i] > natal) this.velocity[i] -= contraction;
+        }
+      }
+    }
+
+    const damping = BARRIER_DAMPING ** dt;
+    const fade = Math.exp(-BARRIER_FLASH_DECAY * dt);
+    const smooth = Math.min(0.9, BARRIER_TENSION * dt);
+    for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+      this.velocity[i] = (this.velocity[i] - 2 * this.load[i] * dt) * damping;
+      const radius = Math.max(1, this.radii[i] + this.velocity[i] * dt);
+      if (Math.abs(radius - this.radii[i]) > BARRIER_DEFORM_THRESHOLD) this.flash[i] = 1;
+      this.flash[i] *= fade;
+      this.radii[i] = radius;
+    }
+    this.max = 0;
+    for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+      const left = (i + BARRIER_POINT_COUNT - 1) % BARRIER_POINT_COUNT;
+      const right = (i + 1) % BARRIER_POINT_COUNT;
+      this.smoothed[i] = this.radii[i] + ((this.radii[left] + this.radii[right]) / 2 - this.radii[i]) * smooth;
+      this.max = Math.max(this.max, this.smoothed[i]);
+    }
+    this.radii.set(this.smoothed);
+  }
+
+  contain(u, dt) {
+    const c = u.clouds;
+    for (let i = 0; i < c.n; i++) {
+      const dx = c.x[i] - this.x;
+      const dy = c.y[i] - this.y;
+      const d = unit(dx, dy);
+      const angle = Math.atan2(dy, dx);
+      const radius = this.radius(angle);
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      if (!c.star[i]) {
+        const gap = radius - d;
+        const kick = gap * BARRIER_CLOUD_GRAVITY_CONSTANT * Math.sqrt(c.mass[i]) * dt /
+          Math.max(Math.abs(gap), 1) ** 3;
+        c.vx[i] += ux * kick;
+        c.vy[i] += uy * kick;
+      }
+      if (d < radius) continue;
+      c.x[i] = this.x + ux * radius * 0.99;
+      c.y[i] = this.y + uy * radius * 0.99;
+      const radial = Math.max(0, c.vx[i] * ux + c.vy[i] * uy);
+      c.vx[i] -= ux * radial;
+      c.vy[i] -= uy * radial;
+    }
+    const bodies = [...u.holes, ...u.pulsars, ...u.magnetars, ...u.dwarfs];
+    const angles = bodies.map(body => Math.atan2(body.y - this.y, body.x - this.x));
+    for (let i = 0; i < bodies.length; i++) {
+      const b = bodies[i];
+      const r = this.radius(angles[i]);
+      if (unit(b.x - this.x, b.y - this.y) < r) continue;
+      const ux = Math.cos(angles[i]);
+      const uy = Math.sin(angles[i]);
+      const hole = b.type === "hole";
+      if (!hole) {
+        b.x = this.x + ux * r * 0.99;
+        b.y = this.y + uy * r * 0.99;
+        const radial = Math.max(0, b.vx * ux + b.vy * uy);
+        b.vx -= ux * radial;
+        b.vy -= uy * radial;
+      }
+      let nearbyMass = 0;
+      for (let j = 0; j < bodies.length; j++) {
+        if (bodies[j].type !== "dwarf" &&
+            Math.abs(wrap(angles[i] - angles[j] + Math.PI) - Math.PI) <
+            ringStep * BARRIER_SECTION_SEARCH_RANGE) nearbyMass += bodies[j].mass;
+      }
+      const weakness = Math.min(1, nearbyMass / BARRIER_HEAVY_MASS_THRESHOLD);
+      const containment = 1 - weakness * (hole ? BLACK_HOLE_BARRIER_WEAKENING_FACTOR :
+        NEUTRON_STAR_BARRIER_WEAKENING_FACTOR);
+      if (containment > BARRIER_CONTAINMENT_THRESHOLD) {
+        const kick = containment * dt * (hole ? BLACK_HOLE_BARRIER_PUSH_STRENGTH :
+          NEUTRON_STAR_BARRIER_PUSH_STRENGTH);
+        b.vx -= ux * kick;
+        b.vy -= uy * kick;
+      }
+    }
+  }
+
+  wave(x, y, radius, width, flash, push) {
+    for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+      const dx = this.x + this.radii[i] * cosines[i] - x;
+      const dy = this.y + this.radii[i] * sines[i] - y;
+      if (Math.abs(unit(dx, dy) - radius) < width) {
+        this.flash[i] = Math.max(this.flash[i], flash);
+        this.velocity[i] += push;
+      }
+    }
+  }
+}
+
+// Same softened force and opening criterion as the desktop Barnes–Hut backend.
+function gravity(c, multiplier, dt) {
+  if (c.n < 2) return;
+  const {x, y, vx, vy, mass, star} = c;
+  const charge = i => mass[i] * (star[i] ? STAR_GRAVITY_MULTIPLIER : 1);
+  let xmin = x[0], xmax = x[0], ymin = y[0], ymax = y[0];
+  for (let i = 1; i < c.n; i++) {
+    xmin = Math.min(xmin, x[i]); xmax = Math.max(xmax, x[i]);
+    ymin = Math.min(ymin, y[i]); ymax = Math.max(ymax, y[i]);
+  }
+  const rows = Array.from({length: c.n}, (_, i) => i);
+  function build(indices, cx, cy, half, depth) {
+    let total = 0, mx = 0, my = 0;
+    for (const i of indices) {
+      const g = charge(i);
+      total += g;
+      mx += x[i] * g;
+      my += y[i] * g;
+    }
+    const node = {half, total, mx: mx / total, my: my / total};
+    if (indices.length <= 1 || depth === BARNES_HUT_MAX_DEPTH) {
+      node.rows = indices;
+      return node;
+    }
+    const groups = [[], [], [], []];
+    for (const i of indices) groups[+(x[i] >= cx) + 2 * +(y[i] >= cy)].push(i);
+    const h = half / 2;
+    node.children = [];
+    groups.forEach((group, q) => {
+      if (group.length) node.children.push(build(group, cx + (q & 1 ? h : -h),
+        cy + (q & 2 ? h : -h), h, depth + 1));
+    });
+    return node;
+  }
+  const side = Math.max(xmax - xmin, ymax - ymin, 1) * 1.0001 + 1;
+  const root = build(rows, xmin + side / 2, ymin + side / 2, side / 2, 0);
+  const soft2 = BARNES_HUT_SOFTENING ** 2;
+  const theta2 = BARNES_HUT_THETA ** 2;
+  const G = MOLECULAR_CLOUD_GRAVITY_CONSTANT * multiplier * dt;
+  const stack = [];
+  for (let i = 0; i < c.n; i++) {
+    let fx = 0, fy = 0;
+    const xi = x[i], yi = y[i];
+    stack.push(root);
+    while (stack.length) {
+      const q = stack.pop();
+      const dx = q.mx - xi, dy = q.my - yi;
+      const d2 = dx * dx + dy * dy + soft2;
+      if (q.rows) {
+        for (const j of q.rows) {
+          if (i === j) continue;
+          const sx = x[j] - xi, sy = y[j] - yi;
+          const s2 = sx * sx + sy * sy + soft2;
+          const f = charge(j) / (s2 * Math.sqrt(s2));
+          fx += sx * f;
+          fy += sy * f;
+        }
+      } else if (4 * q.half * q.half < theta2 * (dx * dx + dy * dy)) {
+        const f = q.total / (d2 * Math.sqrt(d2));
+        fx += dx * f;
+        fy += dy * f;
+      } else {
+        for (const child of q.children) stack.push(child);
+      }
+    }
+    const factor = G * (star[i] ? STAR_GRAVITY_MULTIPLIER : 1);
+    vx[i] += fx * factor;
+    vy[i] += fy * factor;
+  }
+}
+
+function collide(c, chance, shocked) {
+  if (chance <= 0 || c.n < 2) return;
+  const removed = new Uint8Array(c.n);
+  const {x, y, mass, size, vx, vy, element, shock} = c;
+  let changed = false;
+  // Each cloud occupies one cell by its top-left corner. Every possible box
+  // overlap fits in the 3×3 neighborhood, since the cells exceed all box sizes.
+  const cell = Math.max(MOLECULAR_CLOUD_START_SIZE +
+    Math.ceil(MOLECULAR_CLOUD_START_MASS * MOLECULAR_CLOUD_GROWTH_RATE),
+    PROTOSTAR_HIGH_SIZE, PROTOSTAR_MEDIUM_SIZE, PROTOSTAR_LOW_SIZE);
+  const grid = new Map();
+  const groups = new Array(c.n);
+  let xmin = x[0], ymin = y[0], ymax = y[0];
+  for (let i = 1; i < c.n; i++) {
+    xmin = Math.min(xmin, x[i]);
+    ymin = Math.min(ymin, y[i]);
+    ymax = Math.max(ymax, y[i]);
+  }
+  const stride = Math.floor((ymax - ymin) / cell) + 3;
+  const key = (a, b) => a * stride + b;
+  for (let i = 0; i < c.n; i++) {
+    if (size[i] <= 0 || (shocked && shock[i] <= 0)) continue;
+    const a = Math.floor((x[i] - xmin) / cell), b = Math.floor((y[i] - ymin) / cell);
+    const bucket = key(a, b);
+    if (!grid.has(bucket)) grid.set(bucket, {a, b, rows: [], candidates: []});
+    const group = grid.get(bucket);
+    group.rows.push(i);
+    groups[i] = group;
+  }
+  for (const group of grid.values()) {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const neighbor = grid.get(key(group.a + dx, group.b + dy));
+      if (neighbor) group.candidates.push(...neighbor.rows);
+    }
+    if (shocked) group.candidates.sort((a, b) => a - b);
+  }
+  // Sample the gaps between successful Bernoulli rolls in candidate order.
+  // Ineligible pairs can use the same rolls and discard successes. This
+  // preserves the merge probability while skipping the vast majority of
+  // pair tests in dense universes.
+  const logFailure = Math.log1p(-Math.min(chance, 1));
+  const failures = () => Math.floor(Math.log1p(-Math.random()) / logFailure);
+  for (let i = 0; i < c.n; i++) {
+    const group = groups[i];
+    if (!group || removed[i]) continue;
+    const candidates = group.candidates;
+    for (let k = failures(); k < candidates.length; k += 1 + failures()) {
+      const j = candidates[k];
+      if (i === j || removed[j] || (shocked && j < i)) continue;
+      if (mass[i] < PROTOSTAR_THRESHOLD && mass[j] < PROTOSTAR_THRESHOLD &&
+          Math.abs(element[i] - element[j]) > 1) continue;
+      if (!(x[i] < x[j] + size[j] && x[i] + size[i] > x[j] &&
+            y[i] < y[j] + size[j] && y[i] + size[i] > y[j])) continue;
+      const survivor = element[j] > element[i] ? j : i;
+      const consumed = survivor === i ? j : i;
+      const total = mass[survivor] + mass[consumed];
+      vx[survivor] = (vx[survivor] * mass[survivor] + vx[consumed] * mass[consumed]) / total;
+      vy[survivor] = (vy[survivor] * mass[survivor] + vy[consumed] * mass[consumed]) / total;
+      mass[survivor] = Math.min(total, MOLECULAR_CLOUD_MAX_MASS);
+      size[survivor] = Math.max(MOLECULAR_CLOUD_MIN_SIZE, MOLECULAR_CLOUD_START_SIZE -
+        (mass[survivor] - MOLECULAR_CLOUD_START_MASS) * MOLECULAR_CLOUD_GROWTH_RATE);
+      changed = true;
+      removed[consumed] = 1;
+      if (consumed === i) break;
+    }
+  }
+  if (changed) c.keep(i => !removed[i]);
+}
+
+function starClass(mass, element) {
+  if (mass >= WOLF_RAYET_MASS && element >= STAR_ENRICHED_ELEMENT_MIN) return "a Wolf-Rayet star";
+  return STAR_CLASSES.find(([min]) => mass >= min)[1];
+}
+
+let nextBodyId = 0;
+function body(type, x, y, mass, vx = 0, vy = 0) {
+  if (type === "hole") mass = Math.min(mass, BLACK_HOLE_MAX_MASS);
+  return {id: ++nextBodyId, type, x, y, mass, vx, vy, age: 0, angle: uniform(0, TAU), angular: 0, accretion: 0,
+    previousAccretion: 0, flare: 0, flareX: 0, flareY: 0, flaring: false, rip: null,
+    border: Math.floor(mass / BLACK_HOLE_RADIUS), elapsed: 0, pulseFlash: 0,
+    pulses: [], wobble: Math.random() < 0.5 ? -1 : 1, dead: false, removed: false,
+    field: MAGNETAR_FIELD_LIFETIME, phase: uniform(0, TAU), latched: false};
+}
+
+function eject(spawns, x, y, count, minDist, spread, minMass, maxMass, abundance, speed) {
+  for (let i = 0; i < count; i++) {
+    const angle = uniform(0, TAU);
+    const distance = uniform(minDist, spread);
+    const dx = Math.cos(angle) * distance;
+    const dy = Math.sin(angle) * distance;
+    spawns.push([x + dx, y + dy, uniform(minMass, maxMass), pickElement(abundance), dx * speed, dy * speed]);
+  }
+}
+
+function enrich(u, amount) {
+  u.z = Math.min(1, u.z + amount);
+}
+
+function evolveClouds(u, dt) {
+  const c = u.clouds;
+  const fusion = u.fusion * (1 - u.z) ** STAR_FORMATION_QUENCH_EXPONENT;
+  for (let i = 0; i < c.n; i++) if (c.giant[i] > 0) c.size[i] = -1e9;
+  collide(c, MOLECULAR_CLOUD_MERGE_CHANCE * fusion, false);
+  collide(c, SHOCK_MERGE_CHANCE * fusion, true);
+  c.refresh();
+  const remove = new Uint8Array(c.n);
+  const heavy = new Uint8Array(c.n);
+  const spawns = [];
+  const metalEjecta = () => blendAbundance(EJECTA_ELEMENTAL_ABUNDANCE, BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE, u.z);
+  for (let i = 0; i < c.n; i++) {
+    const mass = c.mass[i];
+    if (mass <= BLACK_HOLE_THRESHOLD || u.holes.length >= BLACK_HOLE_MAX_COUNT) continue;
+    heavy[i] = 1;
+    const ratio = mass / BLACK_HOLE_THRESHOLD;
+    const name = starClass(mass, c.element[i]);
+    if (Math.random() < BLACK_HOLE_CHANCE * u.collapse * ratio ** COLLAPSE_MASS_EXPONENT) {
+      if (c.civ[i]) u.events.push("CIVILIZATION LOST — its star collapses in an instant");
+      const bias = c.element[i] >= STAR_ENRICHED_ELEMENT_MIN ? COLLAPSE_NS_METALLICITY_BIAS :
+        -COLLAPSE_NS_METALLICITY_BIAS;
+      if (Math.random() < NEUTRON_STAR_CHANCE + bias) {
+        const magnetar = Math.random() < MAGNETAR_CHANCE;
+        (magnetar ? u.magnetars : u.pulsars).push(body(magnetar ? "magnetar" : "pulsar", c.x[i], c.y[i], mass));
+        u.events.push(`CORE COLLAPSE — ${name} collapses; a ${magnetar ? "magnetar" : "pulsar"} is born`);
+      } else {
+        u.holes.push(body("hole", c.x[i], c.y[i], mass));
+        u.events.push(`CORE COLLAPSE — ${name} implodes into a black hole`);
+      }
+      remove[i] = 1;
+    } else if (Math.random() < MOLECULAR_CLOUD_DEFAULT_STATE_CHANCE * ratio ** SUPERNOVA_LIFETIME_MASS_EXPONENT) {
+      eject(spawns, c.x[i], c.y[i], SUPERNOVA_EJECTA_COUNT_BASE +
+        Math.trunc((mass - BLACK_HOLE_THRESHOLD) * SUPERNOVA_EJECTA_COUNT_PER_MASS),
+        5, SUPERNOVA_EJECTA_SPREAD, MOLECULAR_CLOUD_START_MASS,
+        PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION, metalEjecta(), 0.5);
+      if (c.civ[i]) u.events.push("CIVILIZATION LOST — vaporized by its star's supernova");
+      c.civ[i] = c.star[i] = c.giant[i] = 0;
+      u.events.push(`SUPERNOVA (TYPE II) — ${name} explodes, seeding metals`);
+      c.mass[i] = MOLECULAR_CLOUD_START_MASS;
+      c.size[i] = MOLECULAR_CLOUD_START_SIZE;
+      enrich(u, METALLICITY_PER_SUPERNOVA);
+    }
+  }
+
+  let civilization = false;
+  for (let i = 0; i < c.n; i++) {
+    const m = c.mass[i];
+    if (c.star[i] && m >= STAR_TIER_MEDIUM_MASS && m < STAR_TIER_HIGH_MASS &&
+        !c.civ[i] && c.element[i] >= STAR_ENRICHED_ELEMENT_MIN && c.giant[i] <= 0 &&
+        Math.random() < CIVILIZATION_CHANCE * (1 + u.z * CIVILIZATION_Z_BOOST)) {
+      c.civ[i] = 1;
+      civilization = true;
+    }
+  }
+  if (civilization) u.events.push("CIVILIZATION EMERGES — a world lights its star's shadow");
+  for (let i = 0; i < c.n; i++) {
+    if (c.giant[i] <= 0) continue;
+    c.giant[i] = Math.max(0, c.giant[i] - dt);
+    if (c.giant[i] > 0 || c.mass[i] >= STAR_TIER_HIGH_MASS) continue;
+    const m = c.mass[i];
+    eject(spawns, c.x[i], c.y[i], PLANETARY_NEBULA_EJECTA_COUNT, 4, PLANETARY_NEBULA_SPREAD,
+      MOLECULAR_CLOUD_START_MASS, m * (1 - WHITE_DWARF_MASS_FRACTION) / PLANETARY_NEBULA_EJECTA_COUNT * 2,
+      EJECTA_ELEMENTAL_ABUNDANCE, 0.4);
+    u.dwarfs.push(body("dwarf", c.x[i], c.y[i], m * WHITE_DWARF_MASS_FRACTION, c.vx[i], c.vy[i]));
+    remove[i] = 1;
+    enrich(u, METALLICITY_PER_NEBULA);
+    u.events.push("PLANETARY NEBULA — the giant sheds its envelope; a white dwarf remains");
+  }
+  for (let i = 0; i < c.n; i++) {
+    if (remove[i] || !c.star[i] || c.mass[i] >= STAR_TIER_HIGH_MASS || c.giant[i] > 0) continue;
+    if (Math.random() >= WHITE_DWARF_CHANCE * (c.mass[i] / STAR_TIER_HIGH_MASS) **
+        WHITE_DWARF_LIFETIME_MASS_EXPONENT) continue;
+    c.giant[i] = RED_GIANT_DURATION;
+    if (c.civ[i]) {
+      c.civ[i] = 0;
+      u.events.push("CIVILIZATION LOST — engulfed by its swelling star");
+    }
+    u.events.push(`RED GIANT — ${starClass(c.mass[i], c.element[i])} swells off the main sequence`);
+  }
+  for (let i = 0; i < c.n; i++) {
+    if (remove[i] || heavy[i] || c.giant[i] > 0 || c.mass[i] < MOLECULAR_CLOUD_EMISSION_MIN_PARENT_MASS ||
+        c.emissions[i] >= MOLECULAR_CLOUD_EMISSION_COUNT || Math.random() >= MOLECULAR_CLOUD_EMISSION_CHANCE) continue;
+    const mass = uniform(MOLECULAR_CLOUD_EMISSION_MASS_MIN, MOLECULAR_CLOUD_EMISSION_MASS_MAX);
+    const angle = uniform(0, TAU), distance = uniform(2, MOLECULAR_CLOUD_EMISSION_SPREAD);
+    const ux = Math.cos(angle), uy = Math.sin(angle);
+    spawns.push([c.x[i] + ux * distance, c.y[i] + uy * distance, mass, c.element[i],
+      c.vx[i] + ux * MOLECULAR_CLOUD_EMISSION_VELOCITY, c.vy[i] + uy * MOLECULAR_CLOUD_EMISSION_VELOCITY]);
+    c.emissions[i]++;
+  }
+  if (remove.includes(1)) c.keep(i => !remove[i]);
+  for (const spawn of spawns) c.add(...spawn);
+  if (c.n > MOLECULAR_CLOUD_MAX_PER_UNIVERSE) {
+    const rows = Array.from({length: c.n}, (_, i) => i).sort((a, b) => c.mass[b] - c.mass[a]);
+    c.select(rows.slice(0, MOLECULAR_CLOUD_MAX_PER_UNIVERSE));
+  }
+}
+
+function captureRadius(hole) {
+  return Math.max(BLACK_HOLE_MIN_CAPTURE_RADIUS, hole.border * BLACK_HOLE_EVENT_HORIZON_FACTOR);
+}
+
+function swept(dx, dy, vx, vy, radius, dt) {
+  const mx = vx * dt, my = vy * dt;
+  const d2 = mx * mx + my * my;
+  if (d2 < 0.01) return false;
+  const t = clamp((dx * mx + dy * my) / d2, 0, 1);
+  return (dx - t * mx) ** 2 + (dy - t * my) ** 2 < radius * radius;
+}
+
+function feed(hole, mass, vx, vy, dx, dy, distance, extraAngular = 0, extraMass = 0) {
+  hole.angular += (dx * (vy - hole.vy) - dy * (vx - hole.vx)) * mass + extraAngular;
+  const total = hole.mass + mass;
+  hole.vx = (hole.vx * hole.mass + vx * mass) / total;
+  hole.vy = (hole.vy * hole.mass + vy * mass) / total;
+  hole.accretion += mass + extraMass;
+  hole.flareX -= dx * mass / distance;
+  hole.flareY -= dy * mass / distance;
+}
+
+function pairGravity(a, b, G, dt, soften = 0, reciprocal = true) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const distance = Math.max(unit(dx, dy), 1);
+  const d2 = distance * distance + soften * soften;
+  const factor = G * dt / (d2 * Math.sqrt(d2));
+  if (reciprocal) {
+    a.vx += dx * factor * b.mass;
+    a.vy += dy * factor * b.mass;
+  }
+  b.vx -= dx * factor * a.mass;
+  b.vy -= dy * factor * a.mass;
+}
+
+function sendThrough(c, i, u) {
+  const angle = uniform(0, TAU);
+  const radius = Math.sqrt(Math.random()) * u.ring.rest;
+  c.x[i] = u.ring.x + Math.cos(angle) * radius;
+  c.y[i] = u.ring.y + Math.sin(angle) * radius;
+  c.vx[i] = 0;
+  c.vy[i] = 0;
+}
+
+function updateHole(u, hole, dt, captured, streams, spawns) {
+  const c = u.clouds;
+  const horizon = captureRadius(hole);
+  for (const b of u.holes) {
+    if (b === hole || b.removed) continue;
+    const dx = hole.x - b.x, dy = hole.y - b.y;
+    const d = Math.max(1, unit(dx, dy));
+    if (d < horizon + captureRadius(b) &&
+        (hole.mass > b.mass || (hole.mass === b.mass && hole.id > b.id))) {
+      b.removed = true;
+      feed(hole, b.mass, b.vx, b.vy, dx, dy, d, b.angular, b.accretion);
+      u.pulses.push([hole.x, hole.y, 0, b.mass]);
+      u.events.push("BLACK HOLE MERGER — gravitational waves ripple out");
+    } else {
+      pairGravity(hole, b, BLACK_HOLE_GRAVITY_CONSTANT, dt, BLACK_HOLE_GRAVITY_SOFTENING, false);
+    }
+  }
+
+  for (let i = 0; i < c.n; i++) {
+    if (captured[i]) continue;
+    const dx = hole.x - c.x[i], dy = hole.y - c.y[i];
+    const d = Math.max(1, unit(dx, dy));
+    if (d >= horizon && !swept(dx, dy, c.vx[i], c.vy[i], horizon, dt)) continue;
+    captured[i] = 1;
+    if (hole.rip && Math.random() < UNIVERSE_STREAM_FRACTION) {
+      sendThrough(c, i, hole.rip);
+      streams.push([i, hole.rip]);
+    } else {
+      feed(hole, c.mass[i], c.vx[i], c.vy[i], dx, dy, d);
+    }
+  }
+
+  const swirlRadius = BLACK_HOLE_SWIRL_RADIUS * Math.sqrt(hole.mass / BLACK_HOLE_SWIRL_REFERENCE_MASS);
+  for (let i = 0; i < c.n; i++) {
+    if (captured[i]) continue;
+    const dx = hole.x - c.x[i], dy = hole.y - c.y[i];
+    const d = Math.max(1, unit(dx, dy));
+    const d2 = d * d + BLACK_HOLE_GRAVITY_SOFTENING ** 2;
+    const soft = Math.sqrt(d2);
+    const ux = dx / soft, uy = dy / soft;
+    const accel = BLACK_HOLE_GRAVITY_CONSTANT * hole.mass / d2;
+    const kx = ux * accel * dt, ky = uy * accel * dt;
+    c.vx[i] += kx;
+    c.vy[i] += ky;
+    if (d < swirlRadius) {
+      const tx = -uy, ty = ux;
+      const target = (hole.angular >= 0 ? 1 : -1) * Math.sqrt(accel * d);
+      const falloff = (1 - d / swirlRadius) ** BLACK_HOLE_SWIRL_FALLOFF_EXPONENT;
+      const current = (c.vx[i] - hole.vx) * tx + (c.vy[i] - hole.vy) * ty;
+      const turn = (target - current) * Math.min(1, BLACK_HOLE_SWIRL_RATE * falloff * dt);
+      c.vx[i] += turn * tx;
+      c.vy[i] += turn * ty;
+      const radial = (c.vx[i] - hole.vx) * ux + (c.vy[i] - hole.vy) * uy;
+      const circularize = -radial * Math.min(1, BLACK_HOLE_DISK_CIRCULARIZATION * falloff * dt);
+      c.vx[i] += circularize * ux;
+      c.vy[i] += circularize * uy;
+    }
+    hole.vx -= kx * c.mass[i] / hole.mass;
+    hole.vy -= ky * c.mass[i] / hole.mass;
+  }
+
+  for (const b of [...u.pulsars, ...u.magnetars, ...u.dwarfs]) {
+    if (b.removed) continue;
+    const dx = hole.x - b.x, dy = hole.y - b.y;
+    const d = Math.max(1, unit(dx, dy));
+    if (d < horizon || swept(dx, dy, b.vx, b.vy, horizon, dt)) {
+      b.removed = true;
+      feed(hole, b.mass, b.vx, b.vy, dx, dy, d);
+    } else {
+      pairGravity(hole, b, BLACK_HOLE_GRAVITY_CONSTANT, dt, BLACK_HOLE_GRAVITY_SOFTENING);
+    }
+  }
+
+  const throttle = Math.max(0, 1 - (hole.mass / BLACK_HOLE_MAX_MASS) ** BLACK_HOLE_EDDINGTON_EXPONENT);
+  const meal = Math.max(0, hole.accretion - hole.previousAccretion);
+  hole.flare = Math.min(BLACK_HOLE_FLARE_MAX_LENGTH,
+    Math.max(0, hole.flare - BLACK_HOLE_FLARE_DECAY_PER_SEC * dt) +
+    meal * (1 - throttle) * BLACK_HOLE_FLARE_PX_PER_MASS);
+  const flareDecay = BLACK_HOLE_FLARE_DIR_DECAY ** dt;
+  hole.flareX *= flareDecay;
+  hole.flareY *= flareDecay;
+  if (!hole.flaring && hole.flare >= BLACK_HOLE_FLARE_THRESHOLD) {
+    u.events.push("QUASAR FLARE — Eddington-choked accretion lights the disk");
+  }
+  hole.flaring = hole.flare >= BLACK_HOLE_FLARE_THRESHOLD;
+  const growthRate = BLACK_HOLE_GROWTH_RATE * (1 + BLACK_HOLE_GROWTH_BACKLOG_FACTOR * Math.sqrt(hole.accretion));
+  const growth = Math.min(growthRate * throttle * dt, hole.accretion);
+  hole.mass = Math.min(hole.mass + growth, BLACK_HOLE_MAX_MASS);
+  const decay = BLACK_HOLE_DECAY_RATE * (BLACK_HOLE_DECAY_THRESHOLD / hole.mass) ** 2 * dt;
+  hole.mass -= decay;
+  hole.accretion = Math.max(0, hole.accretion - growth - decay);
+  hole.previousAccretion = hole.accretion;
+  hole.border = Math.floor(hole.mass / BLACK_HOLE_RADIUS);
+  if (!hole.rip && hole.mass >= BLACK_HOLE_RIP_MASS_FACTOR * BLACK_HOLE_MAX_MASS) u.ripping.push(hole);
+  if (hole.mass <= BLACK_HOLE_DECAY_THRESHOLD) {
+    hole.removed = true;
+    u.events.push("BLACK HOLE EVAPORATED — Hawking radiation wins in the end");
+    eject(spawns, hole.x, hole.y, BLACK_HOLE_DECAY_CLOUD_COUNT, 5, BLACK_HOLE_DECAY_EJECTA_SPREAD,
+      BLACK_HOLE_DECAY_CLOUD_MASS_MIN, BLACK_HOLE_DECAY_CLOUD_MASS_MAX, BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE, 0.5);
+  }
+}
+
+function compactCloudGravity(c, b, dt, magnetic = false) {
+  const cell = SPATIAL_HASH_CELL_SIZE;
+  const cx = Math.floor(b.x / cell), cy = Math.floor(b.y / cell);
+  const G = magnetic ? MAGNETAR_MAGNETIC_CONSTANT :
+    b.type === "dwarf" ? WHITE_DWARF_GRAVITY_CONSTANT : NEUTRON_STAR_GRAVITY_CONSTANT;
+  let recoilX = 0, recoilY = 0;
+  for (let i = 0; i < c.n; i++) {
+    if (magnetic) {
+      if (!FERROMAGNETIC_ELEMENTS.includes(c.element[i])) continue;
+    } else if (Math.abs(Math.floor(c.x[i] / cell) - cx) > 1 ||
+               Math.abs(Math.floor(c.y[i] / cell) - cy) > 1) continue;
+    const dx = c.x[i] - b.x, dy = c.y[i] - b.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < 1 || (magnetic && d2 >= MAGNETAR_FIELD_RADIUS ** 2)) continue;
+    const kick = G * b.mass * dt / (magnetic ? d2 : d2 * Math.sqrt(d2));
+    const kx = dx * kick, ky = dy * kick;
+    c.vx[i] -= kx;
+    c.vy[i] -= ky;
+    recoilX += kx * c.mass[i];
+    recoilY += ky * c.mass[i];
+  }
+  b.vx += recoilX / b.mass;
+  b.vy += recoilY / b.mass;
+}
+
+function cloudWave(c, x, y, radius, width, strength, exponent, dt, energy = Infinity) {
+  const outer = (radius + width) ** 2, inner = Math.max(0, radius - width) ** 2;
+  for (let i = 0; i < c.n && energy > 0; i++) {
+    const dx = c.x[i] - x, dy = c.y[i] - y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 === 0 || d2 < inner || d2 > outer) continue;
+    const d = Math.sqrt(d2);
+    const gap = Math.abs(d - radius);
+    if (gap >= width) continue;
+    const push = strength * (1 - gap / width) * dt / (gap + 1) ** exponent;
+    c.vx[i] += dx / d * push;
+    c.vy[i] += dy / d * push;
+    c.shock[i] = SHOCK_DURATION;
+    energy -= push * 0.01;
+  }
+  return energy;
+}
+
+function compactWave(b, x, y, radius, width, strength, exponent, dt) {
+  const dx = b.x - x, dy = b.y - y;
+  const d = unit(dx, dy), gap = Math.abs(d - radius);
+  if (d === 0 || gap >= width) return 0;
+  const push = strength * (1 - gap / width) * dt / (gap + 1) ** exponent;
+  b.vx += dx / d * push;
+  b.vy += dy / d * push;
+  return push;
+}
+
+function mergerWaves(u, dt) {
+  const width = NEUTRON_STAR_RIPPLE_EFFECT_WIDTH;
+  u.pulses = u.pulses.filter(pulse => {
+    const [x, y, before, mass] = pulse;
+    const radius = before + NEUTRON_STAR_RIPPLE_SPEED * BLACK_HOLE_PULSE_SPEED_MULTIPLIER * dt;
+    const scale = mass / BLACK_HOLE_PULSE_MASS_SCALE;
+    const strength = NEUTRON_STAR_PULSE_STRENGTH * scale * BLACK_HOLE_PULSE_ENTITY_FACTOR;
+    let energy = cloudWave(u.clouds, x, y, radius, width * 3, strength * 3, 1.5, dt, mass);
+    for (const b of u.holes) {
+      if (energy <= 0) break;
+      energy -= compactWave(b, x, y, radius, width * 4, strength * 2, 2, dt) * 0.01;
+    }
+    for (const b of [...u.pulsars, ...u.magnetars]) {
+      if (energy <= 0) break;
+      energy -= compactWave(b, x, y, radius, width * 3, strength * 2.5, 1.8, dt) * 0.01;
+    }
+    const fade = Math.max(0, 1 - radius / u.ring.rest);
+    u.ring.wave(x, y, radius, width * 4, fade * 0.9, BARRIER_WAVE_PUSH * 2 * scale * fade * dt);
+    pulse[2] = radius;
+    pulse[3] = Math.max(0, energy);
+    return radius <= u.ring.max;
+  });
+}
+
+function updatePulsar(u, b, dt, spawns) {
+  compactCloudGravity(u.clouds, b, dt);
+  for (const h of u.holes) pairGravity(b, h, NEUTRON_STAR_GRAVITY_CONSTANT, dt);
+  b.elapsed += dt;
+  b.age += dt;
+  b.pulseFlash = Math.max(0, b.pulseFlash - dt);
+  const period = NEUTRON_STAR_PULSE_RATE * (1 + b.age * NEUTRON_STAR_SPINDOWN_RATE);
+  if (!b.dead && period >= NEUTRON_STAR_DEATH_LINE_PERIOD) {
+    b.dead = true;
+    u.events.push("PULSAR DEATH LINE — spin-down silences the beacon");
+  }
+  const width = NEUTRON_STAR_RIPPLE_EFFECT_WIDTH;
+  for (let i = b.pulses.length - 1; i >= 0; i--) {
+    const radius = b.pulses[i] + NEUTRON_STAR_RIPPLE_SPEED * dt;
+    const fade = Math.max(0, 1 - Math.max(0, radius - u.ring.rest * 0.75) / (u.ring.rest * 0.25));
+    u.ring.wave(b.x, b.y, radius, width * 2, fade * 0.4, BARRIER_WAVE_PUSH * 0.3 * fade * dt);
+    cloudWave(u.clouds, b.x, b.y, radius, width, NEUTRON_STAR_PULSE_STRENGTH, 0.8, dt);
+    for (const h of u.holes) {
+      compactWave(h, b.x, b.y, radius, width, NEUTRON_STAR_PULSE_STRENGTH * 0.06, 1.2, dt);
+    }
+    if (radius > u.ring.max || radius > NEUTRON_STAR_PULSE_RANGE) b.pulses.splice(i, 1);
+    else b.pulses[i] = radius;
+  }
+  if (!b.dead && b.elapsed >= period && b.pulses.length < NEUTRON_STAR_PULSE_TRAIN) {
+    b.pulses.push(0);
+    b.elapsed = 0;
+    b.pulseFlash = NEUTRON_STAR_PULSE_COLOR_DURATION;
+    b.wobble *= -1;
+  }
+  b.mass -= (b.dead ? NEUTRON_STAR_DEAD_DECAY_RATE : NEUTRON_STAR_ACTIVE_DECAY_RATE) * dt;
+  if (b.mass <= NEUTRON_STAR_DECAY_THRESHOLD) {
+    b.removed = true;
+    eject(spawns, b.x, b.y, PULSAR_REMNANT_CLOUD_COUNT, 4, PULSAR_REMNANT_SPREAD, 2, 8,
+      blendAbundance(EJECTA_ELEMENTAL_ABUNDANCE, BLACK_HOLE_DECAY_ELEMENTAL_ABUNDANCE, u.z), 0.3);
+  }
+}
+
+function updateMagnetar(u, b, dt) {
+  compactCloudGravity(u.clouds, b, dt);
+  for (const h of u.holes) pairGravity(b, h, NEUTRON_STAR_GRAVITY_CONSTANT, dt);
+  compactCloudGravity(u.clouds, b, dt, true);
+  b.field -= dt;
+  b.phase += MAGNETAR_COLOR_CYCLE_RATE * dt;
+  b.pulseFlash = Math.max(0, b.pulseFlash - dt);
+  if (!b.latched && b.mass > MAGNETAR_FLARE_MASS_COST && Math.random() < MAGNETAR_FLARE_CHANCE) {
+    u.pulses.push([b.x, b.y, 0, MAGNETAR_FLARE_ENERGY]);
+    b.mass -= MAGNETAR_FLARE_MASS_COST;
+    b.pulseFlash = NEUTRON_STAR_PULSE_COLOR_DURATION;
+    u.events.push("MAGNETAR GIANT FLARE — magnetic field snaps and reconnects");
+  }
+  b.mass -= MAGNETAR_DECAY_RATE * dt;
+  if (b.field <= 0 || b.mass <= NEUTRON_STAR_DECAY_THRESHOLD) {
+    b.removed = true;
+    u.pulsars.push(body("pulsar", b.x, b.y, b.mass, b.vx, b.vy));
+  }
+}
+
+function compactMergers(u, bodies, typeIa, spawns) {
+  const distance = typeIa ? TYPE_IA_COLLISION_DISTANCE : KILONOVA_COLLISION_DISTANCE;
+  for (let i = 0; i < bodies.length; i++) {
+    const a = bodies[i];
+    if (a.removed) continue;
+    for (let j = i + 1; j < bodies.length; j++) {
+      const b = bodies[j];
+      if (b.removed || unit(a.x - b.x, a.y - b.y) >= distance) continue;
+      a.removed = b.removed = true;
+      const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+      const mass = a.mass + b.mass;
+      eject(spawns, x, y, typeIa ? TYPE_IA_EJECTA_COUNT : KILONOVA_EJECTA_COUNT, 5,
+        typeIa ? TYPE_IA_EJECTA_SPREAD : KILONOVA_EJECTA_SPREAD, MOLECULAR_CLOUD_START_MASS,
+        PROTOSTAR_THRESHOLD * SUPERNOVA_EJECTA_MAX_MASS_FRACTION,
+        typeIa ? TYPE_IA_ELEMENTAL_ABUNDANCE : KILONOVA_ELEMENTAL_ABUNDANCE, 0.5);
+      u.pulses.push([x, y, 0, mass]);
+      enrich(u, typeIa ? METALLICITY_PER_TYPE_IA : METALLICITY_PER_KILONOVA);
+      if (typeIa) {
+        u.events.push("SUPERNOVA (TYPE IA) — white dwarfs detonate, forging iron");
+      } else {
+        const vx = (a.mass * a.vx + b.mass * b.vx) / mass;
+        const vy = (a.mass * a.vy + b.mass * b.vy) / mass;
+        if (mass < KILONOVA_MAGNETAR_REMNANT_MAX || u.holes.length >= BLACK_HOLE_MAX_COUNT) {
+          u.magnetars.push(body("magnetar", x, y, mass, vx, vy));
+          u.events.push("KILONOVA — neutron stars merge; gold forged, magnetar left");
+        } else {
+          u.holes.push(body("hole", x, y, mass, vx, vy));
+          u.events.push("KILONOVA — neutron stars merge; gold forged, black hole left");
+        }
+      }
+      break;
+    }
+  }
+}
+
+function stepUniverse(u, dt) {
+  const c = u.clouds;
+  u.ring.deform(u, dt);
+  gravity(c, u.g, dt);
+  evolveClouds(u, dt);
+  u.ring.contain(u, dt);
+  for (const hole of u.holes) {
+    hole.angle = (hole.angle + (BLACK_HOLE_DISK_ROTATION + hole.angular / Math.max(hole.mass, 1)) * dt) % TAU;
+    hole.angular *= BLACK_HOLE_ANGULAR_MOMENTUM_DISSIPATION ** dt;
+  }
+  mergerWaves(u, dt);
+  const captured = new Uint8Array(c.n);
+  const streams = [], spawns = [];
+  for (const h of u.holes) if (!h.removed) updateHole(u, h, dt, captured, streams, spawns);
+  for (const p of u.pulsars) if (!p.removed) updatePulsar(u, p, dt, spawns);
+  for (const m of u.magnetars) if (!m.removed) updateMagnetar(u, m, dt);
+  for (const d of u.dwarfs) {
+    if (d.removed) continue;
+    compactCloudGravity(c, d, dt);
+    d.age += dt;
+    if (d.age >= WHITE_DWARF_COOL_TIME) {
+      d.removed = true;
+      u.events.push("BLACK DWARF — a white dwarf finishes cooling, fades from view");
+    }
+  }
+  const compact = [...u.pulsars, ...u.magnetars, ...u.dwarfs].filter(b => !b.removed);
+  for (let i = 0; i < compact.length; i++) for (let j = i + 1; j < compact.length; j++) {
+    pairGravity(compact[i], compact[j], NEUTRON_STAR_GRAVITY_CONSTANT, dt);
+  }
+  compactMergers(u, u.dwarfs, true, spawns);
+  compactMergers(u, [...u.pulsars, ...u.magnetars], false, spawns);
+  for (const [i, destination] of streams) c.copyTo(i, destination.clouds);
+  if (captured.includes(1)) c.keep(i => !captured[i]);
+  for (const group of ["holes", "pulsars", "magnetars", "dwarfs"]) {
+    if (u[group].some(b => b.removed)) u[group] = u[group].filter(b => !b.removed);
+  }
+  for (const spawn of spawns) c.add(...spawn);
+  const damping = VELOCITY_DAMPING ** dt;
+  for (let i = 0; i < c.n; i++) {
+    c.vx[i] *= damping;
+    c.vy[i] *= damping;
+    c.x[i] += c.vx[i] * dt;
+    c.y[i] += c.vy[i] * dt;
+    c.shock[i] = Math.max(0, c.shock[i] - dt);
+  }
+  const holeDamping = BLACK_HOLE_VELOCITY_DAMPING ** dt * damping;
+  const compactDamping = NEUTRON_STAR_VELOCITY_DAMPING ** dt * damping;
+  for (const b of [...u.holes, ...u.pulsars, ...u.magnetars, ...u.dwarfs]) {
+    const friction = b.type === "hole" ? holeDamping : compactDamping;
+    b.vx *= friction;
+    b.vy *= friction;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+  }
+}
+
+function universe(x, y) {
+  return {ring: new Barrier(x, y), clouds: new Clouds(), holes: [], pulsars: [], magnetars: [],
+    dwarfs: [], pulses: [], ripping: [], events: [], z: 0, g: 1, fusion: 1, collapse: 1};
+}
+
+function bigBang() {
+  const u = universe(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
+  const weights = u.ring.perturbation.map(p => Math.max(0, 1 - CMB_DENSITY_CONTRAST * p));
+  const total = sum(weights);
+  for (let i = 0; i < MOLECULAR_CLOUD_COUNT; i++) {
+    let roll = Math.random() * total;
+    let j = 0;
+    while (j < weights.length - 1 && (roll -= weights[j]) > 0) j++;
+    const angle = (j + Math.random()) * ringStep;
+    const radius = Math.sqrt(Math.random()) * u.ring.radius(angle);
+    u.clouds.add(u.ring.x + radius * Math.cos(angle), u.ring.y + radius * Math.sin(angle),
+      MOLECULAR_CLOUD_START_MASS, pickElement(SEED_ELEMENTAL_ABUNDANCE));
+  }
+  return u;
+}
+
+function centerForChild(universes, parent, hole) {
+  const radius = BARRIER_INITIAL_SIZE / 2;
+  const clear = (x, y) => universes.every(u => {
+    const dx = x - u.ring.x, dy = y - u.ring.y;
+    return unit(dx, dy) > radius + UNIVERSE_SPAWN_GAP + u.ring.radius(Math.atan2(dy, dx));
+  });
+  const r = parent.ring;
+  const angle = Math.atan2(hole.y - r.y, hole.x - r.x);
+  const edge = r.radius(angle);
+  for (let extra = 0; extra < 800; extra += 10) {
+    const d = edge + radius + UNIVERSE_SPAWN_GAP + extra;
+    const x = r.x + Math.cos(angle) * d, y = r.y + Math.sin(angle) * d;
+    if (clear(x, y)) return [x, y];
+  }
+  const cx = sum(universes.map(u => u.ring.x)) / universes.length;
+  const cy = sum(universes.map(u => u.ring.y)) / universes.length;
+  let x, y;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const a = uniform(0, TAU), d = 40 + attempt * 8;
+    x = cx + d * Math.cos(a);
+    y = cy + d * Math.sin(a);
+    if (clear(x, y)) break;
+  }
+  return [x, y];
+}
+
+function processRips(universes) {
+  for (const u of [...universes]) {
+    for (const hole of u.ripping) {
+      if (universes.length >= universeLimit) break;
+      if (hole.rip) continue;
+      const child = universe(...centerForChild(universes, u, hole));
+      child.z = u.z;
+      for (const key of ["g", "fusion", "collapse"]) {
+        child[key] = clamp(u[key] * Math.exp(normal() * UNIVERSE_MUTATION_SCALE), UNIVERSE_DIAL_MIN, UNIVERSE_DIAL_MAX);
+      }
+      const c = u.clouds;
+      const move = Math.floor(c.n * UNIVERSE_RIP_TRANSFER_FRACTION);
+      if (move) {
+        const order = Array.from({length: c.n}, (_, i) => i);
+        for (let i = order.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [order[i], order[j]] = [order[j], order[i]];
+        }
+        c.select(order);
+        for (let i = 0; i < move; i++) {
+          c.copyTo(i, child.clouds);
+          sendThrough(child.clouds, i, child);
+        }
+        c.keep(i => i >= move);
+      }
+      hole.rip = child;
+      universes.push(child);
+      u.events.push(`SPACETIME RIP — a child universe opens; its constants drift (G ×${child.g.toFixed(2)}, fusion ×${child.fusion.toFixed(2)}, collapse ×${child.collapse.toFixed(2)})`);
+    }
+    u.ripping.length = 0;
+  }
+}
+
+function capClouds(universes) {
+  if (sum(universes.map(u => u.clouds.n)) <= MULTIVERSE_MAX_CLOUDS) return;
+  const rows = [];
+  const masks = universes.map(u => new Uint8Array(u.clouds.n));
+  universes.forEach(({clouds: c}, index) => {
+    for (let i = 0; i < c.n; i++) rows.push([c.mass[i], index, i]);
+  });
+  rows.sort((a, b) => b[0] - a[0]);
+  for (let i = 0; i < MULTIVERSE_MAX_CLOUDS; i++) masks[rows[i][1]][rows[i][2]] = 1;
+  universes.forEach((u, i) => u.clouds.keep(row => masks[i][row]));
+}
+
+function translate(u, dx, dy) {
+  u.ring.x += dx;
+  u.ring.y += dy;
+  for (let i = 0; i < u.clouds.n; i++) {
+    u.clouds.x[i] += dx;
+    u.clouds.y[i] += dy;
+  }
+  for (const b of [...u.holes, ...u.pulsars, ...u.magnetars, ...u.dwarfs]) {
+    b.x += dx;
+    b.y += dy;
+  }
+  for (const p of u.pulses) {
+    p[0] += dx;
+    p[1] += dy;
+  }
+}
+
+function universeMass(u) {
+  let mass = 0;
+  for (let i = 0; i < u.clouds.n; i++) mass += u.clouds.mass[i];
+  for (const list of [u.holes, u.pulsars, u.magnetars, u.dwarfs]) for (const b of list) mass += b.mass;
+  return mass;
+}
+
+function population(u) {
+  return u.clouds.n + u.holes.length + u.pulsars.length + u.magnetars.length + u.dwarfs.length;
+}
+
+function darkFlow(universes, dt) {
+  if (universes.length < 2) return;
+  let mass = 0, mx = 0, my = 0;
+  for (const u of universes) {
+    const m = universeMass(u);
+    mass += m;
+    mx += u.ring.x * m;
+    my += u.ring.y * m;
+  }
+  if (mass <= 0) return;
+  const cx = mx / mass, cy = my / mass;
+  const pull = Math.min(1, DARK_FLOW_RATE * dt);
+  for (const u of universes) translate(u, (cx - u.ring.x) * pull, (cy - u.ring.y) * pull);
+}
+
+function flatten(r, tx, ty, amount) {
+  const angle = Math.atan2(ty - r.y, tx - r.x);
+  const x = Math.cos(angle), y = Math.sin(angle);
+  r.max = 0;
+  for (let i = 0; i < r.radii.length; i++) {
+    const align = cosines[i] * x + sines[i] * y;
+    if (align > 0) r.radii[i] = Math.max(2, r.radii[i] - amount * align);
+    r.max = Math.max(r.max, r.radii[i]);
+  }
+}
+
+function resolveOverlaps(universes, dt) {
+  if (universes.length < 2) return;
+  const means = universes.map(u => sum(u.ring.radii) / BARRIER_POINT_COUNT);
+  const relax = Math.min(0.9, BARRIER_REPULSION_RATE * dt);
+  for (let iteration = 0; iteration < BARRIER_RESOLVE_ITERATIONS; iteration++) {
+    for (let i = 0; i < universes.length; i++) for (let j = i + 1; j < universes.length; j++) {
+      const a = universes[i], b = universes[j];
+      const bx = b.ring.x, by = b.ring.y;
+      let dx = bx - a.ring.x, dy = by - a.ring.y, d = unit(dx, dy);
+      if (d > a.ring.max + b.ring.max) continue;
+      if (d < 0.01) {
+        dx = uniform(-1, 1);
+        dy = uniform(-1, 1);
+        d = 1;
+      }
+      const angle = Math.atan2(dy, dx);
+      const overlap = a.ring.radius(angle) + b.ring.radius(angle + Math.PI) - d;
+      if (overlap <= 0) continue;
+      const weightA = means[i] / (means[i] + means[j]), weightB = 1 - weightA;
+      const distance = overlap * BARRIER_SEPARATION_SHARE * relax / d;
+      translate(a, -dx * distance * weightB, -dy * distance * weightB);
+      translate(b, dx * distance * weightA, dy * distance * weightA);
+      const dent = overlap * BARRIER_CONTACT_DEFORM * relax;
+      flatten(a.ring, bx, by, dent * weightB);
+      flatten(b.ring, a.ring.x, a.ring.y, dent * weightA);
+    }
+  }
+}
+
+function reap(universes) {
+  if (universes.length < 2) return universes;
+  const live = [], dead = [];
+  for (const u of universes) {
+    const z = u.z.toFixed(2);
+    let epitaph;
+    if (sum(u.ring.radii) / BARRIER_POINT_COUNT < UNIVERSE_COLLAPSE_RADIUS) {
+      epitaph = `BIG CRUNCH — a universe contracts to a point; nothing gets out (Z ${z})`;
+    } else if (!population(u)) {
+      epitaph = u.z >= HEAT_DEATH_Z ?
+        `HEAT DEATH — a universe completes its chemistry (Z ${z}) and goes dark` :
+        `UNIVERSE LOST — the last of its matter is gone (Z ${z})`;
+    }
+    if (epitaph) dead.push(...u.events, epitaph);
+    else live.push(u);
+  }
+  if (dead.length && live.length) live[0].events.push(...dead);
+  const survivors = new Set(live);
+  for (const u of live) for (const h of u.holes) if (h.rip && !survivors.has(h.rip)) h.rip = null;
+  return live;
+}
+
+// Version 5 of sim/rng.py's little-endian state record.
+function serialize(universes) {
+  const counts = ["clouds", "holes", "pulsars", "magnetars", "dwarfs"];
+  const totals = counts.map(key => sum(universes.map(u => key === "clouds" ? u.clouds.n : u[key].length)));
+  const points = universes.length * BARRIER_POINT_COUNT;
+  const bytes = new Uint8Array(29 + 8 * (6 * totals[0] + 7 * totals[1] + 6 * totals[2] +
+    7 * totals[3] + 6 * totals[4] + 2 * points) + 72 * universes.length);
+  const view = new DataView(bytes.buffer);
+  let offset = 1;
+  const u32 = value => { view.setUint32(offset, value, true); offset += 4; };
+  const f64 = value => { view.setFloat64(offset, value, true); offset += 8; };
+  bytes[0] = 5;
+  [universes.length, ...totals, points].forEach(u32);
+  for (const u of universes) {
+    const c = u.clouds;
+    [c.n, u.holes.length, u.pulsars.length, u.magnetars.length, u.dwarfs.length, BARRIER_POINT_COUNT].forEach(u32);
+    [u.z, u.g, u.fusion, u.collapse].forEach(f64);
+    for (let i = 0; i < c.n; i++) {
+      f64(c.x[i]); f64(c.y[i]); f64(c.vx[i]); f64(c.vy[i]); f64(c.mass[i]);
+    }
+    for (let i = 0; i < c.n; i++) { u32(c.element[i]); u32(0); }
+    for (const [list, extra] of [[u.holes, ["angular", "accretion"]], [u.pulsars, ["elapsed"]],
+      [u.magnetars, ["field", "phase"]], [u.dwarfs, ["age"]]]) {
+      for (const b of list) {
+        [b.x, b.y, b.vx, b.vy, b.mass].forEach(f64);
+        for (const key of extra) f64(b[key]);
+      }
+    }
+    f64(u.ring.x); f64(u.ring.y);
+    u.ring.radii.forEach(f64);
+    u.ring.velocity.forEach(f64);
+  }
+  return bytes;
+}
+
+const encoder = new TextEncoder();
+const poolDomain = encoder.encode("simcraft-pool-v1");
+const drawDomain = encoder.encode("simcraft-rng-v1\x01");
+const blakeIV = Uint32Array.of(0xf3bcc908, 0x6a09e667, 0x84caa73b, 0xbb67ae85,
+  0xfe94f82b, 0x3c6ef372, 0x5f1d36f1, 0xa54ff53a, 0xade682d1, 0x510e527f,
+  0x2b3e6c1f, 0x9b05688c, 0xfb41bd6b, 0x1f83d9ab, 0x137e2179, 0x5be0cd19);
+const blakeOrder = [
+  [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+  [14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3],
+  [11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4],
+  [7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8],
+  [9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13],
+  [2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9],
+  [12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11],
+  [13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10],
+  [6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5],
+  [10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0]
+];
+
+// BLAKE2b-256 with a 32-byte key and the desktop's personalization string.
+// Each 64-bit word is stored as a little-endian pair of 32-bit lanes.
+function foldHash(key, data) {
+  const h = blakeIV.slice();
+  h[0] ^= 0x01012020;
+  const personal = new DataView(poolDomain.buffer);
+  for (let i = 0; i < 4; i++) h[12 + i] ^= personal.getUint32(i * 4, true);
+  const v = new Uint32Array(32), m = new Uint32Array(32);
+  const tail = new Uint8Array(128);
+  const tailView = new DataView(tail.buffer);
+
+  function add(lane, low, high) {
+    const sum = v[lane] + low;
+    v[lane] = sum;
+    v[lane + 1] += high + (sum >= 0x100000000 ? 1 : 0);
+  }
+  function xorRotate(a, b, shift) {
+    const lo = v[a] ^ v[b], hi = v[a + 1] ^ v[b + 1];
+    if (shift === 32) {
+      v[a] = hi;
+      v[a + 1] = lo;
+    } else if (shift === 63) {
+      v[a] = lo << 1 | hi >>> 31;
+      v[a + 1] = hi << 1 | lo >>> 31;
+    } else {
+      v[a] = lo >>> shift | hi << (32 - shift);
+      v[a + 1] = hi >>> shift | lo << (32 - shift);
+    }
+  }
+  function mix(a, b, c, d, x, y) {
+    add(a, v[b], v[b + 1]);
+    add(a, m[x], m[x + 1]);
+    xorRotate(d, a, 32);
+    add(c, v[d], v[d + 1]);
+    xorRotate(b, c, 24);
+    add(a, v[b], v[b + 1]);
+    add(a, m[y], m[y + 1]);
+    xorRotate(d, a, 16);
+    add(c, v[d], v[d + 1]);
+    xorRotate(b, c, 63);
+  }
+  function compress(block, offset, count, last) {
+    for (let i = 0; i < 32; i++) m[i] = block.getUint32(offset + 4 * i, true);
+    v.set(h);
+    v.set(blakeIV, 16);
+    v[24] ^= count;
+    v[25] ^= Math.floor(count / 0x100000000);
+    if (last) { v[28] = ~v[28]; v[29] = ~v[29]; }
+    for (let round = 0; round < 12; round++) {
+      const s = blakeOrder[round % 10];
+      mix(0, 8, 16, 24, 2*s[0], 2*s[1]);
+      mix(2, 10, 18, 26, 2*s[2], 2*s[3]);
+      mix(4, 12, 20, 28, 2*s[4], 2*s[5]);
+      mix(6, 14, 22, 30, 2*s[6], 2*s[7]);
+      mix(0, 10, 20, 30, 2*s[8], 2*s[9]);
+      mix(2, 12, 22, 24, 2*s[10], 2*s[11]);
+      mix(4, 14, 16, 26, 2*s[12], 2*s[13]);
+      mix(6, 8, 18, 28, 2*s[14], 2*s[15]);
+    }
+    for (let i = 0; i < 16; i++) h[i] ^= v[i] ^ v[i + 16];
+  }
+
+  tail.set(key);
+  compress(tailView, 0, 128, data.length === 0);
+  if (data.length) {
+    const view = new DataView(data.buffer, data.byteOffset, data.length);
+    let i = 0;
+    for (; i + 128 < data.length; i += 128) compress(view, i, 256 + i, false);
+    tail.fill(0);
+    tail.set(data.subarray(i));
+    compress(tailView, 0, 128 + data.length, true);
+  }
+  const result = new Uint8Array(32);
+  const resultView = new DataView(result.buffer);
+  for (let i = 0; i < 8; i++) resultView.setUint32(i * 4, h[i], true);
+  return result;
+}
+
+const shaK = Uint32Array.of(
+  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+);
+const ror = (x, n) => x >>> n | x << (32 - n);
+
+// Synchronous SHA-256 for the two short HMACs in each HKDF draw. This also
+// works when the page is served over plain HTTP, where SubtleCrypto is absent.
+function sha256(data) {
+  const bytes = new Uint8Array(Math.ceil((data.length + 9) / 64) * 64);
+  bytes.set(data);
+  bytes[data.length] = 0x80;
+  const view = new DataView(bytes.buffer);
+  view.setBigUint64(bytes.length - 8, BigInt(data.length) * 8n);
+  const h = Uint32Array.of(0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19);
+  const w = new Uint32Array(64);
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const x = w[i - 15], y = w[i - 2];
+      w[i] = w[i - 16] + (ror(x, 7) ^ ror(x, 18) ^ (x >>> 3)) + w[i - 7] +
+        (ror(y, 17) ^ ror(y, 19) ^ (y >>> 10));
+    }
+    let [a, b, c, d, e, f, g, j] = h;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (j + (ror(e, 6) ^ ror(e, 11) ^ ror(e, 25)) +
+        ((e & f) ^ (~e & g)) + shaK[i] + w[i]) | 0;
+      const t2 = ((ror(a, 2) ^ ror(a, 13) ^ ror(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      j = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    const words = [a, b, c, d, e, f, g, j];
+    for (let i = 0; i < h.length; i++) h[i] += words[i];
+  }
+  const result = new Uint8Array(32);
+  const output = new DataView(result.buffer);
+  h.forEach((word, i) => output.setUint32(i * 4, word));
+  return result;
+}
+
+function hmac(key, data) {
+  const inner = new Uint8Array(64 + data.length);
+  const outer = new Uint8Array(96);
+  inner.fill(0x36, 0, 64);
+  outer.fill(0x5c, 0, 64);
+  key.forEach((byte, i) => { inner[i] ^= byte; outer[i] ^= byte; });
+  inner.set(data, 64);
+  outer.set(sha256(inner), 64);
+  return sha256(outer);
+}
+
+const RNG_MIN = 10n ** 41n;
+const RNG_RANGE = 9n * RNG_MIN;
+const RNG_LIMIT = (1n << 256n) - (1n << 256n) % RNG_RANGE;
+
+class EntropyPool {
+  constructor() {
+    this.key = crypto.getRandomValues(new Uint8Array(32));
+    this.folds = 0;
+    this.frames = 0;
+  }
+
+  fold(data) {
+    this.key = foldHash(this.key, data);
+    this.folds++;
+  }
+
+  frame(universes, stamp, elapsed) {
+    const bytes = new Uint8Array(16 + sum(universes.map(u => 48 + 16 * Math.min(u.clouds.n, 4))));
+    const view = new DataView(bytes.buffer);
+    view.setBigUint64(0, BigInt(this.folds), true);
+    view.setUint32(8, stamp, true);
+    view.setInt32(12, elapsed, true);
+    let offset = 16;
+    for (const u of universes) {
+      const c = u.clouds;
+      for (const count of [c.n, u.holes.length, u.pulsars.length, u.magnetars.length, u.dwarfs.length, u.pulses.length]) {
+        view.setUint32(offset, count, true);
+        offset += 4;
+      }
+      const sample = Math.min(c.n, 4);
+      for (const value of [sum(u.ring.radii), sum(u.ring.velocity), sum(c.mass.subarray(0, c.n)),
+        ...c.x.subarray(0, sample), ...c.y.subarray(0, sample)]) {
+        view.setFloat64(offset, value, true);
+        offset += 8;
+      }
+    }
+    this.fold(bytes);
+    if (++this.frames % 120 === 0) this.fold(serialize(universes));
+  }
+
+  draw() {
+    let raw, bytes;
+    do {
+      const secret = crypto.getRandomValues(new Uint8Array(32));
+      bytes = hmac(hmac(this.key, secret), drawDomain);
+      raw = 0n;
+      for (const byte of bytes) raw = (raw << 8n) | BigInt(byte);
+    } while (raw >= RNG_LIMIT);
+    this.fold(bytes);
+    return String(RNG_MIN + raw % RNG_RANGE);
+  }
+}
+
+const canvas = document.querySelector("#space");
+const ctx = canvas.getContext("2d", {alpha: false});
+const byId = id => document.getElementById(id);
+const controls = Object.fromEntries(["barriers", "waves", "events", "help", "reset", "end"].map(id => [id, byId(id)]));
+const tickerNode = byId("ticker");
+const legendNode = byId("legend");
+const elementNode = byId("elements");
+const statsNode = byId("stats");
+const numberNode = byId("number");
+const statusNode = byId("status");
+const worldX = SCREEN_WIDTH / 2, worldY = SCREEN_HEIGHT / 2;
+const view = {x: worldX, y: worldY, zoom: 1, tx: worldX, ty: worldY, tz: 1};
+const flags = {barriers: true, waves: true, events: false, help: true};
+let width = 0, height = 0, pixelRatio = 1;
+let universes, pool, age, emptyTime, ticker, helpTime, previous, nextRender, ended, rngNumber;
+let shownNumber;
+let lastHUD = -Infinity;
+let fps = 0;
+
+const background = rgb(BACKGROUND_COLOR);
+const lerpColor = (from, to, t) => from.map((x, i) => Math.round(x + (to[i] - x) * t));
+
+function circle(x, y, radius, fill) {
+  if (radius <= 0) return;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, TAU);
+  ctx.fill();
+}
+
+function barrierPath(r, radii) {
+  ctx.beginPath();
+  for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+    const x = r.x + radii[i] * cosines[i], y = r.y + radii[i] * sines[i];
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+function drawBarrier(r) {
+  r.drawRadii.set(r.radii);
+  let a = r.drawRadii, b = r.smoothed;
+  const half = Math.floor(BARRIER_SMOOTHING_WINDOW / 2);
+  for (let pass = 0; pass < BARRIER_SMOOTHING_PASSES; pass++) {
+    let window = 0;
+    for (let j = -half; j <= half; j++) window += a[(j + BARRIER_POINT_COUNT) % BARRIER_POINT_COUNT];
+    for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+      b[i] = window / BARRIER_SMOOTHING_WINDOW;
+      window += a[(i + half + 1) % BARRIER_POINT_COUNT] - a[(i - half + BARRIER_POINT_COUNT) % BARRIER_POINT_COUNT];
+    }
+    [a, b] = [b, a];
+  }
+  barrierPath(r, a);
+  ctx.lineWidth = BARRIER_LINE_WIDTH;
+  ctx.strokeStyle = rgb(BARRIER_COLOR, BARRIER_BASE_OPACITY / 255);
+  ctx.stroke();
+  for (let i = 0; i < BARRIER_POINT_COUNT; i++) {
+    const j = (i + 1) % BARRIER_POINT_COUNT;
+    const f = Math.max(r.flash[i], r.flash[j]);
+    if (f <= 0.01) continue;
+    ctx.strokeStyle = rgb(lerpColor(BARRIER_COLOR, BARRIER_FLASH_COLOR, f),
+      (BARRIER_BASE_OPACITY + f * (BARRIER_FLASH_OPACITY - BARRIER_BASE_OPACITY)) / 255);
+    ctx.beginPath();
+    ctx.moveTo(r.x + a[i] * cosines[i], r.y + a[i] * sines[i]);
+    ctx.lineTo(r.x + a[j] * cosines[j], r.y + a[j] * sines[j]);
+    ctx.stroke();
+  }
+}
+
+// Cache paint values and block patterns so every cloud remains a cheap fill.
+const gasColors = new Map();
+const cloudPatterns = Array.from({length: 256}, (_, pattern) => {
+  let state = pattern + 1;
+  const sample = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+  return Array.from({length: 7}, () => {
+    const radius = 0.05 + 0.17 * sample(), angle = TAU * sample();
+    return [radius * Math.cos(angle), radius * Math.sin(angle)];
+  });
+});
+const starColors = STAR_CLASSES.map(row => CEPHEID_LEVELS.map(level => rgb(row[2].map(v => Math.floor(v * level)))));
+const elementColors = MOLECULAR_CLOUD_START_COLORS.map(color => rgb(color));
+
+function drawClouds(c, now, bounds) {
+  const cepheid = Math.floor(now / CEPHEID_STEP);
+  for (let i = 0; i < c.n; i++) {
+    const x = c.x[i], y = c.y[i], mass = c.mass[i], el = c.element[i];
+    if (x < bounds[0] - 24 || x > bounds[2] + 24 || y < bounds[1] - 24 || y > bounds[3] + 24) continue;
+    if (c.star[i]) {
+      const cls = STAR_CLASSES.findIndex(([min]) => mass >= min);
+      const level = mass >= CEPHEID_MASS_MIN && mass < CEPHEID_MASS_MAX ?
+        (i * 7 + cepheid) % CEPHEID_LEVELS.length : 0;
+      const giant = c.giant[i] > 0;
+      const size = giant ? RED_GIANT_DRAW_SIZE : STAR_CLASSES[cls][3];
+      ctx.fillStyle = giant ? rgb(RED_GIANT_COLOR) : mass < STAR_TIER_MEDIUM_MASS && el === CARBON_STAR_ELEMENT ?
+        rgb(CARBON_STAR_COLOR) : starColors[cls][level];
+      ctx.fillRect(Math.floor(x), Math.floor(y), size, size);
+      const cx = x + size / 2, cy = y + size / 2;
+      if (c.civ[i]) {
+        const radius = Math.floor(size / 2) + CIVILIZATION_RING_PADDING;
+        for (let dot = 0; dot < CIVILIZATION_RING_DOT_COUNT; dot++) {
+          const angle = dot * TAU / CIVILIZATION_RING_DOT_COUNT;
+          circle(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius,
+            CIVILIZATION_RING_DOT_RADIUS, rgb(CIVILIZATION_RING_COLOR));
+        }
+        const bucket = Math.floor(now / CIVILIZATION_FLICKER_STEP);
+        if (((Math.imul(i + 1, 1299721) ^ Math.imul(bucket, 2654435761)) >>> 0) % CIVILIZATION_FLICKER_GAP_CHANCE) {
+          circle(cx, cy, Math.floor(size / 2) + CIVILIZATION_DISC_PADDING, rgb(CIVILIZATION_DISC_COLOR));
+        }
+      }
+      if (!giant && mass >= WOLF_RAYET_MASS && el >= STAR_ENRICHED_ELEMENT_MIN &&
+          c.pattern[i] % WOLF_RAYET_FRACTION === 0) {
+        const expansion = (now * WOLF_RAYET_SHED_SPEED + i * 1.7) % WOLF_RAYET_SHELL_RANGE;
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.floor(size / 2) + 2 + expansion, 0, TAU);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = rgb(WOLF_RAYET_SHELL_COLOR, 200 / 255 * (1 - expansion / WOLF_RAYET_SHELL_RANGE));
+        ctx.stroke();
+      }
+      continue;
+    }
+    const size = c.size[i];
+    const opacity = Math.floor(MOLECULAR_CLOUD_MIN_OPACITY + (MOLECULAR_CLOUD_OPACITY - MOLECULAR_CLOUD_MIN_OPACITY) *
+      clamp((mass - MOLECULAR_CLOUD_START_MASS) / (PROTOSTAR_THRESHOLD - MOLECULAR_CLOUD_START_MASS), 0, 1));
+    const ember = mass >= BROWN_DWARF_MASS_MIN;
+    const key = ((el * 64 + size) * 256 + opacity) * 2 + +ember;
+    if (!gasColors.has(key)) {
+      const base = MOLECULAR_CLOUD_START_COLORS[el];
+      const color = ember ? BROWN_DWARF_COLOR : lerpColor(base, MOLECULAR_CLOUD_END_COLOR,
+        size <= 4 ? 1 : 1 - (size - 4) / (MOLECULAR_CLOUD_START_SIZE - 4));
+      gasColors.set(key, rgb(color, opacity / 255));
+    }
+    ctx.fillStyle = gasColors.get(key);
+    const radius = Math.max(1, Math.floor(size * 0.3));
+    const blocks = Math.min(7, 3 + Math.floor((MOLECULAR_CLOUD_START_SIZE - size) / 4));
+    const pattern = cloudPatterns[c.pattern[i]];
+    ctx.beginPath();
+    for (let j = 0; j < blocks; j++) {
+      const [ox, oy] = pattern[j];
+      ctx.rect(Math.floor(x + size * (0.5 + ox)) - radius,
+        Math.floor(y + size * (0.5 + oy)) - radius, 2 * radius, 2 * radius);
+    }
+    ctx.fill();
+  }
+}
+
+function drawHole(h, now) {
+  const radius = h.border;
+  let heat = clamp(h.flare / BLACK_HOLE_FLARE_MAX_LENGTH, 0, 1);
+  heat *= 1 - BLACK_HOLE_FLARE_PULSE_DEPTH * (0.5 - 0.5 * Math.cos(now * BLACK_HOLE_FLARE_OSC_RATE + h.id));
+  const floor = BLACK_HOLE_FLARE_FAR_SIDE_FLOOR;
+  const sharp = Math.min(1, unit(h.flareX, h.flareY) / BLACK_HOLE_FLARE_DIR_REFERENCE);
+  circle(h.x, h.y, radius, rgb(lerpColor(BLACK_HOLE_BORDER_COLOR, BLACK_HOLE_FLARE_COLOR,
+    heat * (1 - sharp + sharp * floor))));
+  if (heat > 0 && radius >= 2) {
+    const meal = Math.atan2(h.flareY, h.flareX);
+    const step = TAU / BLACK_HOLE_RING_SEGMENTS;
+    const profile = Array.from({length: BLACK_HOLE_RING_SEGMENTS}, (_, i) => floor + (1 - floor) *
+      (0.5 + 0.5 * Math.cos((i + 0.5) * step - meal)) ** BLACK_HOLE_FLARE_CRESCENT_POWER);
+    const mean = sum(profile) / profile.length;
+    ctx.lineWidth = 3;
+    profile.forEach((value, i) => {
+      ctx.strokeStyle = rgb(lerpColor(BLACK_HOLE_BORDER_COLOR, BLACK_HOLE_FLARE_COLOR,
+        Math.min(1, heat * (1 - sharp + sharp * value / mean))));
+      ctx.beginPath();
+      ctx.arc(h.x, h.y, radius, i * step, (i + 1) * step);
+      ctx.stroke();
+    });
+  }
+  circle(h.x, h.y, radius - 2, rgb(BLACK_HOLE_COLOR));
+  circle(h.x + radius * Math.cos(h.angle), h.y + radius * Math.sin(h.angle),
+    BLACK_HOLE_DISK_SIZE, rgb(BLACK_HOLE_DISK_COLOR));
+}
+
+function drawPulsar(p) {
+  if (!p.dead) {
+    const flash = p.pulseFlash > 0;
+    const length = flash ? NEUTRON_STAR_JET_FLASH_LENGTH : NEUTRON_STAR_JET_LENGTH;
+    const angle = p.wobble * NEUTRON_STAR_JET_WOBBLE * Math.PI / 180;
+    const dx = Math.sin(angle) * length, dy = -Math.cos(angle) * length;
+    ctx.strokeStyle = flash ? "#fff" : rgb(NEUTRON_STAR_COLOR);
+    ctx.lineWidth = NEUTRON_STAR_JET_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(p.x - dx, p.y - dy);
+    ctx.lineTo(p.x + dx, p.y + dy);
+    ctx.stroke();
+  }
+  ctx.fillStyle = rgb(p.dead ? NEUTRON_STAR_DEAD_COLOR : NEUTRON_STAR_COLOR);
+  ctx.fillRect(p.x - NEUTRON_STAR_RADIUS, p.y - NEUTRON_STAR_RADIUS,
+    2 * NEUTRON_STAR_RADIUS + 1, 2 * NEUTRON_STAR_RADIUS + 1);
+}
+
+function drawWaves(u) {
+  const count = u.pulses.length + sum(u.pulsars.map(b => b.pulses.length));
+  if (!count) return;
+  const dim = Math.sqrt(Math.min(1, PULSE_CROWD_REFERENCE / count));
+  ctx.save();
+  barrierPath(u.ring, u.ring.radii);
+  ctx.clip();
+  function wave(x, y, radius, color, width, alpha) {
+    if (radius <= 1 || alpha <= 0) return;
+    ctx.strokeStyle = rgb(color.slice(0, 3), color[3] / 255 * alpha * dim);
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, TAU);
+    ctx.stroke();
+  }
+  for (const [x, y, radius, energy] of u.pulses) {
+    wave(x, y, radius, BLACK_HOLE_MERGE_COLOR, Math.max(2, Math.floor(energy / 20)), 1);
+  }
+  for (const p of u.pulsars) for (const radius of p.pulses) {
+    const fade = clamp((NEUTRON_STAR_PULSE_RANGE - radius) / (NEUTRON_STAR_PULSE_RANGE * 0.3), 0, 1);
+    wave(p.x, p.y, radius, NEUTRON_STAR_PULSE_COLOR, NEUTRON_STAR_PULSE_WIDTH, fade);
+  }
+  ctx.restore();
+}
+
+function render(now) {
+  const w = canvas.clientWidth, h = canvas.clientHeight, ratio = window.devicePixelRatio || 1;
+  if (w !== width || h !== height || ratio !== pixelRatio) {
+    width = w; height = h; pixelRatio = ratio;
+    canvas.width = Math.round(w * ratio);
+    canvas.height = Math.round(h * ratio);
+  }
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, width, height);
+  ctx.translate(width / 2, height / 2);
+  ctx.scale(view.zoom, view.zoom);
+  ctx.translate(-view.x, -view.y);
+  const a = width / (2 * view.zoom), b = height / (2 * view.zoom);
+  const bounds = [view.x - a, view.y - b, view.x + a, view.y + b];
+  for (const u of universes) {
+    const r = u.ring, reach = r.max + UNIVERSE_CULL_MARGIN;
+    if (r.x + reach < bounds[0] || r.y + reach < bounds[1] ||
+        r.x - reach > bounds[2] || r.y - reach > bounds[3]) continue;
+    if (flags.barriers) drawBarrier(r);
+    drawClouds(u.clouds, now, bounds);
+    for (const d of u.dwarfs) {
+      const t = Math.min(1, d.age / WHITE_DWARF_COOL_TIME);
+      const color = t < 0.7 ? lerpColor(WHITE_DWARF_COLOR, WHITE_DWARF_COOL_COLOR, t / 0.7) :
+        lerpColor(WHITE_DWARF_COOL_COLOR, BACKGROUND_COLOR, (t - 0.7) / 0.3);
+      circle(d.x, d.y, WHITE_DWARF_RADIUS, rgb(color));
+    }
+    for (const h of u.holes) drawHole(h, now);
+    for (const p of u.pulsars) drawPulsar(p);
+    for (const m of u.magnetars) {
+      const color = m.pulseFlash > 0 ? [255, 255, 255] :
+        lerpColor(MAGNETAR_COLOR_A, MAGNETAR_COLOR_B, (1 + Math.sin(m.phase)) / 2);
+      circle(m.x, m.y, MAGNETAR_GLOW_RADIUS + Math.trunc(2 * Math.sin(m.phase / 2)), rgb(color, MAGNETAR_GLOW_ALPHA / 255));
+      circle(m.x, m.y, MAGNETAR_RADIUS, rgb(color));
+    }
+    if (flags.waves && view.zoom >= PULSE_LOD_MIN_ZOOM) drawWaves(u);
+  }
+}
+
+function yearsLabel(years) {
+  if (years >= 1e15) return `10^${Math.log10(years).toFixed(1)}`;
+  for (const [divisor, suffix] of [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]]) {
+    const value = (years / divisor).toFixed(1);
+    if (Number(value) >= 1) return value + suffix;
+  }
+  return String(Math.floor(years));
+}
+
+function syncHUD(stamp, force = false) {
+  if (shownNumber !== rngNumber) numberNode.textContent = shownNumber = rngNumber;
+  if (!force && stamp - lastHUD < 120) return;
+  lastHUD = stamp;
+  const z = sum(universes.map(u => u.z)) / Math.max(1, universes.length);
+  const cells = [`${Math.round(fps)} FPS`, `Year ${yearsLabel(age)}`,
+    `${universes.length} ${universes.length === 1 ? "universe" : "universes"}`,
+    `${sum(universes.map(population)).toLocaleString()} entities`, `Z ${z.toFixed(3)}`];
+  statsNode.replaceChildren(...cells.map(text => {
+    const span = document.createElement("span");
+    span.textContent = text;
+    return span;
+  }));
+  if (flags.events) {
+    tickerNode.replaceChildren(...ticker.slice(-Math.max(1, Math.floor((height - 160) / 23))).map(event => {
+      const row = document.createElement("div");
+      row.style.opacity = clamp((UI_TICKER_LIFETIME - event.age) / 2, 0, 1);
+      row.textContent = event.text;
+      return row;
+    }));
+  }
+  if (flags.help) {
+    const present = new Set();
+    for (const {clouds: c} of universes) for (let i = 0; i < c.n; i++) present.add(c.element[i]);
+    elementNode.replaceChildren(...[...present].sort((a, b) => a - b).map(el => {
+      const span = document.createElement("span");
+      span.style.background = elementColors[el];
+      span.textContent = ELEMENT_SYMBOLS[el];
+      return span;
+    }));
+  }
+}
+
+function restart(tag) {
+  if (!pool || ended) {
+    pool = new EntropyPool();
+    ticker = [];
+  } else if (tag) {
+    pool.fold(encoder.encode(tag));
+  }
+  universes = [bigBang()];
+  age = emptyTime = 0;
+  view.x = view.tx = worldX;
+  view.y = view.ty = worldY;
+  view.zoom = view.tz = 1;
+  previous = undefined;
+  ended = false;
+  rngNumber = pool.draw();
+  controls.end.disabled = false;
+  controls.reset.textContent = "Reset";
+  statusNode.textContent = "";
+}
+
+function step(dt, stamp, raw) {
+  for (const u of universes) stepUniverse(u, dt);
+  processRips(universes);
+  capClouds(universes);
+  darkFlow(universes, dt);
+  resolveOverlaps(universes, dt);
+  universes = reap(universes);
+  for (const u of universes) {
+    for (const text of u.events) {
+      const last = ticker.at(-1);
+      if (last?.text !== text || last.age >= 1) ticker.push({text, age: 0});
+    }
+    u.events.length = 0;
+  }
+  for (const event of ticker) event.age += dt;
+  ticker = ticker.filter(e => e.age < UI_TICKER_LIFETIME);
+
+  pool.frame(universes, stamp, raw);
+  const z = sum(universes.map(u => u.z)) / Math.max(1, universes.length);
+  emptyTime = !universes.length || !universes.some(u => population(u)) ||
+    sum(universes.map(universeMass)) <= 0 ? emptyTime + dt : 0;
+  let resetTag;
+  if (age >= MAX_SIMULATION_YEARS) resetTag = "age-limit-reset";
+  else if (z >= MAX_SIMULATION_METALLICITY) resetTag = "metallicity-limit-reset";
+  else if (emptyTime >= HEAT_DEATH_LINGER_DURATION) resetTag = "heat-death-reset";
+  if (resetTag) {
+    restart(resetTag);
+  } else {
+    age += dt * Math.min(MAX_YEAR_RATE, Math.log(10) / COSMIC_DECADE_SECONDS * (age + 1000));
+    rngNumber = pool.draw();
+  }
+}
+
+function animation(stamp) {
+  requestAnimationFrame(animation);
+  if (nextRender !== undefined && stamp + 1 < nextRender) return;
+  const frameLength = 1000 / TARGET_FPS;
+  nextRender = nextRender === undefined ? stamp + frameLength :
+    nextRender + (1 + Math.floor(Math.max(0, stamp - nextRender) / frameLength)) * frameLength;
+  const raw = previous === undefined ? frameLength : stamp - previous;
+  previous = stamp;
+  const dt = Math.min(raw / 1000, MAX_DELTA_TIME);
+  if (!ended && raw > 0) fps = fps ? fps * 0.94 + 60 / raw : 1000 / raw;
+  if (!ended) step(dt, stamp, raw);
+  const blend = 1 - Math.exp(-ZOOM_SMOOTH_RATE * dt);
+  view.x += (view.tx - view.x) * blend;
+  view.y += (view.ty - view.y) * blend;
+  view.zoom = Math.exp(Math.log(view.zoom) + (Math.log(view.tz) - Math.log(view.zoom)) * blend);
+  if (flags.help) {
+    helpTime += dt;
+    const opacity = clamp(1 - (helpTime - UI_HOTKEYS_HOLD_SECONDS) / UI_HOTKEYS_FADE_SECONDS, 0, 1);
+    legendNode.style.opacity = opacity;
+    if (opacity <= 0) toggle("help");
+  }
+  render(stamp / 1000);
+  syncHUD(stamp);
+}
+
+function toggle(flag) {
+  flags[flag] = !flags[flag];
+  controls[flag].setAttribute("aria-pressed", String(flags[flag]));
+  if (flag === "help") {
+    legendNode.hidden = !flags.help;
+    legendNode.style.opacity = 1;
+    helpTime = 0;
+  }
+  if (flag === "events") tickerNode.hidden = !flags.events;
+  syncHUD(performance.now(), true);
+}
+
+function endRun() {
+  if (ended) return;
+  pool.fold(serialize(universes));
+  rngNumber = pool.draw();
+  ended = true;
+  fps = 0;
+  controls.end.disabled = true;
+  controls.reset.textContent = "New run";
+  statusNode.textContent = "Run ended. Copy the final number.";
+  syncHUD(performance.now(), true);
+}
+
+function copyWithSelection(number) {
+  const input = document.createElement("textarea");
+  input.value = number;
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.append(input);
+  try {
+    input.select();
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    input.remove();
+    numberNode.focus();
+  }
+}
+
+async function copyNumber() {
+  const number = rngNumber;
+  let copied = false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(number);
+      copied = true;
+    } catch {
+      // The native clipboard may be denied on file URLs.
+    }
+  }
+  if (!copied) copied = copyWithSelection(number);
+  if (copied) {
+    statusNode.textContent = ended ? "Final number copied." : "Number copied.";
+    return;
+  }
+  statusNode.textContent = "Select the number and copy it manually.";
+  const selection = window.getSelection();
+  if (selection) {
+    const range = document.createRange();
+    range.selectNodeContents(numberNode);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+}
+
+function zoomBy(factor, x, y) {
+  const target = clamp(view.tz * factor, ZOOM_MIN, ZOOM_MAX);
+  if (target === view.tz) return;
+  view.tz = target;
+  view.tx = view.x + (x - width / 2) / view.zoom;
+  view.ty = view.y + (y - height / 2) / view.zoom;
+}
+
+const pointers = new Map();
+function pointerMove(event) {
+  const before = pointers.get(event.pointerId);
+  if (!before) return;
+  const after = [event.clientX, event.clientY];
+  pointers.set(event.pointerId, after);
+  if (pointers.size === 1) {
+    view.tx -= (after[0] - before[0]) / view.zoom;
+    view.ty -= (after[1] - before[1]) / view.zoom;
+  } else if (pointers.size === 2) {
+    const other = [...pointers.entries()].find(([id]) => id !== event.pointerId)[1];
+    const oldDistance = unit(before[0] - other[0], before[1] - other[1]);
+    const newDistance = unit(after[0] - other[0], after[1] - other[1]);
+    if (oldDistance > 0 && newDistance > 0) {
+      zoomBy(newDistance / oldDistance, (after[0] + other[0]) / 2, (after[1] + other[1]) / 2);
+    }
+  }
+}
+
+for (const flag of Object.keys(flags)) controls[flag].addEventListener("click", () => toggle(flag));
+controls.end.addEventListener("click", endRun);
+function manualReset() {
+  restart("manual-reset");
+  syncHUD(performance.now(), true);
+}
+controls.reset.addEventListener("click", manualReset);
+numberNode.addEventListener("click", copyNumber);
+byId("zoom-out").addEventListener("click", () => zoomBy(1 / ZOOM_STEP_FACTOR, width / 2, height / 2));
+byId("zoom-in").addEventListener("click", () => zoomBy(ZOOM_STEP_FACTOR, width / 2, height / 2));
+canvas.addEventListener("wheel", event => {
+  event.preventDefault();
+  const ticks = event.deltaMode === 0 ? clamp(Math.abs(event.deltaY) / 100, 0.15, 4) :
+    clamp(Math.abs(event.deltaY), 1, 4);
+  zoomBy(ZOOM_STEP_FACTOR ** (-Math.sign(event.deltaY) * ticks), event.clientX, event.clientY);
+}, {passive: false});
+canvas.addEventListener("pointerdown", event => {
+  if (event.button !== 0) return;
+  canvas.setPointerCapture(event.pointerId);
+  pointers.set(event.pointerId, [event.clientX, event.clientY]);
+});
+canvas.addEventListener("pointermove", pointerMove);
+for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) {
+  canvas.addEventListener(name, event => pointers.delete(event.pointerId));
+}
+const hotkeys = {b: () => toggle("barriers"), g: () => toggle("waves"), l: () => toggle("events"),
+  h: () => toggle("help"), r: manualReset, q: endRun};
+window.addEventListener("keydown", event => {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+  hotkeys[event.key.toLowerCase()]?.();
+});
+document.addEventListener("visibilitychange", () => {
+  previous = nextRender = undefined;
+  pointers.clear();
+});
+
+helpTime = 0;
+restart();
+syncHUD(performance.now(), true);
+requestAnimationFrame(animation);
+</script>
+</body>
+</html>
