@@ -23,10 +23,9 @@ const SPATIAL_HASH_CELL_SIZE = 40;
 const BARNES_HUT_THETA = 0.7;
 const BARNES_HUT_SOFTENING = 2.0;
 const BARNES_HUT_MAX_DEPTH = 28;
-const COSMIC_DECADE_SECONDS = 9;
-const MAX_YEAR_RATE = 250000000.0;
 const MAX_DELTA_TIME = 0.05;
-const RESET_INTERVAL_YEARS = 20_000_000_000;
+const HEAT_DEATH_LINGER_DURATION = 12.0;
+const MAX_SIMULATION_METALLICITY = 1.0;
 const TARGET_FPS = 60;
 const VELOCITY_DAMPING = 0.999;
 const CMB_PERTURBATION_MODES = 3;
@@ -1631,7 +1630,7 @@ let width = 0, height = 0, pixelRatio = 1;
 let universes = [bigBang()];
 const pool = new EntropyPool();
 pool.draw();
-let age = 0;
+let emptyTime = 0;
 let previous, nextRender;
 
 // Return the trajectory number as a string so all 42 digits are preserved.
@@ -1890,12 +1889,16 @@ function step(dt, stamp, raw) {
   for (const u of universes) u.events.length = 0;
   pool.frame(universes, stamp, raw);
 
-  const yearRate = Math.min(MAX_YEAR_RATE, Math.log(10) / COSMIC_DECADE_SECONDS * (age + 1000));
-  age += dt * yearRate;
-  if (age >= RESET_INTERVAL_YEARS) {
-    pool.fold(encoder.encode("age-limit-reset"));
+  const z = sum(universes.map(u => u.z)) / Math.max(1, universes.length);
+  emptyTime = !universes.length || !universes.some(u => population(u)) ||
+    sum(universes.map(universeMass)) <= 0 ? emptyTime + dt : 0;
+  let resetTag;
+  if (z >= MAX_SIMULATION_METALLICITY) resetTag = "metallicity-limit-reset";
+  else if (emptyTime >= HEAT_DEATH_LINGER_DURATION) resetTag = "heat-death-reset";
+  if (resetTag) {
+    pool.fold(encoder.encode(resetTag));
     universes = [bigBang()];
-    age = 0;
+    emptyTime = 0;
   }
   pool.draw();
 }
